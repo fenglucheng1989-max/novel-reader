@@ -45,6 +45,20 @@ public class BookServiceImpl implements BookService {
     }
 
     @Override
+    public List<NovelBook> rank(Long categoryId, Integer limit) {
+        int size = limit == null ? 50 : Math.max(1, Math.min(limit, 100));
+        LambdaQueryWrapper<NovelBook> query = new LambdaQueryWrapper<NovelBook>()
+                .orderByDesc(NovelBook::getChapterCount)
+                .orderByDesc(NovelBook::getWordCount)
+                .orderByAsc(NovelBook::getSortOrder)
+                .orderByDesc(NovelBook::getUpdatedAt);
+        if (categoryId != null) {
+            query.eq(NovelBook::getCategoryId, categoryId);
+        }
+        return bookMapper.selectList(query).stream().limit(size).toList();
+    }
+
+    @Override
     public List<NovelBook> list(Long categoryId, String keyword) {
         LambdaQueryWrapper<NovelBook> query = new LambdaQueryWrapper<NovelBook>()
                 .orderByAsc(NovelBook::getSortOrder)

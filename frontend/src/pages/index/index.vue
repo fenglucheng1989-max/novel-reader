@@ -33,9 +33,7 @@
         <view class="rank-panel">
           <view class="section-head">
             <text class="section-title">推荐榜</text>
-            <text class="section-action" @tap="toggleRank">
-              {{ rankExpanded ? '收起榜单' : '完整榜单 ›' }}
-            </text>
+            <text class="section-action" @tap="goRank">完整榜单 ›</text>
           </view>
           <view class="rank-grid">
             <view
@@ -109,9 +107,7 @@ import { useBookStore } from '../../store/book'
 const bookStore = useBookStore()
 const activeCategory = ref(0)
 const loading = ref(false)
-const rankExpanded = ref(false)
-
-const rankedBooks = computed(() => bookStore.books.slice(0, rankExpanded.value ? bookStore.books.length : 6))
+const rankedBooks = computed(() => bookStore.books.slice(0, 6))
 const featuredBooks = computed(() => bookStore.books.slice(0, 2))
 const listBooks = computed(() => bookStore.books.slice(2))
 
@@ -128,13 +124,8 @@ async function load() {
 
 function selectCategory(id) {
   activeCategory.value = id
-  rankExpanded.value = false
   bookStore.selectCategory(id)
   bookStore.loadRecommend(id || null)
-}
-
-function toggleRank() {
-  rankExpanded.value = !rankExpanded.value
 }
 
 function goDetail(id) {
@@ -147,6 +138,11 @@ function goSearch() {
 
 function goCategory() {
   uni.navigateTo({ url: '/pages/category/category' })
+}
+
+function goRank() {
+  const query = activeCategory.value ? `?categoryId=${activeCategory.value}` : ''
+  uni.navigateTo({ url: `/pages/rank/rank${query}` })
 }
 
 function statusText(status) {

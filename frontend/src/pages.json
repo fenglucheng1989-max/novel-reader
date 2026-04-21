@@ -41,6 +41,12 @@
       "style": {
         "navigationStyle": "custom"
       }
+    },
+    {
+      "path": "pages/rank/rank",
+      "style": {
+        "navigationStyle": "custom"
+      }
     }
   ],
   "tabBar": {

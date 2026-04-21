@@ -29,6 +29,13 @@ export const useBookStore = defineStore('book', {
       }
       return res
     },
+    async loadRank(categoryId, limit = 50) {
+      const params = [`limit=${encodeURIComponent(limit)}`]
+      if (categoryId) {
+        params.push(`categoryId=${encodeURIComponent(categoryId)}`)
+      }
+      return request({ url: `/api/v1/books/rank?${params.join('&')}` })
+    },
     async search(keyword) {
       const res = await request({ url: `/api/v1/search/books?keyword=${encodeURIComponent(keyword || '')}` })
       if (res.code === 200) {

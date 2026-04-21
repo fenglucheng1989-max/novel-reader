@@ -12,6 +12,7 @@ import java.util.List;
 
 public interface BookService {
     List<NovelBook> recommend(Long categoryId);
+    List<NovelBook> rank(Long categoryId, Integer limit);
     List<NovelBook> list(Long categoryId, String keyword);
     BookDetailVO detail(Long bookId, Long userId);
     List<ChapterItemVO> chapters(Long bookId);

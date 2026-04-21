@@ -9,6 +9,7 @@ import com.yourcompany.novelreader.dto.ImportPreviewDTO;
 import com.yourcompany.novelreader.entity.NovelBook;
 import com.yourcompany.novelreader.entity.NovelCategory;
 import com.yourcompany.novelreader.entity.NovelChapter;
+import com.yourcompany.novelreader.exception.BusinessException;
 import com.yourcompany.novelreader.mapper.AppUserMapper;
 import com.yourcompany.novelreader.mapper.NovelBookMapper;
 import com.yourcompany.novelreader.mapper.NovelCategoryMapper;
@@ -313,7 +314,11 @@ public class AdminNovelController extends BaseUserController {
                 .build();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() >= 400) {
-            throw new IllegalArgumentException("网页请求失败，状态码：" + response.statusCode());
+            String body = response.body() == null ? "" : response.body();
+            if (response.statusCode() == 403 && body.contains("challenge-platform")) {
+                throw new BusinessException(400, "目标网站启用了 Cloudflare 人机校验，后端无法直接抓取。请在浏览器打开页面后复制正文，改用 TXT 导入。");
+            }
+            throw new BusinessException(400, "网页请求失败，状态码：" + response.statusCode());
         }
         return response.body();
     }

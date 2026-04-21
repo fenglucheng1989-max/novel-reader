@@ -3,8 +3,6 @@
     <view class="category-shell">
       <view class="nav-bar">
         <view class="nav-button" @tap="goBack">‹</view>
-        <text class="nav-title">分类</text>
-        <view class="nav-placeholder"></view>
       </view>
 
       <view class="segment-row">
@@ -195,16 +193,13 @@ onShow(load)
 }
 
 .nav-bar {
-  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 44px;
-  margin-bottom: 8px;
+  height: 38px;
+  margin-bottom: 10px;
 }
 
-.nav-button,
-.nav-placeholder {
+.nav-button {
   flex: 0 0 38px;
   width: 38px;
   height: 38px;
@@ -220,19 +215,6 @@ onShow(load)
   color: #25332e;
   font-size: 28px;
   font-weight: 500;
-}
-
-.nav-title {
-  position: absolute;
-  left: 50%;
-  max-width: calc(100% - 112px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #17221e;
-  font-size: 17px;
-  font-weight: 900;
-  transform: translateX(-50%);
 }
 
 .segment-row {
@@ -331,7 +313,6 @@ onShow(load)
   margin-top: 22px;
 }
 
-.nav-title,
 .section-title,
 .section-note,
 .tag-card,

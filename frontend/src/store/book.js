@@ -7,9 +7,13 @@ export const useBookStore = defineStore('book', {
     books: [],
     shelf: [],
     currentBook: null,
-    chapters: []
+    chapters: [],
+    selectedCategoryId: 0
   }),
   actions: {
+    selectCategory(categoryId) {
+      this.selectedCategoryId = categoryId || 0
+    },
     async loadCategories() {
       const res = await request({ url: '/api/v1/categories' })
       if (res.code === 200) {

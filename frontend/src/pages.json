@@ -35,6 +35,12 @@
       "style": {
         "navigationBarTitleText": "搜索"
       }
+    },
+    {
+      "path": "pages/category/category",
+      "style": {
+        "navigationStyle": "custom"
+      }
     }
   ],
   "tabBar": {

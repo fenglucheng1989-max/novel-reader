@@ -5,22 +5,36 @@ import com.yourcompany.novelreader.entity.AppUser;
 import com.yourcompany.novelreader.mapper.AppUserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.annotation.Profile;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("local")
 @RequiredArgsConstructor
 public class LocalAdminInitializer implements CommandLineRunner {
 
     private final AppUserMapper appUserMapper;
     private final PasswordEncoder passwordEncoder;
 
+    @Value("${app.admin.init.enabled:true}")
+    private boolean initEnabled;
+
+    @Value("${app.admin.username:admin}")
+    private String adminUsername;
+
+    @Value("${app.admin.password:admin123456}")
+    private String adminPassword;
+
+    @Value("${app.admin.email:admin@local}")
+    private String adminEmail;
+
     @Override
     public void run(String... args) {
+        if (!initEnabled) {
+            return;
+        }
         AppUser existing = appUserMapper.selectOne(
-                new LambdaQueryWrapper<AppUser>().eq(AppUser::getUsername, "admin"));
+                new LambdaQueryWrapper<AppUser>().eq(AppUser::getUsername, adminUsername));
         if (existing != null) {
             if (!"ADMIN".equalsIgnoreCase(existing.getRole())) {
                 existing.setRole("ADMIN");
@@ -29,9 +43,9 @@ public class LocalAdminInitializer implements CommandLineRunner {
             return;
         }
         AppUser admin = AppUser.builder()
-                .username("admin")
-                .passwordHash(passwordEncoder.encode("admin123456"))
-                .email("admin@local")
+                .username(adminUsername)
+                .passwordHash(passwordEncoder.encode(adminPassword))
+                .email(adminEmail)
                 .role("ADMIN")
                 .build();
         appUserMapper.insert(admin);

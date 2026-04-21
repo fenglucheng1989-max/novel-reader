@@ -28,3 +28,11 @@ mybatis-plus:
 jwt:
   secret: ${JWT_SECRET:default-secret-key-for-development-only-change-in-production}
   expiration: 604800
+
+app:
+  admin:
+    init:
+      enabled: ${ADMIN_INIT_ENABLED:true}
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD:admin123456}
+    email: ${ADMIN_EMAIL:admin@local}

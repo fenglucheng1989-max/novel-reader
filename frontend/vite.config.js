@@ -3,7 +3,7 @@ import uni from '@dcloudio/vite-plugin-uni'
 
 const apiProxy = {
   '/api': {
-    target: process.env.VITE_API_TARGET || 'http://localhost:8081',
+    target: process.env.VITE_API_TARGET || 'http://localhost:8080',
     changeOrigin: true
   }
 }

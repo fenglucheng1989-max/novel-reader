@@ -1,36 +1,56 @@
 <template>
   <view class="page">
-    <view class="profile-card">
+    <view class="account-card">
       <view class="avatar">{{ avatarText }}</view>
-      <view class="profile-main">
-        <text class="name">{{ userStore.isLoggedIn ? userStore.username : '未登录' }}</text>
-        <text class="subtitle">{{ userStore.isLoggedIn ? '阅读偏好已为你保存' : '登录后同步书架、进度和偏好' }}</text>
+      <view class="account-main">
+        <text class="account-title">{{ userStore.isLoggedIn ? userStore.username : '悦读账号' }}</text>
+        <text class="account-subtitle">{{ userStore.isLoggedIn ? '书架、进度和偏好已同步' : '登录后保存你的阅读世界' }}</text>
       </view>
+      <text class="account-badge">{{ userStore.isLoggedIn ? '已登录' : '未登录' }}</text>
     </view>
 
     <view v-if="!userStore.isLoggedIn" class="login-card">
+      <view class="login-head">
+        <text class="panel-title">{{ mode === 'login' ? '登录悦读' : '创建账号' }}</text>
+        <text class="panel-subtitle">同步书架、阅读进度和阅读偏好。</text>
+      </view>
+
       <view class="segment">
         <button :class="{ active: mode === 'login' }" @tap="mode = 'login'">登录</button>
         <button :class="{ active: mode === 'register' }" @tap="mode = 'register'">注册</button>
       </view>
-      <input v-model="username" class="input" placeholder="用户名" />
-      <input v-model="password" class="input" password placeholder="密码" />
-      <input v-if="mode === 'register'" v-model="email" class="input" placeholder="邮箱，可选" />
-      <button class="primary" @tap="submit">{{ mode === 'login' ? '登录悦读' : '创建账号' }}</button>
-      <text class="login-tip">本地测试账号可以直接注册，也可以使用已创建的账号登录。</text>
+
+      <view class="field">
+        <text class="field-label">用户名</text>
+        <input v-model="username" class="input" placeholder="请输入用户名" />
+      </view>
+      <view class="field">
+        <text class="field-label">密码</text>
+        <input v-model="password" class="input" password placeholder="请输入密码" />
+      </view>
+      <view v-if="mode === 'register'" class="field">
+        <text class="field-label">邮箱</text>
+        <input v-model="email" class="input" placeholder="可选" />
+      </view>
+
+      <button class="primary" @tap="submit">{{ mode === 'login' ? '登录' : '注册并登录' }}</button>
+      <text class="login-tip">本地预览环境可直接注册测试账号。</text>
     </view>
 
     <view v-else>
-      <view class="section-card">
-        <view class="section-head">
-          <text class="section-title">阅读偏好</text>
-          <text class="section-note">{{ themeLabel }}</text>
+      <view class="preference-card">
+        <view class="panel-head">
+          <view>
+            <text class="panel-title">阅读偏好</text>
+            <text class="panel-subtitle">这些设置会应用到阅读器正文。</text>
+          </view>
+          <text class="theme-pill">{{ themeLabel }}</text>
         </view>
 
         <view class="setting-row">
-          <view>
+          <view class="setting-copy">
             <text class="setting-title">字号</text>
-            <text class="setting-subtitle">影响正文显示大小</text>
+            <text class="setting-subtitle">当前 {{ readerStore.setting.fontSize }}</text>
           </view>
           <view class="stepper">
             <button @tap="changeFont(-1)">-</button>
@@ -40,9 +60,9 @@
         </view>
 
         <view class="setting-row">
-          <view>
+          <view class="setting-copy">
             <text class="setting-title">行距</text>
-            <text class="setting-subtitle">长文阅读更舒展</text>
+            <text class="setting-subtitle">当前 {{ readerStore.setting.lineHeight }}</text>
           </view>
           <view class="stepper">
             <button @tap="changeLineHeight(-2)">-</button>
@@ -51,10 +71,19 @@
           </view>
         </view>
 
-        <view class="theme-row">
-          <button :class="{ active: readerStore.setting.theme === 'DEFAULT' }" @tap="setTheme('DEFAULT')">米白</button>
-          <button :class="{ active: readerStore.setting.theme === 'GREEN' }" @tap="setTheme('GREEN')">清绿</button>
-          <button :class="{ active: readerStore.setting.theme === 'NIGHT' }" @tap="setTheme('NIGHT')">夜间</button>
+        <view class="theme-grid">
+          <button :class="{ active: readerStore.setting.theme === 'DEFAULT' }" @tap="setTheme('DEFAULT')">
+            <text class="theme-dot default"></text>
+            <text>米白</text>
+          </button>
+          <button :class="{ active: readerStore.setting.theme === 'GREEN' }" @tap="setTheme('GREEN')">
+            <text class="theme-dot green"></text>
+            <text>清绿</text>
+          </button>
+          <button :class="{ active: readerStore.setting.theme === 'NIGHT' }" @tap="setTheme('NIGHT')">
+            <text class="theme-dot night"></text>
+            <text>夜间</text>
+          </button>
         </view>
       </view>
 
@@ -84,7 +113,7 @@ const username = ref('')
 const password = ref('')
 const email = ref('')
 
-const avatarText = computed(() => (userStore.isLoggedIn ? userStore.username.slice(0, 1).toUpperCase() : '读'))
+const avatarText = computed(() => (userStore.isLoggedIn ? userStore.username.slice(0, 1).toUpperCase() : '悦'))
 const themeLabel = computed(() => {
   if (readerStore.setting.theme === 'GREEN') return '清绿'
   if (readerStore.setting.theme === 'NIGHT') return '夜间'
@@ -143,21 +172,21 @@ onShow(() => {
   box-sizing: border-box;
 }
 
-.profile-card,
+.account-card,
 .login-card,
-.section-card,
+.preference-card,
 .quick-card {
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 10px 28px rgba(31, 42, 38, 0.06);
 }
 
-.profile-card {
+.account-card {
   display: flex;
   align-items: center;
   padding: 18px;
   margin-bottom: 14px;
-  background: linear-gradient(145deg, #20342d, #376a58);
+  background: #20342d;
   color: #fff;
 }
 
@@ -168,22 +197,24 @@ onShow(() => {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.16);
   font-size: 24px;
   font-weight: 800;
 }
 
-.profile-main {
+.account-main {
   min-width: 0;
   flex: 1;
   margin-left: 14px;
 }
 
-.name,
-.subtitle,
+.account-title,
+.account-subtitle,
+.account-badge,
+.panel-title,
+.panel-subtitle,
+.field-label,
 .login-tip,
-.section-title,
-.section-note,
 .setting-title,
 .setting-subtitle,
 .quick-title,
@@ -191,26 +222,58 @@ onShow(() => {
   display: block;
 }
 
-.name {
+.account-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 24px;
   font-weight: 800;
 }
 
-.subtitle {
+.account-subtitle {
   margin-top: 6px;
   color: #d6e3dc;
   font-size: 13px;
 }
 
+.account-badge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #e7f0eb;
+  font-size: 12px;
+}
+
 .login-card,
-.section-card {
+.preference-card {
   padding: 16px;
+}
+
+.login-head,
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.panel-title {
+  color: #1f2a26;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.panel-subtitle {
+  margin-top: 5px;
+  color: #81776c;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .segment {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 14px;
   padding: 4px;
   border-radius: 8px;
@@ -232,10 +295,19 @@ onShow(() => {
   font-weight: 700;
 }
 
+.field {
+  margin-bottom: 10px;
+}
+
+.field-label {
+  margin-bottom: 6px;
+  color: #62584d;
+  font-size: 12px;
+}
+
 .input {
   width: 100%;
   height: 44px;
-  margin-bottom: 10px;
   padding: 0 12px;
   border-radius: 8px;
   border: 1px solid #e4ddd3;
@@ -255,7 +327,7 @@ onShow(() => {
 }
 
 .primary {
-  margin-top: 2px;
+  margin-top: 4px;
   background: #2f6f5e;
   color: #fff;
 }
@@ -268,30 +340,25 @@ onShow(() => {
   text-align: center;
 }
 
-.section-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.section-title {
-  color: #1f2a26;
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.section-note {
+.theme-pill {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #f1e7dc;
   color: #9a6b45;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .setting-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 0;
+  padding: 13px 0;
   border-bottom: 1px solid #eee7de;
+}
+
+.setting-copy {
+  min-width: 0;
 }
 
 .setting-title {
@@ -329,25 +396,47 @@ onShow(() => {
   text-align: center;
 }
 
-.theme-row {
+.theme-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-top: 14px;
 }
 
-.theme-row button {
-  height: 36px;
-  line-height: 36px;
+.theme-grid button {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border-radius: 8px;
   background: #f1e7dc;
   color: #5b5148;
   font-size: 13px;
 }
 
-.theme-row button.active {
+.theme-grid button.active {
   background: #2f6f5e;
   color: #fff;
+}
+
+.theme-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.theme-dot.default {
+  background: #f6f0e6;
+  border: 1px solid #d8cfc2;
+}
+
+.theme-dot.green {
+  background: #b9d7c1;
+}
+
+.theme-dot.night {
+  background: #20242a;
 }
 
 .quick-card {

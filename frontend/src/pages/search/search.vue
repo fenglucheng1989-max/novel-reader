@@ -30,6 +30,7 @@
 
 <script setup>
 import { ref } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 
 const bookStore = useBookStore()
@@ -58,6 +59,13 @@ function goDetail(id) {
 function coverText(title) {
   return (title || '书').slice(0, 2)
 }
+
+onLoad((options) => {
+  if (options?.keyword) {
+    keyword.value = decodeURIComponent(options.keyword)
+    doSearch()
+  }
+})
 </script>
 
 <style scoped>

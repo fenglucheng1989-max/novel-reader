@@ -3,59 +3,153 @@
     <view class="category-shell">
       <view class="nav-bar">
         <view class="nav-button" @tap="goBack">‹</view>
-        <text class="nav-title">全部分类</text>
+        <text class="nav-title">分类</text>
         <view class="nav-placeholder"></view>
       </view>
 
-      <view class="page-head">
-        <text class="eyebrow">书城频道</text>
-        <text class="title">按频道浏览书城内容</text>
-      </view>
-
-      <view class="featured-card" @tap="chooseCategory(0)">
-        <view>
-          <text class="featured-title">推荐</text>
-          <text class="featured-subtitle">查看当前推荐榜、精选书籍和最新上架。</text>
-        </view>
-        <text class="featured-mark">全部</text>
-      </view>
-
-      <view class="section-head">
-        <text class="section-title">频道分类</text>
-        <text class="section-count">{{ bookStore.categories.length }} 个</text>
-      </view>
-
-      <view v-if="loading" class="empty">正在整理分类...</view>
-      <view v-else-if="!bookStore.categories.length" class="empty">
-        <text class="empty-title">暂无分类</text>
-        <text class="empty-subtitle">可以先在后台维护书籍分类。</text>
-      </view>
-      <view v-else class="category-grid">
+      <view class="segment-row">
         <view
-          v-for="item in bookStore.categories"
-          :key="item.id"
-          class="category-card"
-          :class="{ active: bookStore.selectedCategoryId === item.id }"
-          @tap="chooseCategory(item.id)"
-        >
-          <view class="category-main">
-            <text class="category-name">{{ item.name }}</text>
-            <text class="category-desc">浏览{{ item.name }}频道内容</text>
-          </view>
-          <text class="category-arrow">›</text>
+          v-for="item in genderTabs"
+          :key="item.key"
+          class="segment-item"
+          :class="{ active: activeGender === item.key }"
+          @tap="activeGender = item.key"
+        >{{ item.name }}</view>
+      </view>
+
+      <view class="content-card">
+        <view class="rail">
+          <view
+            v-for="group in groups"
+            :key="group.key"
+            class="rail-item"
+            :class="{ active: activeGroup === group.key }"
+            @tap="activeGroup = group.key"
+          >{{ group.name }}</view>
         </view>
+
+        <scroll-view class="tag-scroll" scroll-y>
+          <view v-if="activeGroup === 'category'" class="tag-section">
+            <view class="section-head">
+              <text class="section-title">频道分类</text>
+              <text class="section-note">{{ bookStore.categories.length }} 个</text>
+            </view>
+
+            <view class="tag-grid">
+              <view class="tag-card featured" @tap="chooseCategory(0)">
+                <text>推荐</text>
+              </view>
+              <view
+                v-for="item in bookStore.categories"
+                :key="item.id"
+                class="tag-card"
+                :class="{ active: bookStore.selectedCategoryId === item.id }"
+                @tap="chooseCategory(item.id)"
+              >
+                <text>{{ item.name }}</text>
+              </view>
+            </view>
+
+            <view class="section-head spaced">
+              <text class="section-title">热门标签</text>
+              <text class="section-note">{{ activeGenderName }}</text>
+            </view>
+            <view class="tag-grid">
+              <view
+                v-for="tag in hotTags"
+                :key="tag"
+                class="tag-card soft"
+                @tap="searchTag(tag)"
+              >
+                <text>{{ tag }}</text>
+              </view>
+            </view>
+          </view>
+
+          <view v-else class="tag-section">
+            <view class="section-head">
+              <text class="section-title">{{ currentGroup.name }}</text>
+              <text class="section-note">偏好标签</text>
+            </view>
+            <view class="tag-grid">
+              <view
+                v-for="tag in currentTags"
+                :key="tag"
+                class="tag-card"
+                @tap="searchTag(tag)"
+              >
+                <text>{{ tag }}</text>
+              </view>
+            </view>
+          </view>
+
+          <view v-if="loading" class="empty">正在整理分类...</view>
+          <view v-else-if="activeGroup === 'category' && !bookStore.categories.length" class="empty">
+            <text class="empty-title">暂无分类</text>
+            <text class="empty-subtitle">可以先在后台维护书籍分类。</text>
+          </view>
+        </scroll-view>
       </view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 
 const bookStore = useBookStore()
 const loading = ref(false)
+const activeGender = ref('male')
+const activeGroup = ref('category')
+
+const genderTabs = [
+  { key: 'male', name: '男生' },
+  { key: 'female', name: '女生' },
+  { key: 'audio', name: '听书' },
+  { key: 'short', name: '短剧' }
+]
+
+const groups = [
+  { key: 'category', name: '频道' },
+  { key: 'theme', name: '主题' },
+  { key: 'role', name: '角色' },
+  { key: 'plot', name: '情节' }
+]
+
+const tagMap = {
+  male: {
+    hot: ['热血', '升级流', '无限流', '都市脑洞', '玄幻脑洞', '克苏鲁', '游戏体育', '架空', '副本', '求生', '末日', '灵异'],
+    theme: ['悬疑', '玄幻', '历史', '都市', '科幻', '奇幻', '武侠', '仙侠', '末世', '游戏', '体育', '脑洞'],
+    role: ['少年', '剑客', '医生', '学生', '侦探', '商人', '修士', '反派', '群像', '异能者', '穿越者', '凡人'],
+    plot: ['开局', '复仇', '升级', '种田', '探案', '冒险', '权谋', '日常', '求生', '无限流', '副本', '逆袭']
+  },
+  female: {
+    hot: ['古言', '现言', '女强', '甜宠', '宫斗', '重生', '穿越', '先婚后爱', '豪门', '权谋', '种田', '破镜重圆'],
+    theme: ['古代言情', '现代言情', '幻想言情', '悬疑恋爱', '青春', '职场', '宫廷', '宅斗', '仙侠', '年代', '田园', '娱乐圈'],
+    role: ['女主', '将军', '公主', '医妃', '影后', '总裁', '学霸', '王爷', '反派', '群像', '青梅竹马', '大女主'],
+    plot: ['重生', '穿越', '复仇', '甜宠', '虐恋', '追妻', '契约', '婚恋', '成长', '逆袭', '破案', '日久生情']
+  },
+  audio: {
+    hot: ['精品听书', '睡前故事', '多人剧', '悬疑有声', '历史评书', '都市爽文', '玄幻热血', '短篇', '长篇', '新书上架', '完结必听', '高分'],
+    theme: ['悬疑', '历史', '都市', '玄幻', '言情', '科幻', '人文', '评书', '儿童', '职场', '情感', '相声'],
+    role: ['单播', '双播', '多人剧', '男声', '女声', '旁白', '精品主播', '新锐主播', '剧场', '作者亲读', '沉浸', '白噪'],
+    plot: ['探案', '逆袭', '成长', '冒险', '权谋', '日常', '治愈', '烧脑', '爆笑', '催眠', '热血', '情感']
+  },
+  short: {
+    hot: ['短剧热榜', '反转', '逆袭', '爽感', '甜宠', '战神', '赘婿', '复仇', '豪门', '都市', '古装', '悬疑'],
+    theme: ['都市短剧', '古装短剧', '甜宠短剧', '悬疑短剧', '家庭', '职场', '校园', '年代', '奇幻', '权谋', '喜剧', '情感'],
+    role: ['霸总', '战神', '赘婿', '千金', '神医', '萌宝', '女强', '反派', '管家', '律师', '警探', '群像'],
+    plot: ['逆袭', '复仇', '闪婚', '打脸', '追妻', '掉马', '真假千金', '契约', '重逢', '破案', '救赎', '反转']
+  }
+}
+
+const currentGroup = computed(() => groups.find((item) => item.key === activeGroup.value) || groups[0])
+const activeGenderName = computed(() => genderTabs.find((item) => item.key === activeGender.value)?.name || '男生')
+const activeTagSet = computed(() => tagMap[activeGender.value] || tagMap.male)
+const currentTags = computed(() => activeTagSet.value[activeGroup.value] || [])
+const hotTags = computed(() => activeTagSet.value.hot || [])
 
 async function load() {
   loading.value = true
@@ -71,6 +165,10 @@ function chooseCategory(id) {
   uni.switchTab({ url: '/pages/index/index' })
 }
 
+function searchTag(tag) {
+  uni.navigateTo({ url: `/pages/search/search?keyword=${encodeURIComponent(tag)}` })
+}
+
 function goBack() {
   uni.navigateBack({
     fail: () => uni.switchTab({ url: '/pages/index/index' })
@@ -84,9 +182,10 @@ onShow(load)
 .page {
   width: 100%;
   min-height: 100vh;
-  padding: 18px 16px 34px;
+  padding: 14px 12px 28px;
   background: #f6f3ee;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .category-shell {
@@ -101,7 +200,7 @@ onShow(load)
   align-items: center;
   justify-content: space-between;
   height: 44px;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .nav-button,
@@ -136,150 +235,166 @@ onShow(load)
   transform: translateX(-50%);
 }
 
-.page-head {
-  margin-bottom: 16px;
+.segment-row {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  height: 40px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  white-space: nowrap;
 }
 
-.eyebrow,
-.title,
-.nav-title,
-.featured-title,
-.featured-subtitle,
-.featured-mark,
-.section-title,
-.section-count,
-.category-name,
-.category-desc,
-.category-arrow,
-.empty-title,
-.empty-subtitle {
-  display: block;
-}
-
-.eyebrow {
-  color: #9a6b45;
-  font-size: 12px;
+.segment-item {
+  position: relative;
+  flex: 0 0 auto;
+  color: #81776c;
+  font-size: 15px;
   font-weight: 800;
 }
 
-.title {
-  margin-top: 4px;
+.segment-item.active {
   color: #17221e;
-  font-size: 26px;
-  font-weight: 900;
-}
-
-.featured-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  min-height: 112px;
-  padding: 18px;
-  border-radius: 8px;
-  background: #20342d;
-  color: #fff;
-  box-shadow: 0 12px 30px rgba(31, 42, 38, 0.12);
-  box-sizing: border-box;
-}
-
-.featured-title {
   font-size: 22px;
   font-weight: 900;
 }
 
-.featured-subtitle {
-  margin-top: 8px;
-  color: #d8e4dd;
-  font-size: 13px;
-  line-height: 20px;
+.segment-item.active::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+  background: #2f6f5e;
+  transform: translateX(-50%);
 }
 
-.featured-mark {
-  flex: 0 0 auto;
-  padding: 7px 10px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-  font-size: 13px;
+.content-card {
+  min-height: calc(100vh - 128px);
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  overflow: hidden;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(31, 42, 38, 0.06);
+}
+
+.rail {
+  padding: 12px 0;
+  background: #f1eee8;
+}
+
+.rail-item {
+  position: relative;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #62584d;
+  font-size: 14px;
   font-weight: 800;
+}
+
+.rail-item.active {
+  background: #fff;
+  color: #17221e;
+}
+
+.rail-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 20px;
+  border-radius: 0 999px 999px 0;
+  background: #2f6f5e;
+}
+
+.tag-scroll {
+  height: calc(100vh - 128px);
+}
+
+.tag-section {
+  padding: 16px 12px 22px;
 }
 
 .section-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  margin: 20px 0 12px;
+  margin-bottom: 12px;
+}
+
+.section-head.spaced {
+  margin-top: 22px;
+}
+
+.nav-title,
+.section-title,
+.section-note,
+.tag-card,
+.empty-title,
+.empty-subtitle {
+  display: block;
 }
 
 .section-title {
   color: #1f2a26;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 900;
 }
 
-.section-count {
-  color: #91867a;
-  font-size: 13px;
-}
-
-.category-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.category-card {
-  min-width: 0;
-  min-height: 88px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 15px;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid transparent;
-  box-shadow: 0 10px 24px rgba(31, 42, 38, 0.05);
-  box-sizing: border-box;
-}
-
-.category-card.active {
-  border-color: #2f6f5e;
-  background: #f4fbf7;
-}
-
-.category-main {
-  min-width: 0;
-}
-
-.category-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #1f2a26;
-  font-size: 17px;
-  font-weight: 900;
-}
-
-.category-desc {
-  margin-top: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #81776c;
+.section-note {
+  color: #9a6b45;
   font-size: 12px;
 }
 
-.category-arrow {
-  flex: 0 0 auto;
-  color: #9a6b45;
-  font-size: 24px;
-  line-height: 1;
+.tag-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tag-card {
+  min-width: 0;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #f6f3ee;
+  color: #2a332f;
+  font-size: 14px;
+  font-weight: 800;
+  box-sizing: border-box;
+}
+
+.tag-card text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-card.featured {
+  background: #20342d;
+  color: #fff;
+}
+
+.tag-card.active {
+  background: #2f6f5e;
+  color: #fff;
+}
+
+.tag-card.soft {
+  background: #fbfaf7;
+  border: 1px solid #efe8df;
 }
 
 .empty {
-  padding: 64px 0;
+  padding: 44px 0;
   color: #8b8176;
   text-align: center;
 }
@@ -300,6 +415,10 @@ onShow(load)
   .page {
     padding-left: 22px;
     padding-right: 22px;
+  }
+
+  .content-card {
+    grid-template-columns: 108px minmax(0, 1fr);
   }
 }
 </style>

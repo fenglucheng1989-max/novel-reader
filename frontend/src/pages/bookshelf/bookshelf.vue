@@ -56,9 +56,11 @@
         </view>
 
         <view v-if="item.book.description" class="description-wrap" @tap.stop>
-          <view class="description" :class="{ collapsed: !expanded[item.book.id] }">{{ item.book.description }}</view>
-          <button class="desc-toggle" @tap.stop="toggleDesc(item.book.id)">
-            {{ expanded[item.book.id] ? '收起' : '展开简介' }}
+          <view class="description" :class="{ collapsed: shouldFold(item.book.description) && !expanded[item.book.id] }">
+            {{ item.book.description }}
+          </view>
+          <button v-if="shouldFold(item.book.description)" class="desc-toggle" @tap.stop="toggleDesc(item.book.id)">
+            {{ expanded[item.book.id] ? '收起' : '展开' }}
           </button>
         </view>
 
@@ -77,6 +79,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import { useUserStore } from '../../store/user'
 
+const FOLD_THRESHOLD = 70
 const bookStore = useBookStore()
 const userStore = useUserStore()
 const loading = ref(false)
@@ -115,6 +118,10 @@ async function remove(bookId) {
       await refresh()
     }
   })
+}
+
+function shouldFold(content) {
+  return (content || '').length > FOLD_THRESHOLD
 }
 
 function toggleDesc(bookId) {
@@ -326,8 +333,9 @@ onShow(refresh)
 }
 
 .description-wrap {
+  position: relative;
   margin-top: 12px;
-  padding: 10px 12px;
+  padding: 10px 12px 30px;
   border-radius: 8px;
   background: #f8f5ef;
 }
@@ -348,15 +356,16 @@ onShow(refresh)
 }
 
 .desc-toggle {
+  position: absolute;
+  right: 12px;
+  bottom: 4px;
   width: auto;
-  height: 26px;
-  line-height: 26px;
-  margin-top: 4px;
+  height: 24px;
+  line-height: 24px;
   padding: 0;
   background: transparent;
   color: #2f6f5e;
   font-size: 12px;
-  text-align: left;
 }
 
 .card-actions {

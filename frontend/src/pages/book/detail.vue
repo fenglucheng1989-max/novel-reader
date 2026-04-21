@@ -20,7 +20,14 @@
 
       <view class="section">
         <text class="section-title">简介</text>
-        <view class="desc">{{ detail.book.description || '暂无简介' }}</view>
+        <view class="foldable">
+          <view class="desc" :class="{ collapsed: shouldFold(detail.book.description) && !descExpanded }">
+            {{ detail.book.description || '暂无简介' }}
+          </view>
+          <button v-if="shouldFold(detail.book.description)" class="fold-button" @tap="descExpanded = !descExpanded">
+            {{ descExpanded ? '收起' : '展开' }}
+          </button>
+        </view>
       </view>
 
       <view class="section">
@@ -49,11 +56,13 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import { useUserStore } from '../../store/user'
 
+const FOLD_THRESHOLD = 70
 const bookStore = useBookStore()
 const userStore = useUserStore()
 const id = ref('')
 const detail = ref(null)
 const loading = ref(false)
+const descExpanded = ref(false)
 
 async function load() {
   loading.value = true
@@ -93,6 +102,10 @@ function startRead() {
 
 function readChapter(chapterNo) {
   uni.navigateTo({ url: `/pages/reader/reader?bookId=${id.value}&chapterNo=${chapterNo}` })
+}
+
+function shouldFold(content) {
+  return (content || '').length > FOLD_THRESHOLD
 }
 
 function statusText(status) {
@@ -236,15 +249,40 @@ onLoad((query) => {
   font-size: 13px;
 }
 
+.foldable {
+  position: relative;
+  margin-top: 10px;
+  padding-bottom: 24px;
+}
+
 .desc {
   width: 100%;
-  margin-top: 10px;
   color: #4c5550;
   font-size: 14px;
   line-height: 23px;
   white-space: normal;
   word-break: break-all;
   overflow-wrap: anywhere;
+}
+
+.desc.collapsed {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.fold-button {
+  position: absolute;
+  right: 0;
+  bottom: -2px;
+  width: auto;
+  height: 26px;
+  line-height: 26px;
+  padding: 0;
+  background: transparent;
+  color: #2f6f5e;
+  font-size: 13px;
 }
 
 .chapter {

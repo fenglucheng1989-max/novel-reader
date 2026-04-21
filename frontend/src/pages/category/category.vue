@@ -1,12 +1,15 @@
 <template>
   <view class="page">
     <view class="category-shell">
+      <view class="nav-bar">
+        <view class="nav-button" @tap="goBack">‹</view>
+        <text class="nav-title">全部分类</text>
+        <view class="nav-placeholder"></view>
+      </view>
+
       <view class="page-head">
-        <view>
-          <text class="eyebrow">书城频道</text>
-          <text class="title">全部分类</text>
-        </view>
-        <button class="back-button" @tap="goBack">返回</button>
+        <text class="eyebrow">书城频道</text>
+        <text class="title">按频道浏览书城内容</text>
       </view>
 
       <view class="featured-card" @tap="chooseCategory(0)">
@@ -92,16 +95,54 @@ onShow(load)
   margin: 0 auto;
 }
 
-.page-head {
+.nav-bar {
+  position: relative;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  height: 44px;
+  margin-bottom: 14px;
+}
+
+.nav-button,
+.nav-placeholder {
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+}
+
+.nav-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #e5ddd2;
+  color: #25332e;
+  font-size: 28px;
+  font-weight: 500;
+}
+
+.nav-title {
+  position: absolute;
+  left: 50%;
+  max-width: calc(100% - 112px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #17221e;
+  font-size: 17px;
+  font-weight: 900;
+  transform: translateX(-50%);
+}
+
+.page-head {
   margin-bottom: 16px;
 }
 
 .eyebrow,
 .title,
+.nav-title,
 .featured-title,
 .featured-subtitle,
 .featured-mark,
@@ -124,21 +165,8 @@ onShow(load)
 .title {
   margin-top: 4px;
   color: #17221e;
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 900;
-}
-
-.back-button {
-  flex: 0 0 auto;
-  min-width: 62px;
-  height: 36px;
-  line-height: 36px;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid #e5ddd2;
-  color: #4d564f;
-  font-size: 14px;
-  font-weight: 700;
 }
 
 .featured-card {

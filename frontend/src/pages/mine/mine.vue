@@ -34,7 +34,7 @@
       </view>
 
       <button class="primary" @tap="submit">{{ mode === 'login' ? '登录' : '注册并登录' }}</button>
-      <text class="login-tip">本地预览环境可直接注册测试账号。</text>
+      <text class="login-tip">登录后可同步书架、进度和阅读偏好。</text>
     </view>
 
     <view v-else>

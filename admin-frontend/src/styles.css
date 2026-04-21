@@ -1,0 +1,123 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #eef1f4;
+  color: #1f2a26;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+.admin-shell {
+  min-width: 1200px;
+  min-height: 100vh;
+}
+
+.sidebar {
+  min-height: 100vh;
+  background: #1f2a26;
+}
+
+.brand {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  padding: 0 22px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.topbar {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e6e8eb;
+  background: #fff;
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.user-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.main {
+  padding: 20px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.searchbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel {
+  padding: 18px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.form-page {
+  max-width: 980px;
+}
+
+.wide-form {
+  max-width: 1180px;
+}
+
+.inline-action {
+  width: 100%;
+  display: flex;
+  gap: 10px;
+}
+
+.muted {
+  margin-left: 12px;
+  color: #7a8580;
+}
+
+.full-editor textarea {
+  font-family: "Microsoft YaHei", sans-serif;
+  line-height: 1.7;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eef1f4;
+}
+
+.login-card {
+  width: 380px;
+  padding: 30px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 16px 45px rgba(31, 42, 38, 0.12);
+}
+
+.login-title {
+  margin: 0 0 6px;
+  font-size: 24px;
+}
+
+.login-subtitle {
+  margin: 0 0 22px;
+  color: #7a8580;
+}

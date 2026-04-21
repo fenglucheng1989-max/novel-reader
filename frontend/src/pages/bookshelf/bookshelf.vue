@@ -1,11 +1,7 @@
 <template>
   <view class="page">
-    <view class="topline">
-      <text class="topline-text">{{ userStore.isLoggedIn ? '继续你的阅读节奏' : '登录后同步收藏和进度' }}</text>
-      <button v-if="userStore.isLoggedIn" class="refresh-link" @tap="refresh">刷新</button>
-    </view>
-
     <view v-if="userStore.isLoggedIn" class="stats-card">
+      <button class="refresh-link" @tap="refresh">刷新</button>
       <view class="stat-item">
         <text class="stat-value">{{ bookStore.shelf.length }}</text>
         <text class="stat-label">藏书</text>
@@ -155,14 +151,6 @@ onShow(refresh)
   box-sizing: border-box;
 }
 
-.topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.topline-text,
 .stat-value,
 .stat-label,
 .state-mark,
@@ -174,27 +162,26 @@ onShow(refresh)
   display: block;
 }
 
-.topline-text {
-  color: #8a8178;
-  font-size: 13px;
-}
-
 .refresh-link {
-  width: 48px;
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 44px;
   height: 26px;
   line-height: 26px;
   padding: 0;
   border-radius: 999px;
-  background: transparent;
-  color: #2f6f5e;
-  font-size: 13px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #d6e3dc;
+  font-size: 12px;
 }
 
 .stats-card {
+  position: relative;
   display: flex;
   align-items: center;
   margin-bottom: 14px;
-  padding: 16px 10px;
+  padding: 20px 10px 16px;
   border-radius: 8px;
   background: #20342d;
   color: #fff;

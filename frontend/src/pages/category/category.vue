@@ -3,16 +3,15 @@
     <view class="category-shell">
       <view class="nav-bar">
         <view class="nav-button" @tap="goBack">‹</view>
-      </view>
-
-      <view class="segment-row">
-        <view
-          v-for="item in genderTabs"
-          :key="item.key"
-          class="segment-item"
-          :class="{ active: activeGender === item.key }"
-          @tap="activeGender = item.key"
-        >{{ item.name }}</view>
+        <scroll-view class="segment-row" scroll-x>
+          <view
+            v-for="item in genderTabs"
+            :key="item.key"
+            class="segment-item"
+            :class="{ active: activeGender === item.key }"
+            @tap="activeGender = item.key"
+          >{{ item.name }}</view>
+        </scroll-view>
       </view>
 
       <view class="content-card">
@@ -195,8 +194,9 @@ onShow(load)
 .nav-bar {
   display: flex;
   align-items: center;
-  height: 38px;
-  margin-bottom: 10px;
+  gap: 14px;
+  height: 42px;
+  margin-bottom: 12px;
 }
 
 .nav-button {
@@ -218,18 +218,25 @@ onShow(load)
 }
 
 .segment-row {
+  min-width: 0;
+  flex: 1;
+  height: 42px;
+  white-space: nowrap;
+}
+
+.segment-row :deep(.uni-scroll-view-content) {
   display: flex;
   align-items: center;
   gap: 22px;
-  height: 40px;
-  margin-bottom: 12px;
-  overflow-x: auto;
-  white-space: nowrap;
+  min-height: 42px;
 }
 
 .segment-item {
   position: relative;
-  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 42px;
+  margin-right: 22px;
   color: #81776c;
   font-size: 15px;
   font-weight: 800;
@@ -245,7 +252,7 @@ onShow(load)
   content: "";
   position: absolute;
   left: 50%;
-  bottom: -7px;
+  bottom: 1px;
   width: 18px;
   height: 3px;
   border-radius: 999px;

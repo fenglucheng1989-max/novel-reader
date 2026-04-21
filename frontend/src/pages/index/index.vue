@@ -6,7 +6,7 @@
           <text class="search-icon">⌕</text>
           <text class="search-placeholder">搜索书名、作者或关键词</text>
         </view>
-        <button class="category-button" @tap="goSearch">分类</button>
+        <button class="category-button" @tap="openCategoryPanel">分类</button>
       </view>
 
       <scroll-view class="channel-row" scroll-x>
@@ -33,7 +33,9 @@
         <view class="rank-panel">
           <view class="section-head">
             <text class="section-title">推荐榜</text>
-            <text class="section-action">完整榜单 ›</text>
+            <text class="section-action" @tap="toggleRank">
+              {{ rankExpanded ? '收起榜单' : '完整榜单 ›' }}
+            </text>
           </view>
           <view class="rank-grid">
             <view
@@ -95,6 +97,29 @@
         </view>
       </template>
     </view>
+
+    <view v-if="categoryPanelVisible" class="panel-mask" @tap="closeCategoryPanel">
+      <view class="category-panel" @tap.stop>
+        <view class="panel-head">
+          <text class="panel-title">选择分类</text>
+          <button class="panel-close" @tap="closeCategoryPanel">×</button>
+        </view>
+        <view class="category-grid">
+          <button
+            class="category-option"
+            :class="{ active: activeCategory === 0 }"
+            @tap="chooseCategory(0)"
+          >推荐</button>
+          <button
+            v-for="item in bookStore.categories"
+            :key="item.id"
+            class="category-option"
+            :class="{ active: activeCategory === item.id }"
+            @tap="chooseCategory(item.id)"
+          >{{ item.name }}</button>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -106,8 +131,10 @@ import { useBookStore } from '../../store/book'
 const bookStore = useBookStore()
 const activeCategory = ref(0)
 const loading = ref(false)
+const rankExpanded = ref(false)
+const categoryPanelVisible = ref(false)
 
-const rankedBooks = computed(() => bookStore.books.slice(0, 8))
+const rankedBooks = computed(() => bookStore.books.slice(0, rankExpanded.value ? bookStore.books.length : 6))
 const featuredBooks = computed(() => bookStore.books.slice(0, 2))
 const listBooks = computed(() => bookStore.books.slice(2))
 
@@ -123,7 +150,25 @@ async function load() {
 
 function selectCategory(id) {
   activeCategory.value = id
+  rankExpanded.value = false
   bookStore.loadRecommend(id || null)
+}
+
+function chooseCategory(id) {
+  closeCategoryPanel()
+  selectCategory(id)
+}
+
+function openCategoryPanel() {
+  categoryPanelVisible.value = true
+}
+
+function closeCategoryPanel() {
+  categoryPanelVisible.value = false
+}
+
+function toggleRank() {
+  rankExpanded.value = !rankExpanded.value
 }
 
 function goDetail(id) {
@@ -191,6 +236,7 @@ onShow(load)
 .section-title,
 .section-action,
 .section-count,
+.panel-title,
 .rank-no,
 .rank-title,
 .rank-meta,
@@ -290,6 +336,10 @@ onShow(load)
 .section-count {
   color: #8d8175;
   font-size: 13px;
+}
+
+.section-action {
+  padding: 4px 0 4px 12px;
 }
 
 .rank-grid {
@@ -504,6 +554,72 @@ onShow(load)
   margin-top: 8px;
   color: #94897c;
   font-size: 13px;
+}
+
+.panel-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 12px 12px;
+  background: rgba(20, 28, 25, 0.28);
+  box-sizing: border-box;
+}
+
+.category-panel {
+  width: 100%;
+  max-width: 760px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 18px 44px rgba(31, 42, 38, 0.18);
+  box-sizing: border-box;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.panel-title {
+  color: #1f2a26;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.panel-close {
+  width: 34px;
+  height: 34px;
+  line-height: 34px;
+  border-radius: 8px;
+  background: #f3eee7;
+  color: #62584d;
+  font-size: 20px;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.category-option {
+  height: 40px;
+  line-height: 40px;
+  border-radius: 8px;
+  background: #f6f3ee;
+  color: #4c5550;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.category-option.active {
+  background: #2f6f5e;
+  color: #fff;
 }
 
 @media (min-width: 720px) {

@@ -7,7 +7,7 @@
         <el-button type="primary" @click="$router.push(`/books/${bookId}/chapters/new`)">新增章节</el-button>
       </div>
     </div>
-    <el-table :data="chapters" border>
+    <el-table :data="chapters" border v-loading="loading" empty-text="暂无章节">
       <el-table-column prop="chapterNo" label="序号" width="100" />
       <el-table-column prop="title" label="章节标题" min-width="220" />
       <el-table-column prop="wordCount" label="字数" width="120" />
@@ -31,11 +31,17 @@ const route = useRoute()
 const bookId = route.params.bookId
 const chapters = ref([])
 const bookTitle = ref('')
+const loading = ref(false)
 
 async function load() {
-  chapters.value = (await listChapters(bookId)).data || []
-  const detail = await getBook(bookId)
-  bookTitle.value = detail.data.book.title
+  loading.value = true
+  try {
+    chapters.value = (await listChapters(bookId)).data || []
+    const detail = await getBook(bookId)
+    bookTitle.value = detail.data.book.title
+  } finally {
+    loading.value = false
+  }
 }
 
 async function remove(id) {

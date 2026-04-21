@@ -17,7 +17,7 @@
 
     <view v-if="showTools" class="reader-bottom">
       <button class="nav" @tap.stop="prevChapter">上一章</button>
-      <text class="chapter-indicator">第 {{ chapterNo }} 章</text>
+      <text class="chapter-indicator">{{ chapterIndicator }}</text>
       <button class="nav" @tap.stop="nextChapter">下一章</button>
     </view>
 
@@ -68,6 +68,14 @@ const scrollTop = ref(0)
 const position = ref(0)
 
 const chapter = computed(() => readerStore.chapter)
+const maxChapterNo = computed(() => {
+  const list = readerStore.chapters || []
+  return list.length ? Math.max(...list.map((item) => Number(item.chapterNo || 0))) : 0
+})
+const chapterIndicator = computed(() => {
+  if (!maxChapterNo.value) return `第 ${chapterNo.value} 章`
+  return `第 ${chapterNo.value} / ${maxChapterNo.value} 章`
+})
 const paragraphs = computed(() => {
   if (!chapter.value?.content) return []
   return chapter.value.content
@@ -122,8 +130,8 @@ function openSetting() {
   settingVisible.value = !settingVisible.value
 }
 
-function goBack() {
-  saveProgress()
+async function goBack() {
+  await saveProgress()
   const pages = getCurrentPages()
   if (pages.length > 1) {
     uni.navigateBack()
@@ -141,14 +149,18 @@ async function prevChapter() {
     uni.showToast({ title: '已经是第一章', icon: 'none' })
     return
   }
-  saveProgress()
+  await saveProgress()
   chapterNo.value -= 1
   resetScroll()
   await loadChapter()
 }
 
 async function nextChapter() {
-  saveProgress()
+  if (maxChapterNo.value && chapterNo.value >= maxChapterNo.value) {
+    uni.showToast({ title: '已经是最后一章', icon: 'none' })
+    return
+  }
+  await saveProgress()
   chapterNo.value += 1
   resetScroll()
   await loadChapter()
@@ -190,11 +202,11 @@ function saveSetting(setting) {
   }
 }
 
-function saveProgress() {
+async function saveProgress() {
   if (!userStore.isLoggedIn || !chapter.value) {
-    return
+    return null
   }
-  readerStore.saveProgress(bookId.value, {
+  return readerStore.saveProgress(bookId.value, {
     chapterId: chapter.value.id,
     chapterNo: chapterNo.value,
     position: position.value,
@@ -203,13 +215,18 @@ function saveProgress() {
   })
 }
 
-onLoad((query) => {
+async function initReader(query) {
   bookId.value = query.bookId
   chapterNo.value = Number(query.chapterNo || 1)
   if (userStore.isLoggedIn) {
-    readerStore.loadSetting()
+    await readerStore.loadSetting()
   }
-  loadChapter()
+  await readerStore.loadChapters(bookId.value)
+  await loadChapter()
+}
+
+onLoad((query) => {
+  initReader(query)
 })
 
 onUnload(saveProgress)

@@ -1,5 +1,6 @@
 package com.yourcompany.novelreader.controller;
 
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.yourcompany.novelreader.dto.BookDTO;
 import com.yourcompany.novelreader.dto.CategoryDTO;
 import com.yourcompany.novelreader.dto.ChapterDTO;
@@ -181,7 +182,14 @@ public class AdminNovelController extends BaseUserController {
     @DeleteMapping("/categories/{id}")
     public ApiResponse<Void> deleteCategory(Authentication authentication, @PathVariable Long id) {
         requireAdmin(authentication);
+        NovelCategory category = categoryMapper.selectById(id);
+        if (category == null) {
+            return ApiResponse.error(404, "Category not found");
+        }
         categoryMapper.deleteById(id);
+        bookMapper.update(null, new LambdaUpdateWrapper<NovelBook>()
+                .eq(NovelBook::getCategoryId, id)
+                .set(NovelBook::getCategoryId, null));
         return ApiResponse.success(null);
     }
 

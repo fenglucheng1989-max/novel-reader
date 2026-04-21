@@ -11,10 +11,18 @@ const defaultSetting = {
 export const useReaderStore = defineStore('reader', {
   state: () => ({
     chapter: null,
+    chapters: [],
     progress: null,
     setting: uni.getStorageSync('readerSetting') || defaultSetting
   }),
   actions: {
+    async loadChapters(bookId) {
+      const res = await request({ url: `/api/v1/books/${bookId}/chapters` })
+      if (res.code === 200) {
+        this.chapters = res.data || []
+      }
+      return res
+    },
     async loadChapter(bookId, chapterNo) {
       const cacheKey = `chapter:${bookId}:${chapterNo}`
       const cached = uni.getStorageSync(cacheKey)

@@ -13,10 +13,18 @@
     </view>
 
     <view v-if="loading" class="empty">正在搜索...</view>
-    <view v-else-if="searched && !bookStore.books.length" class="empty">没有找到相关书籍</view>
+    <view v-else-if="searched && !results.length" class="empty">没有找到相关书籍</view>
     <view v-else-if="!searched" class="empty hint">输入关键词，查找书名或作者</view>
+    <view v-if="!searched" class="quick-tags">
+      <view
+        v-for="tag in quickTags"
+        :key="tag"
+        class="quick-tag"
+        @tap="searchTag(tag)"
+      >{{ tag }}</view>
+    </view>
     <view v-else class="list">
-      <view v-for="book in bookStore.books" :key="book.id" class="item" @tap="goDetail(book.id)">
+      <view v-for="book in results" :key="book.id" class="item" @tap="goDetail(book.id)">
         <view class="cover">{{ coverText(book.title) }}</view>
         <view class="info">
           <text class="name">{{ book.title }}</text>
@@ -37,19 +45,29 @@ const bookStore = useBookStore()
 const keyword = ref('')
 const loading = ref(false)
 const searched = ref(false)
+const results = ref([])
+const quickTags = ['玄幻', '都市', '悬疑', '热血', '重生', '完结']
 
 async function doSearch() {
   if (!keyword.value.trim()) {
+    results.value = []
+    searched.value = false
     uni.showToast({ title: '请输入关键词', icon: 'none' })
     return
   }
   loading.value = true
   searched.value = true
   try {
-    await bookStore.search(keyword.value.trim())
+    const res = await bookStore.search(keyword.value.trim())
+    results.value = res.code === 200 ? (res.data || []) : []
   } finally {
     loading.value = false
   }
+}
+
+function searchTag(tag) {
+  keyword.value = tag
+  doSearch()
 }
 
 function goDetail(id) {
@@ -113,6 +131,25 @@ onLoad((options) => {
 
 .hint {
   color: #9a8f83;
+}
+
+.quick-tags {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: -36px;
+}
+
+.quick-tag {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #fff;
+  color: #4c5550;
+  font-size: 14px;
+  font-weight: 800;
 }
 
 .list {

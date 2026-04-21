@@ -7,11 +7,15 @@ import com.yourcompany.novelreader.entity.NovelBook;
 import com.yourcompany.novelreader.entity.NovelBookshelf;
 import com.yourcompany.novelreader.entity.NovelCategory;
 import com.yourcompany.novelreader.entity.NovelChapter;
+import com.yourcompany.novelreader.entity.NovelReadingHistory;
+import com.yourcompany.novelreader.entity.NovelReadingProgress;
 import com.yourcompany.novelreader.exception.BusinessException;
 import com.yourcompany.novelreader.mapper.NovelBookMapper;
 import com.yourcompany.novelreader.mapper.NovelBookshelfMapper;
 import com.yourcompany.novelreader.mapper.NovelCategoryMapper;
 import com.yourcompany.novelreader.mapper.NovelChapterMapper;
+import com.yourcompany.novelreader.mapper.NovelReadingHistoryMapper;
+import com.yourcompany.novelreader.mapper.NovelReadingProgressMapper;
 import com.yourcompany.novelreader.service.BookService;
 import com.yourcompany.novelreader.vo.BookDetailVO;
 import com.yourcompany.novelreader.vo.ChapterItemVO;
@@ -21,6 +25,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +35,8 @@ public class BookServiceImpl implements BookService {
     private final NovelCategoryMapper categoryMapper;
     private final NovelChapterMapper chapterMapper;
     private final NovelBookshelfMapper bookshelfMapper;
+    private final NovelReadingProgressMapper progressMapper;
+    private final NovelReadingHistoryMapper historyMapper;
     private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
@@ -133,8 +140,12 @@ public class BookServiceImpl implements BookService {
 
     @Override
     public void deleteBook(Long id) {
-        bookMapper.deleteById(id);
+        requireBook(id);
+        bookshelfMapper.delete(new LambdaQueryWrapper<NovelBookshelf>().eq(NovelBookshelf::getBookId, id));
+        progressMapper.delete(new LambdaQueryWrapper<NovelReadingProgress>().eq(NovelReadingProgress::getBookId, id));
+        historyMapper.delete(new LambdaQueryWrapper<NovelReadingHistory>().eq(NovelReadingHistory::getBookId, id));
         chapterMapper.delete(new LambdaQueryWrapper<NovelChapter>().eq(NovelChapter::getBookId, id));
+        bookMapper.deleteById(id);
         clearBookCache(id);
     }
 
@@ -213,13 +224,18 @@ public class BookServiceImpl implements BookService {
         book.setWordCount(chapters.stream().mapToInt(c -> c.getWordCount() == null ? 0 : c.getWordCount()).sum());
         if (!chapters.isEmpty()) {
             book.setLatestChapterTitle(chapters.get(chapters.size() - 1).getTitle());
+        } else {
+            book.setLatestChapterTitle(null);
         }
         bookMapper.updateById(book);
     }
 
     private void clearBookCache(Long bookId) {
         try {
-            redisTemplate.delete("novel:chapters:" + bookId);
+            Set<String> keys = redisTemplate.keys("novel:chapter:" + bookId + ":*");
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+            }
         } catch (Exception ignored) {
         }
     }

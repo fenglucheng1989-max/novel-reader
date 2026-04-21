@@ -21,3 +21,6 @@ spring:
 
 jwt:
   secret: local-development-secret-key-at-least-32-bytes
+
+server:
+  port: 8081

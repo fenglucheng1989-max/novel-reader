@@ -29,7 +29,7 @@
         <el-input v-model="form.description" type="textarea" :rows="6" />
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="submit">保存</el-button>
+        <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
         <el-button @click="$router.back()">返回</el-button>
       </el-form-item>
     </el-form>
@@ -46,6 +46,7 @@ const route = useRoute()
 const router = useRouter()
 const id = route.params.id
 const categories = ref([])
+const saving = ref(false)
 const form = reactive({
   title: '',
   author: '',
@@ -58,13 +59,22 @@ const form = reactive({
 })
 
 async function submit() {
-  if (id) {
-    await updateBook(id, form)
-  } else {
-    await createBook(form)
+  if (!form.title.trim()) {
+    ElMessage.warning('请填写书名')
+    return
   }
-  ElMessage.success('已保存')
-  router.push('/books')
+  saving.value = true
+  try {
+    if (id) {
+      await updateBook(id, form)
+    } else {
+      await createBook(form)
+    }
+    ElMessage.success('已保存')
+    router.push('/books')
+  } finally {
+    saving.value = false
+  }
 }
 
 onMounted(async () => {

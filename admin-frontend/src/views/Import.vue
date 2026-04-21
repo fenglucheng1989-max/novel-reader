@@ -63,9 +63,13 @@ const form = reactive({
 })
 
 async function loadPreview() {
+  if (!url.value.trim()) {
+    ElMessage.warning('请输入网页 URL')
+    return
+  }
   previewing.value = true
   try {
-    const res = await previewImport({ url: url.value })
+    const res = await previewImport({ url: url.value.trim() })
     preview.value = res.data
     Object.assign(form, res.data)
     if (!form.categoryId && categories.value.length > 0) {
@@ -77,6 +81,14 @@ async function loadPreview() {
 }
 
 async function submit() {
+  if (!form.title.trim() || !form.chapterTitle.trim() || !form.content.trim()) {
+    ElMessage.warning('请补全书名、章节标题和正文')
+    return
+  }
+  if (!form.categoryId) {
+    ElMessage.warning('请选择分类')
+    return
+  }
   saving.value = true
   try {
     const res = await confirmImport(form)

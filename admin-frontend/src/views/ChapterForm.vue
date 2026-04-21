@@ -11,7 +11,7 @@
         <el-input v-model="form.content" type="textarea" :rows="18" />
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="submit">保存</el-button>
+        <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
         <el-button @click="goBack">返回</el-button>
       </el-form-item>
     </el-form>
@@ -19,7 +19,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createChapter, getChapter, listChapters, updateChapter } from '../api/admin'
@@ -28,6 +28,7 @@ const route = useRoute()
 const router = useRouter()
 const id = route.params.id
 const bookId = route.params.bookId || route.query.bookId
+const saving = ref(false)
 const form = reactive({
   chapterNo: 1,
   title: '',
@@ -39,13 +40,26 @@ function goBack() {
 }
 
 async function submit() {
-  if (id) {
-    await updateChapter(id, form)
-  } else {
-    await createChapter(bookId, form)
+  if (!form.title.trim()) {
+    ElMessage.warning('请填写章节标题')
+    return
   }
-  ElMessage.success('已保存')
-  goBack()
+  if (!form.content.trim()) {
+    ElMessage.warning('请填写章节正文')
+    return
+  }
+  saving.value = true
+  try {
+    if (id) {
+      await updateChapter(id, form)
+    } else {
+      await createChapter(bookId, form)
+    }
+    ElMessage.success('已保存')
+    goBack()
+  } finally {
+    saving.value = false
+  }
 }
 
 onMounted(async () => {

@@ -140,6 +140,12 @@ async function refresh() {
   loading.value = true
   try {
     await bookStore.loadShelf()
+  } catch (error) {
+    if (error?.statusCode === 401 || error?.statusCode === 403) {
+      userStore.syncFromStorage()
+      bookStore.shelf = []
+      editMode.value = false
+    }
   } finally {
     loading.value = false
   }
@@ -214,7 +220,10 @@ function coverText(title) {
   return (title || '书').slice(0, 2)
 }
 
-onShow(refresh)
+onShow(() => {
+  userStore.syncFromStorage()
+  refresh()
+})
 </script>
 
 <style scoped>

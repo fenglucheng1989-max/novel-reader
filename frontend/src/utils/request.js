@@ -23,20 +23,20 @@ export function request(options) {
           return
         }
 
-        if (res.statusCode === 401) {
+        if (res.statusCode === 401 || res.statusCode === 403) {
           uni.removeStorageSync('token')
           uni.removeStorageSync('username')
           uni.showToast({ title: '登录已过期，请重新登录', icon: 'none' })
           setTimeout(() => {
             uni.switchTab({ url: '/pages/mine/mine' })
           }, 1500)
-          reject(res.data)
+          reject({ ...(res.data || {}), statusCode: res.statusCode })
           return
         }
 
         const message = res.data && res.data.message ? res.data.message : '请求失败'
         uni.showToast({ title: message, icon: 'none' })
-        reject(res.data)
+        reject({ ...(res.data || {}), statusCode: res.statusCode })
       },
       fail: (err) => {
         uni.showToast({ title: '网络错误', icon: 'none' })

@@ -10,6 +10,10 @@ export const useUserStore = defineStore('user', {
     isLoggedIn: (state) => !!state.token
   },
   actions: {
+    syncFromStorage() {
+      this.token = uni.getStorageSync('token') || ''
+      this.username = uni.getStorageSync('username') || ''
+    },
     async login(username, password) {
       const res = await request({
         url: '/api/v1/auth/login',

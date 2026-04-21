@@ -158,6 +158,7 @@ function setTheme(theme) {
 }
 
 onShow(() => {
+  userStore.syncFromStorage()
   if (userStore.isLoggedIn) {
     readerStore.loadSetting()
   }

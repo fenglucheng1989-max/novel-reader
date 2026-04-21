@@ -1,7 +1,11 @@
 let BASE_URL = ''
 
+// #ifdef H5
+BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+// #endif
+
 // #ifdef APP-PLUS
-BASE_URL = 'http://192.168.101.12:8081'
+BASE_URL = 'http://192.168.101.12:8080'
 // #endif
 
 export function request(options) {

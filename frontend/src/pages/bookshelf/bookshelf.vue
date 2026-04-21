@@ -1,10 +1,7 @@
 <template>
   <view class="page">
-    <view v-if="userStore.isLoggedIn" class="page-action">
-      <button class="refresh-link" @tap="refresh">刷新</button>
-    </view>
-
     <view v-if="userStore.isLoggedIn" class="stats-card">
+      <button class="refresh-link" @tap="refresh">↻</button>
       <view class="stat-item">
         <text class="stat-value">{{ bookStore.shelf.length }}</text>
         <text class="stat-label">藏书</text>
@@ -166,27 +163,25 @@ onShow(refresh)
 }
 
 .refresh-link {
-  width: 44px;
-  height: 26px;
-  line-height: 26px;
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
   padding: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: #2f6f5e;
-  font-size: 12px;
-}
-
-.page-action {
-  display: flex;
-  justify-content: flex-end;
-  margin: -4px 0 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: #d6e3dc;
+  font-size: 15px;
 }
 
 .stats-card {
+  position: relative;
   display: flex;
   align-items: center;
   margin-bottom: 14px;
-  padding: 16px 10px;
+  padding: 26px 10px 16px;
   border-radius: 8px;
   background: #20342d;
   color: #fff;

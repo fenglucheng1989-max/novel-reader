@@ -12,7 +12,7 @@
         <el-menu-item index="/dashboard">概览</el-menu-item>
         <el-menu-item index="/books">书籍管理</el-menu-item>
         <el-menu-item index="/categories">分类管理</el-menu-item>
-        <el-menu-item index="/import">URL 导入</el-menu-item>
+        <el-menu-item index="/import">导入中心</el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>

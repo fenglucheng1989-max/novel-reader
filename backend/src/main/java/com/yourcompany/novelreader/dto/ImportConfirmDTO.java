@@ -4,9 +4,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class ImportConfirmDTO {
-    @NotBlank
     private String sourceUrl;
     @NotBlank
     private String title;
@@ -14,8 +15,17 @@ public class ImportConfirmDTO {
     @NotNull
     private Long categoryId;
     private String description;
-    @NotBlank
     private String chapterTitle;
-    @NotBlank
     private String content;
+    private String sourceType;
+    private List<ChapterItem> chapters;
+
+    @Data
+    public static class ChapterItem {
+        private Integer chapterNo;
+        @NotBlank
+        private String title;
+        @NotBlank
+        private String content;
+    }
 }

@@ -18,6 +18,7 @@ import com.yourcompany.novelreader.vo.AdminDashboardVO;
 import com.yourcompany.novelreader.vo.ApiResponse;
 import com.yourcompany.novelreader.vo.BookDetailVO;
 import com.yourcompany.novelreader.vo.ChapterItemVO;
+import com.yourcompany.novelreader.vo.ImportChapterPreviewVO;
 import com.yourcompany.novelreader.vo.ImportPreviewVO;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
@@ -30,12 +31,16 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -43,6 +48,10 @@ import java.util.regex.Pattern;
 @RestController
 @RequestMapping("/api/v1/admin")
 public class AdminNovelController extends BaseUserController {
+
+    private static final Pattern CHAPTER_TITLE_PATTERN = Pattern.compile(
+            "(?m)^\\s*((第[\\d零〇一二三四五六七八九十百千万两]+[章节卷回集部篇].{0,60})|(Chapter\\s+\\d+.{0,60}))\\s*$",
+            Pattern.CASE_INSENSITIVE);
 
     private final BookService bookService;
     private final NovelBookMapper bookMapper;
@@ -201,14 +210,54 @@ public class AdminNovelController extends BaseUserController {
         String title = extractTitle(html);
         String text = extractText(html);
         String content = text.length() > 5000 ? text.substring(0, 5000) : text;
+        ImportChapterPreviewVO chapter = buildChapter(1, "第一章 导入内容", content);
         return ApiResponse.success(ImportPreviewVO.builder()
                 .sourceUrl(dto.getUrl())
+                .sourceType("EXTERNAL")
                 .title(title.isBlank() ? "外部导入：" + URI.create(dto.getUrl()).getHost() : title)
                 .author(URI.create(dto.getUrl()).getHost())
                 .description("来源：" + dto.getUrl())
-                .chapterTitle("第一章 导入内容")
-                .content(content)
-                .wordCount(countWords(content))
+                .chapterTitle(chapter.getTitle())
+                .content(chapter.getContent())
+                .wordCount(chapter.getWordCount())
+                .chapterCount(1)
+                .chapters(List.of(chapter))
+                .build());
+    }
+
+    @PostMapping("/import/txt/preview")
+    public ApiResponse<ImportPreviewVO> previewTxtImport(Authentication authentication,
+                                                         @RequestParam("file") MultipartFile file) throws Exception {
+        requireAdmin(authentication);
+        if (file.isEmpty()) {
+            return ApiResponse.error(400, "请选择 TXT 文件");
+        }
+        String filename = file.getOriginalFilename() == null ? "未命名作品.txt" : file.getOriginalFilename();
+        String text = cleanText(decodeText(file.getBytes()));
+        List<ImportChapterPreviewVO> chapters = splitChapters(text);
+        String title = filename.replaceFirst("(?i)\\.txt$", "").trim();
+        String author = "本地 TXT";
+        Matcher titleMatcher = Pattern.compile("(?m)^\\s*(书名|标题)[:：]\\s*(.+?)\\s*$").matcher(text);
+        if (titleMatcher.find()) {
+            title = titleMatcher.group(2).trim();
+        }
+        Matcher authorMatcher = Pattern.compile("(?m)^\\s*作者[:：]\\s*(.+?)\\s*$").matcher(text);
+        if (authorMatcher.find()) {
+            author = authorMatcher.group(1).trim();
+        }
+        int wordCount = chapters.stream().mapToInt(item -> item.getWordCount() == null ? 0 : item.getWordCount()).sum();
+        ImportChapterPreviewVO firstChapter = chapters.get(0);
+        return ApiResponse.success(ImportPreviewVO.builder()
+                .sourceUrl("file://" + filename)
+                .sourceType("FILE")
+                .title(title.isBlank() ? "未命名作品" : title)
+                .author(author)
+                .description("来源：TXT 文件导入。" + filename)
+                .chapterTitle(firstChapter.getTitle())
+                .content(firstChapter.getContent())
+                .wordCount(wordCount)
+                .chapterCount(chapters.size())
+                .chapters(chapters)
                 .build());
     }
 
@@ -216,21 +265,37 @@ public class AdminNovelController extends BaseUserController {
     public ApiResponse<NovelBook> confirmImport(Authentication authentication,
                                                 @Valid @RequestBody ImportConfirmDTO dto) {
         requireAdmin(authentication);
+        List<ImportConfirmDTO.ChapterItem> chapters = dto.getChapters();
+        if (chapters == null || chapters.isEmpty()) {
+            ImportConfirmDTO.ChapterItem chapter = new ImportConfirmDTO.ChapterItem();
+            chapter.setChapterNo(1);
+            chapter.setTitle(dto.getChapterTitle());
+            chapter.setContent(dto.getContent());
+            chapters = List.of(chapter);
+        }
+        if (chapters.stream().anyMatch(item -> item.getTitle() == null || item.getTitle().isBlank()
+                || item.getContent() == null || item.getContent().isBlank())) {
+            return ApiResponse.error(400, "章节标题和正文不能为空");
+        }
         BookDTO bookDTO = new BookDTO();
         bookDTO.setTitle(dto.getTitle());
         bookDTO.setAuthor(dto.getAuthor());
         bookDTO.setCategoryId(dto.getCategoryId());
-        bookDTO.setDescription((dto.getDescription() == null ? "" : dto.getDescription()) + "\n来源：" + dto.getSourceUrl());
+        bookDTO.setDescription(buildImportDescription(dto));
         bookDTO.setStatus("COMPLETED");
-        bookDTO.setSourceType("EXTERNAL");
+        bookDTO.setSourceType(dto.getSourceType() == null || dto.getSourceType().isBlank() ? "EXTERNAL" : dto.getSourceType());
         bookDTO.setSortOrder(100);
         NovelBook book = bookService.createBook(bookDTO);
 
-        ChapterDTO chapterDTO = new ChapterDTO();
-        chapterDTO.setChapterNo(1);
-        chapterDTO.setTitle(dto.getChapterTitle());
-        chapterDTO.setContent(dto.getContent());
-        bookService.createChapter(book.getId(), chapterDTO);
+        int chapterNo = 1;
+        for (ImportConfirmDTO.ChapterItem item : chapters) {
+            ChapterDTO chapterDTO = new ChapterDTO();
+            chapterDTO.setChapterNo(item.getChapterNo() == null ? chapterNo : item.getChapterNo());
+            chapterDTO.setTitle(item.getTitle());
+            chapterDTO.setContent(item.getContent());
+            bookService.createChapter(book.getId(), chapterDTO);
+            chapterNo++;
+        }
         return ApiResponse.success(bookMapper.selectById(book.getId()));
     }
 
@@ -272,8 +337,64 @@ public class AdminNovelController extends BaseUserController {
         return cleanText(text);
     }
 
+    private String decodeText(byte[] bytes) {
+        String utf8 = new String(bytes, StandardCharsets.UTF_8);
+        long replacementCount = utf8.chars().filter(ch -> ch == '\uFFFD').count();
+        if (replacementCount > 3) {
+            return new String(bytes, Charset.forName("GB18030"));
+        }
+        return utf8;
+    }
+
+    private List<ImportChapterPreviewVO> splitChapters(String rawText) {
+        String text = cleanText(rawText);
+        List<ImportChapterPreviewVO> chapters = new ArrayList<>();
+        Matcher matcher = CHAPTER_TITLE_PATTERN.matcher(text);
+        List<ChapterMark> marks = new ArrayList<>();
+        while (matcher.find()) {
+            marks.add(new ChapterMark(matcher.start(), matcher.end(), matcher.group(1).trim()));
+        }
+        if (marks.isEmpty()) {
+            chapters.add(buildChapter(1, "第一章 导入内容", text));
+            return chapters;
+        }
+        for (int i = 0; i < marks.size(); i++) {
+            ChapterMark current = marks.get(i);
+            int nextStart = i + 1 < marks.size() ? marks.get(i + 1).start() : text.length();
+            String content = text.substring(current.end(), nextStart).trim();
+            if (!content.isBlank()) {
+                chapters.add(buildChapter(chapters.size() + 1, current.title(), content));
+            }
+        }
+        if (chapters.isEmpty()) {
+            chapters.add(buildChapter(1, "第一章 导入内容", text));
+        }
+        return chapters.stream().limit(500).toList();
+    }
+
+    private ImportChapterPreviewVO buildChapter(int chapterNo, String title, String content) {
+        return ImportChapterPreviewVO.builder()
+                .chapterNo(chapterNo)
+                .title(title)
+                .content(content == null ? "" : content.trim())
+                .wordCount(countWords(content))
+                .build();
+    }
+
+    private String buildImportDescription(ImportConfirmDTO dto) {
+        String description = dto.getDescription() == null ? "" : dto.getDescription().trim();
+        if (dto.getSourceUrl() == null || dto.getSourceUrl().isBlank() || description.contains(dto.getSourceUrl())) {
+            return description;
+        }
+        return (description + "\n来源：" + dto.getSourceUrl()).trim();
+    }
+
     private String cleanText(String text) {
-        return text.replace("&nbsp;", " ")
+        if (text == null) {
+            return "";
+        }
+        return text.replace("\uFEFF", "")
+                .replace("&nbsp;", " ")
                 .replace("&lt;", "<")
                 .replace("&gt;", ">")
                 .replace("&amp;", "&")
@@ -285,5 +406,8 @@ public class AdminNovelController extends BaseUserController {
 
     private int countWords(String content) {
         return content == null ? 0 : content.replaceAll("\\s+", "").length();
+    }
+
+    private record ChapterMark(int start, int end, String title) {
     }
 }

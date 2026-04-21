@@ -21,4 +21,5 @@ export const updateCategory = (id, data) => http.put(`/api/v1/admin/categories/$
 export const deleteCategory = (id) => http.delete(`/api/v1/admin/categories/${id}`)
 
 export const previewImport = (data) => http.post('/api/v1/admin/import/preview', data)
+export const previewTxtImport = (data) => http.post('/api/v1/admin/import/txt/preview', data, { timeout: 30000 })
 export const confirmImport = (data) => http.post('/api/v1/admin/import/confirm', data)

@@ -27,7 +27,7 @@ const router = createRouter({
         { path: 'books/:bookId/chapters/new', component: ChapterForm, meta: { title: '新增章节' } },
         { path: 'chapters/:id/edit', component: ChapterForm, meta: { title: '编辑章节' } },
         { path: 'categories', component: Categories, meta: { title: '分类管理' } },
-        { path: 'import', component: Import, meta: { title: 'URL 导入' } }
+        { path: 'import', component: Import, meta: { title: '导入中心' } }
       ]
     }
   ]

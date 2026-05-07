@@ -93,13 +93,25 @@
         </view>
       </view>
 
-      <!-- Similar recommendations placeholder -->
-      <view class="section">
+      <!-- Similar recommendations -->
+      <view v-if="recommendations.length" class="section">
         <view class="section-header">
           <text class="section-title">相似推荐</text>
         </view>
-        <view class="comment-placeholder">
-          <text class="placeholder-text">推荐功能即将上线</text>
+        <view
+          v-for="book in recommendations"
+          :key="book.id"
+          class="rec-item"
+          @tap="goRecommendDetail(book.id)"
+        >
+          <view class="rec-cover">
+            <text>{{ coverText(book.title) }}</text>
+          </view>
+          <view class="rec-info">
+            <text class="rec-title">{{ book.title }}</text>
+            <text class="rec-meta">{{ book.author || '佚名' }} · {{ book.chapterCount || 0 }}章 · {{ statusText(book.status) }}</text>
+          </view>
+          <text class="rec-arrow">›</text>
         </view>
       </view>
 
@@ -131,6 +143,8 @@ const id = ref('')
 const detail = ref(null)
 const loading = ref(false)
 const descExpanded = ref(false)
+const recommendations = ref([])
+const loadingRecs = ref(false)
 
 const tocPreview = computed(() => (detail.value?.chapters || []).slice(0, TOC_PREVIEW_COUNT))
 const shouldFold = computed(() => (detail.value?.book?.description || '').length > FOLD_THRESHOLD)
@@ -148,6 +162,19 @@ async function load() {
     if (res.code === 200) detail.value = res.data
   } finally {
     loading.value = false
+  }
+  loadRecommendations()
+}
+
+async function loadRecommendations() {
+  loadingRecs.value = true
+  try {
+    const res = await bookStore.loadRecommendations(id.value, 6)
+    if (res.code === 200) recommendations.value = res.data || []
+  } catch {
+    recommendations.value = []
+  } finally {
+    loadingRecs.value = false
   }
 }
 
@@ -178,6 +205,10 @@ function startRead() {
 
 function readChapter(chapterNo) {
   uni.navigateTo({ url: `/pages/reader/reader?bookId=${id.value}&chapterNo=${chapterNo}` })
+}
+
+function goRecommendDetail(bookId) {
+  uni.navigateTo({ url: `/pages/book/detail?id=${bookId}` })
 }
 
 function coverText(title) {
@@ -512,6 +543,61 @@ onLoad((query) => {
 .placeholder-text {
   color: #bfb5a6;
   font-size: 13px;
+}
+
+/* ---- Recommendations ---- */
+.rec-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid #f0ebe0;
+}
+
+.rec-item:first-of-type {
+  margin-top: 8px;
+}
+
+.rec-cover {
+  width: 44px;
+  height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #2f6f5e 0%, #5a9e87 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.rec-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rec-title {
+  display: block;
+  color: #333b37;
+  font-size: 15px;
+  line-height: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rec-meta {
+  display: block;
+  color: #b0a595;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.rec-arrow {
+  color: #c0b8a8;
+  font-size: 20px;
+  flex-shrink: 0;
 }
 
 /* ---- Bottom bar ---- */

@@ -63,6 +63,9 @@ export const useBookStore = defineStore('book', {
     },
     async removeShelf(bookId) {
       return request({ url: `/api/v1/bookshelf/${bookId}`, method: 'DELETE' })
+    },
+    async loadRecommendations(bookId, limit = 6) {
+      return request({ url: `/api/v1/books/${bookId}/recommendations?limit=${limit}` })
     }
   }
 })

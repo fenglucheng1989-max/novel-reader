@@ -112,6 +112,29 @@
 - loadSetting 从后端同步新字段。
 - saveSetting/updateLocalSetting 已通过 spread 自动兼容。
 
+### Phase 2：书籍详情页升级 (2026-05-08)
+
+**后端**
+
+- Flyway V5 migration：新增 `novel_book_stats`（评分/阅读数/收藏数/浏览数）和 `novel_book_tag`（标签）表。
+- 新增 `NovelBookStats`、`NovelBookTag` 实体和 Mapper。
+- `BookDetailVO` 扩展：rating、ratingCount、readingCount、favoriteCount、tags、estimatedReadingMinutes。
+- `BookServiceImpl.detail()` 聚合 stats 和 tags。
+- 新增推荐接口：`GET /api/v1/books/{id}/recommendations?limit=6`（同分类推荐）。
+- `BookController` 新增 `/books/{id}/recommendations` 端点。
+
+**前端**
+
+- 重做 `detail.vue`：
+  - Hero 区：封面占位、书名、作者、状态徽标、字数、分类。
+  - 数据三列：评分、阅读人数、收藏数。
+  - 标签 chips + 预计阅读时长。
+  - 简介（折叠展开）。
+  - 目录预览（前 10 章 + 查看全部入口）。
+  - 热门评论占位。
+  - 相似推荐占位。
+  - 底部固定 CTA：加入书架 / 开始阅读。
+
 ## 当前文档状态
 
 - `docs/design.md`：总体设计与前后端开发方案。
@@ -120,30 +143,29 @@
 
 ## 当前问题
 
-- 书籍详情页缺少评分、标签、阅读人数、收藏数、预计阅读时长。
 - 书架缺少阅读数据卡、筛选、管理、列表/宫格切换。
-- 后端缺少书籍统计、标签、阅读统计和推荐增强接口。
+- 后端缺少书架统计接口（置顶、排序、stats）。
 - 章节末承接页尚未实现。
-- 更多设置（页边距、段间距、字体选择）尚未实现（Phase 2 范围）。
+- 更多设置（页边距、段间距、字体选择）尚未实现。
+- 书城缺少搜索框、频道 Tab、Banner、榜单模块。
+- 管理端不支持标签和统计编辑。
 
 ## 下一阶段建议
 
-优先进入 Phase 2：书籍详情页升级。
+优先进入 Phase 3：书架升级。
 
 具体任务：
 
-- 重做详情页顶部（封面、书名、作者、状态、字数）。
-- 增加三列数据（评分、阅读人数、收藏数）。
-- 增加标签 chips。
-- 增加预计阅读时长。
-- 增加目录预览。
-- 增加热门评论占位。
-- 底部固定 CTA（加入书架、开始阅读）。
-- 后端新增 book_stats 表和标签表，扩展详情 VO。
+- 增加书架顶部统计卡（今日阅读、连续阅读、最近阅读、更新数量）。
+- 重做书架列表项（封面、书名、进度、最新章节、继续阅读）。
+- 增加列表/宫格切换。
+- 增加筛选（全部、更新、完结、最近阅读）。
+- 增加管理模式（批量移除、置顶）。
+- 后端新增书架统计、置顶、排序接口。
 
 ## 验证记录
 
-- `frontend`: `npm run build:h5` 通过 (2026-05-08)。
-- `backend`: `.\mvnw.cmd test` 通过 (2026-05-08)。
+- `frontend`: `npm run build:h5` 通过 (2026-05-08, Phase 2)。
+- `backend`: `.\mvnw.cmd test` 通过 (2026-05-08, Phase 2)。
 - H5 预览：`5175` 可局域网访问。
 - 本地后端：`8082` 可用于小说服务验证。

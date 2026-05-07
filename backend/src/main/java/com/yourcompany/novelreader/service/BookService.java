@@ -24,4 +24,5 @@ public interface BookService {
     NovelChapter createChapter(Long bookId, ChapterDTO dto);
     NovelChapter updateChapter(Long id, ChapterDTO dto);
     void deleteChapter(Long id);
+    List<NovelBook> recommendations(Long bookId, Integer limit);
 }

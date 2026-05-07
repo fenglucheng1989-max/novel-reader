@@ -62,6 +62,12 @@ public class BookController extends BaseUserController {
         return ApiResponse.success(bookService.chapter(id, chapterNo));
     }
 
+    @GetMapping("/books/{id}/recommendations")
+    public ApiResponse<List<NovelBook>> recommendations(@PathVariable Long id,
+                                                        @RequestParam(required = false) Integer limit) {
+        return ApiResponse.success(bookService.recommendations(id, limit));
+    }
+
     @GetMapping("/categories")
     public ApiResponse<List<NovelCategory>> categories() {
         return ApiResponse.success(bookService.categories());

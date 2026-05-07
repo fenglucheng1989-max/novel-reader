@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.yourcompany.novelreader.dto.BookDTO;
 import com.yourcompany.novelreader.dto.ChapterDTO;
 import com.yourcompany.novelreader.entity.NovelBook;
+import com.yourcompany.novelreader.entity.NovelBookStats;
+import com.yourcompany.novelreader.entity.NovelBookTag;
 import com.yourcompany.novelreader.entity.NovelBookshelf;
 import com.yourcompany.novelreader.entity.NovelCategory;
 import com.yourcompany.novelreader.entity.NovelChapter;
@@ -11,6 +13,8 @@ import com.yourcompany.novelreader.entity.NovelReadingHistory;
 import com.yourcompany.novelreader.entity.NovelReadingProgress;
 import com.yourcompany.novelreader.exception.BusinessException;
 import com.yourcompany.novelreader.mapper.NovelBookMapper;
+import com.yourcompany.novelreader.mapper.NovelBookStatsMapper;
+import com.yourcompany.novelreader.mapper.NovelBookTagMapper;
 import com.yourcompany.novelreader.mapper.NovelBookshelfMapper;
 import com.yourcompany.novelreader.mapper.NovelCategoryMapper;
 import com.yourcompany.novelreader.mapper.NovelChapterMapper;
@@ -37,6 +41,8 @@ public class BookServiceImpl implements BookService {
     private final NovelBookshelfMapper bookshelfMapper;
     private final NovelReadingProgressMapper progressMapper;
     private final NovelReadingHistoryMapper historyMapper;
+    private final NovelBookStatsMapper statsMapper;
+    private final NovelBookTagMapper tagMapper;
     private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
@@ -79,12 +85,40 @@ public class BookServiceImpl implements BookService {
         boolean inBookshelf = userId != null && bookshelfMapper.selectCount(new LambdaQueryWrapper<NovelBookshelf>()
                 .eq(NovelBookshelf::getUserId, userId)
                 .eq(NovelBookshelf::getBookId, bookId)) > 0;
+        NovelBookStats stats = statsMapper.selectById(bookId);
+        List<String> tags = tagMapper.selectList(new LambdaQueryWrapper<NovelBookTag>()
+                .eq(NovelBookTag::getBookId, bookId)
+                .orderByAsc(NovelBookTag::getSortOrder))
+                .stream().map(NovelBookTag::getTag).toList();
+        int estimatedMinutes = estimateReadingMinutes(book.getWordCount());
         return BookDetailVO.builder()
                 .book(book)
                 .categoryName(category == null ? null : category.getName())
                 .inBookshelf(inBookshelf)
                 .chapters(chapters(bookId))
+                .rating(stats == null ? null : stats.getRating())
+                .ratingCount(stats == null ? null : stats.getRatingCount())
+                .readingCount(stats == null ? null : stats.getReadingCount())
+                .favoriteCount(stats == null ? null : stats.getFavoriteCount())
+                .tags(tags)
+                .estimatedReadingMinutes(estimatedMinutes)
                 .build();
+    }
+
+    @Override
+    public List<NovelBook> recommendations(Long bookId, Integer limit) {
+        NovelBook book = requireBook(bookId);
+        int size = limit == null ? 6 : Math.max(1, Math.min(limit, 20));
+        return bookMapper.selectList(new LambdaQueryWrapper<NovelBook>()
+                .eq(book.getCategoryId() != null, NovelBook::getCategoryId, book.getCategoryId())
+                .ne(NovelBook::getId, bookId)
+                .orderByDesc(NovelBook::getUpdatedAt))
+                .stream().limit(size).toList();
+    }
+
+    private int estimateReadingMinutes(Integer wordCount) {
+        if (wordCount == null || wordCount == 0) return 0;
+        return Math.max(1, wordCount / 400);
     }
 
     @Override

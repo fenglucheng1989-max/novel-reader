@@ -6,14 +6,16 @@
       <view class="sheet-row">
         <text class="row-label">亮度</text>
         <view class="brightness-wrap">
-          <text class="brightness-icon">&#x2600;</text>
-          <input
+          <text class="brightness-icon">&#x263D;</text>
+          <slider
             class="brightness-slider"
-            type="range"
-            min="20"
-            max="100"
+            :min="20"
+            :max="100"
             :value="brightness"
-            @input="onBrightness"
+            activeColor="#2f6f5e"
+            backgroundColor="#e0e0e0"
+            block-size="18"
+            @change="onBrightness"
           />
           <text class="brightness-icon">&#x2600;</text>
         </view>
@@ -132,7 +134,7 @@ const themes = [
 const intervalOptions = [10, 15, 20, 30, 60]
 
 function onBrightness(e) {
-  emit('update:brightness', Number(e.detail.value || e.target?.value || 80))
+  emit('update:brightness', Number(e.detail.value || 80))
 }
 
 function onAutoPageToggle(e) {
@@ -202,21 +204,7 @@ function onIntervalChange(e) {
 
 .brightness-slider {
   flex: 1;
-  height: 4px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: #e0e0e0;
-  border-radius: 2px;
-  outline: none;
-}
-
-.brightness-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #2f6f5e;
-  cursor: pointer;
+  margin: 0 4px;
 }
 
 .stepper {

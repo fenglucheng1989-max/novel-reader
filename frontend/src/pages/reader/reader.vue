@@ -358,7 +358,7 @@ async function initReader(query) {
   chapterNo.value = Number(query.chapterNo || 1)
   pageModePage.value = 0
   if (userStore.isLoggedIn) {
-    await readerStore.loadSetting()
+    readerStore.loadSetting().catch(() => {})
   }
   await readerStore.loadChapters(bookId.value)
   await loadChapter()

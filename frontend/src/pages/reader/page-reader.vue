@@ -248,6 +248,11 @@ function drawBoundaryTargetPage(ctx, direction) {
 
 function drawCurl(ctx, direction, progress) {
   if (!direction || progress <= 0.001) return
+  const curlFadeStart = 0.82
+  const curlAlpha = progress > curlFadeStart
+    ? Math.max(0, 1 - (progress - curlFadeStart) / (1 - curlFadeStart))
+    : 1
+  if (curlAlpha <= 0.01) return
   const width = viewWidth.value
   const height = viewHeight.value
   const foldWidth = Math.max(24, width * 0.18 * progress)
@@ -257,16 +262,17 @@ function drawCurl(ctx, direction, progress) {
   const gradient = ctx.createLinearGradient(start, 0, end, 0)
 
   if (direction > 0) {
-    gradient.addColorStop(0, 'rgba(255,255,255,0.18)')
-    gradient.addColorStop(0.42, props.theme === 'NIGHT' ? 'rgba(70,70,70,0.38)' : 'rgba(255,251,242,0.72)')
-    gradient.addColorStop(1, 'rgba(0,0,0,0.20)')
+    gradient.addColorStop(0, `rgba(255,255,255,${0.18 * curlAlpha})`)
+    gradient.addColorStop(0.42, props.theme === 'NIGHT' ? `rgba(70,70,70,${0.38 * curlAlpha})` : `rgba(255,251,242,${0.72 * curlAlpha})`)
+    gradient.addColorStop(1, `rgba(0,0,0,${0.20 * curlAlpha})`)
   } else {
-    gradient.addColorStop(0, 'rgba(0,0,0,0.20)')
-    gradient.addColorStop(0.58, props.theme === 'NIGHT' ? 'rgba(70,70,70,0.38)' : 'rgba(255,251,242,0.72)')
-    gradient.addColorStop(1, 'rgba(255,255,255,0.18)')
+    gradient.addColorStop(0, `rgba(0,0,0,${0.20 * curlAlpha})`)
+    gradient.addColorStop(0.58, props.theme === 'NIGHT' ? `rgba(70,70,70,${0.38 * curlAlpha})` : `rgba(255,251,242,${0.72 * curlAlpha})`)
+    gradient.addColorStop(1, `rgba(255,255,255,${0.18 * curlAlpha})`)
   }
 
   ctx.save()
+  ctx.globalAlpha = curlAlpha
   ctx.beginPath()
   ctx.moveTo(direction > 0 ? foldX : foldX - foldWidth, 0)
   ctx.quadraticCurveTo(foldX + direction * foldWidth * 0.45, height * 0.5, direction > 0 ? foldX : foldX - foldWidth, height)
@@ -343,7 +349,6 @@ function commitFlip(targetPage) {
     flipProgress.value = 0
     flipDirection.value = 0
     emit('pageChange', currentPage.value)
-    draw()
   })
 }
 

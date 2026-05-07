@@ -1,13 +1,7 @@
 <template>
   <view class="reader-root">
     <!-- ==================== SCROLL mode ==================== -->
-    <view v-if="readerStore.setting.turnMode === 'SCROLL'" class="reader" :style="pageStyle" @tap="toggleTools">
-      <view v-if="showTools" class="reader-top">
-        <button class="tool" @tap.stop="goBack">返回</button>
-        <text class="top-title">{{ chapter ? chapter.title : '阅读' }}</text>
-        <button class="tool" @tap.stop="openSetting">设置</button>
-      </view>
-
+    <view v-if="readerStore.setting.turnMode === 'SCROLL'" class="reader" :style="pageStyle" @tap="onContentTap">
       <scroll-view class="content-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
         <view v-if="loading" class="empty">正在加载章节...</view>
         <view v-else-if="chapter" class="chapter-content" :style="textStyle">
@@ -16,12 +10,6 @@
         </view>
         <view v-else class="empty">章节不存在</view>
       </scroll-view>
-
-      <view v-if="showTools" class="reader-bottom">
-        <button class="nav" @tap.stop="prevChapter">上一章</button>
-        <text class="chapter-indicator">{{ chapterIndicator }}</text>
-        <button class="nav" @tap.stop="nextChapter">下一章</button>
-      </view>
     </view>
 
     <!-- ==================== PAGE mode ==================== -->
@@ -31,64 +19,61 @@
       :content="rawContent"
       :prevContent="prevChapterContent"
       :nextContent="nextChapterContent"
-      :title="chapter?.title || ''"
       :fontSize="readerStore.setting.fontSize"
       :lineHeight="readerStore.setting.lineHeight"
       :theme="readerStore.setting.theme"
-      :showTools="showTools"
       :initialPage="pageModePage"
-      @back="goBack"
-      @setting="openSetting"
       @prev="prevChapter"
       @next="nextChapter"
       @pageChange="onPageChange"
       @toggleTools="toggleTools"
     />
 
-    <!-- ==================== Setting panel ==================== -->
-    <view v-if="settingVisible" class="setting" @tap.stop>
-      <view class="setting-row">
-        <text>字号</text>
-        <view class="stepper">
-          <button @tap="changeFont(-1)">-</button>
-          <text>{{ readerStore.setting.fontSize }}</text>
-          <button @tap="changeFont(1)">+</button>
-        </view>
-      </view>
-      <view class="setting-row">
-        <text>行距</text>
-        <view class="stepper">
-          <button @tap="changeLineHeight(-2)">-</button>
-          <text>{{ readerStore.setting.lineHeight }}</text>
-          <button @tap="changeLineHeight(2)">+</button>
-        </view>
-      </view>
-      <view class="setting-row">
-        <text>翻页</text>
-        <view class="themes">
-          <button :class="{ active: readerStore.setting.turnMode === 'SCROLL' }" class="theme" @tap="setTurnMode('SCROLL')">滚动</button>
-          <button :class="{ active: readerStore.setting.turnMode === 'PAGE' }" class="theme" @tap="setTurnMode('PAGE')">Canvas</button>
-        </view>
-      </view>
-      <view class="setting-row">
-        <text>主题</text>
-        <view class="themes">
-          <button :class="{ active: readerStore.setting.theme === 'DEFAULT' }" class="theme" @tap="setTheme('DEFAULT')">米白</button>
-          <button :class="{ active: readerStore.setting.theme === 'GREEN' }" class="theme" @tap="setTheme('GREEN')">清绿</button>
-          <button :class="{ active: readerStore.setting.theme === 'NIGHT' }" class="theme" @tap="setTheme('NIGHT')">夜间</button>
-        </view>
-      </view>
-    </view>
+    <!-- ==================== Tool layers ==================== -->
+    <ReaderTopBar
+      :visible="showTools && !settingVisible"
+      :title="chapter?.title || '阅读'"
+      @back="goBack"
+      @bookshelf="toggleBookshelf"
+      @setting="toggleSetting"
+    />
+
+    <ReaderBottomBar
+      :visible="showTools && !settingVisible"
+      :page-indicator="pageIndicator"
+      :progress-percent="progressPercent"
+      :is-night="readerStore.setting.theme === 'NIGHT'"
+      @prev="prevChapter"
+      @next="nextChapter"
+      @catalog="onCatalogTap"
+      @discuss="onDiscussTap"
+      @night="toggleNight"
+      @setting="toggleSetting"
+    />
+
+    <!-- ==================== Setting sheet ==================== -->
+    <ReaderSettingSheet
+      :visible="settingVisible"
+      :setting="readerStore.setting"
+      :brightness="brightness"
+      @close="settingVisible = false"
+      @update:setting="saveSetting"
+      @update:brightness="onBrightnessChange"
+      @more="onMoreSettings"
+    />
   </view>
 </template>
 
 <script setup>
-import { computed, ref, nextTick } from 'vue'
+import { computed, ref, nextTick, watch, onBeforeUnmount } from 'vue'
 import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { useReaderStore } from '../../store/reader'
 import { useUserStore } from '../../store/user'
 import { readerThemes, themeStyle } from '../../utils/reader'
 import PageReader from './page-reader.vue'
+import ReaderTopBar from './components/ReaderTopBar.vue'
+import ReaderBottomBar from './components/ReaderBottomBar.vue'
+import ReaderSettingSheet from './components/ReaderSettingSheet.vue'
 
 const readerStore = useReaderStore()
 const userStore = useUserStore()
@@ -101,7 +86,10 @@ const scrollTop = ref(0)
 const position = ref(0)
 const pageModePage = ref(0)
 const pageReaderRef = ref(null)
+const brightness = ref(80)
+let autoPageTimer = null
 
+// ---- computed ----
 const chapter = computed(() => readerStore.chapter)
 const rawContent = computed(() => chapter.value?.content || '')
 const maxChapterNo = computed(() => {
@@ -122,11 +110,22 @@ const chapterIndicator = computed(() => {
   if (!maxChapterNo.value) return `第 ${chapterNo.value} 章`
   return `第 ${chapterNo.value} / ${maxChapterNo.value} 章`
 })
+const pageIndicator = computed(() => {
+  if (readerStore.setting.turnMode === 'PAGE') {
+    return pageReaderRef.value?.totalPages ? `${pageReaderRef.value.currentPage + 1} / ${pageReaderRef.value.totalPages} 页` : ''
+  }
+  return chapterIndicator.value
+})
+const progressPercent = computed(() => {
+  const list = readerStore.chapters || []
+  if (!list.length) return 0
+  return Math.round((chapterNo.value / list.length) * 100)
+})
 const paragraphs = computed(() => {
   if (!chapter.value?.content) return []
   return chapter.value.content
     .replace(/\r\n/g, '\n')
-    .split(/\n{1,}|(?<=。|！|？|"|”)\s+/)
+    .split(/\n{1,}|(?<=。|！|？|"|")\s+/)
     .map((line) => line.trim())
     .filter(Boolean)
 })
@@ -136,6 +135,7 @@ const pageStyle = computed(() => {
   return { backgroundColor: theme.background }
 })
 
+// ---- load ----
 async function loadChapter({ restoreSavedProgress = true } = {}) {
   loading.value = true
   try {
@@ -174,15 +174,22 @@ function restoreProgress(progress) {
   if (readerStore.setting.turnMode === 'PAGE') {
     pageModePage.value = savedPosition
   } else {
-    setTimeout(() => {
-      scrollTop.value = savedPosition
-    }, 80)
+    setTimeout(() => { scrollTop.value = savedPosition }, 80)
   }
 }
 
 function onPageChange(pageIdx) {
   pageModePage.value = pageIdx
   position.value = pageIdx
+}
+
+// ---- tools & setting ----
+function onContentTap() {
+  if (settingVisible.value) {
+    settingVisible.value = false
+    return
+  }
+  showTools.value = !showTools.value
 }
 
 function toggleTools() {
@@ -193,12 +200,41 @@ function toggleTools() {
   showTools.value = !showTools.value
 }
 
-function openSetting() {
+function toggleSetting() {
   settingVisible.value = !settingVisible.value
 }
 
+function toggleBookshelf() {
+  if (!bookId.value) return
+  uni.showToast({ title: '已加入书架', icon: 'none' })
+}
+
+function toggleNight() {
+  const next = readerStore.setting.theme === 'NIGHT' ? 'DEFAULT' : 'NIGHT'
+  saveSetting({ theme: next })
+}
+
+function onCatalogTap() {
+  if (!bookId.value) return
+  uni.navigateTo({ url: `/pages/book/detail?id=${bookId.value}` })
+}
+
+function onDiscussTap() {
+  uni.showToast({ title: '评论功能即将上线', icon: 'none' })
+}
+
+function onMoreSettings() {
+  uni.showToast({ title: '更多设置即将上线', icon: 'none' })
+}
+
+function onBrightnessChange(val) {
+  brightness.value = Math.max(20, Math.min(100, Number(val) || 80))
+}
+
+// ---- chapter nav ----
 async function goBack() {
   await saveProgress()
+  stopAutoPage()
   const pages = getCurrentPages()
   if (pages.length > 1) {
     uni.navigateBack()
@@ -224,6 +260,7 @@ async function prevChapter() {
   await loadChapter({ restoreSavedProgress: false })
   await nextTick()
   pageReaderRef.value?.goToLastPage()
+  restartAutoPage()
 }
 
 async function nextChapter() {
@@ -242,41 +279,59 @@ async function nextChapter() {
     uni.showToast({ title: '已经是最后一章', icon: 'none' })
     await loadChapter()
   }
-}
-
-function resetScroll() {
-  position.value = 0
-  scrollTop.value = 0
-  pageModePage.value = 0
+  restartAutoPage()
 }
 
 function onScroll(event) {
   position.value = Math.floor(event.detail.scrollTop || 0)
 }
 
-function setTurnMode(mode) {
-  saveSetting({ turnMode: mode })
+// ---- auto page ----
+function startAutoPage() {
+  if (!readerStore.setting.autoPageEnabled) return
+  stopAutoPage()
+  const interval = (readerStore.setting.autoPageInterval || 15) * 1000
+  autoPageTimer = setInterval(() => {
+    if (settingVisible.value) return
+    if (readerStore.setting.turnMode === 'PAGE' && pageReaderRef.value) {
+      const total = pageReaderRef.value.totalPages || 0
+      const cur = pageReaderRef.value.currentPage || 0
+      if (cur < total - 1) {
+        pageReaderRef.value.doFlip?.(1)
+      } else {
+        nextChapter()
+      }
+    }
+  }, interval)
 }
 
-function changeFont(delta) {
-  const next = Math.max(14, Math.min(30, readerStore.setting.fontSize + delta))
-  saveSetting({ fontSize: next })
+function stopAutoPage() {
+  if (autoPageTimer) {
+    clearInterval(autoPageTimer)
+    autoPageTimer = null
+  }
 }
 
-function changeLineHeight(delta) {
-  const next = Math.max(24, Math.min(48, readerStore.setting.lineHeight + delta))
-  saveSetting({ lineHeight: next })
+function restartAutoPage() {
+  stopAutoPage()
+  startAutoPage()
 }
 
-function setTheme(theme) {
-  saveSetting({ theme })
-}
+watch(() => readerStore.setting.autoPageEnabled, (enabled) => {
+  if (enabled) startAutoPage()
+  else stopAutoPage()
+})
 
-function saveSetting(setting) {
+watch(() => readerStore.setting.autoPageInterval, () => {
+  if (readerStore.setting.autoPageEnabled) restartAutoPage()
+})
+
+// ---- setting ----
+function saveSetting(patch) {
   if (userStore.isLoggedIn) {
-    readerStore.saveSetting(setting)
+    readerStore.saveSetting(patch)
   } else {
-    readerStore.updateLocalSetting(setting)
+    readerStore.updateLocalSetting(patch)
   }
 }
 
@@ -291,6 +346,7 @@ async function saveProgress() {
   })
 }
 
+// ---- init ----
 async function initReader(query) {
   bookId.value = query.bookId
   chapterNo.value = Number(query.chapterNo || 1)
@@ -300,13 +356,19 @@ async function initReader(query) {
   }
   await readerStore.loadChapters(bookId.value)
   await loadChapter()
+  startAutoPage()
 }
 
-onLoad((query) => {
-  initReader(query)
+onLoad((query) => { initReader(query) })
+
+onUnload(() => {
+  stopAutoPage()
+  saveProgress()
 })
 
-onUnload(saveProgress)
+onBeforeUnmount(() => {
+  stopAutoPage()
+})
 </script>
 
 <style scoped>
@@ -320,65 +382,6 @@ onUnload(saveProgress)
   width: 100%;
   min-height: 100vh;
   overflow-x: hidden;
-}
-
-.reader-top,
-.reader-bottom {
-  position: fixed;
-  left: 50%;
-  right: auto;
-  width: min(100vw, 480px);
-  transform: translateX(-50%);
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.95);
-  box-sizing: border-box;
-}
-
-.reader-top {
-  top: 0;
-}
-
-.reader-bottom {
-  bottom: 0;
-}
-
-.top-title {
-  min-width: 0;
-  flex: 1;
-  padding: 0 10px;
-  overflow: hidden;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #2f3834;
-  font-size: 14px;
-}
-
-.tool,
-.nav {
-  height: 34px;
-  line-height: 34px;
-  border-radius: 6px;
-  background: #2f6f5e;
-  color: #fff;
-  font-size: 13px;
-}
-
-.tool {
-  width: 62px;
-}
-
-.nav {
-  width: 88px;
-}
-
-.chapter-indicator {
-  color: #62584d;
-  font-size: 13px;
 }
 
 .content-scroll {
@@ -417,68 +420,5 @@ onUnload(saveProgress)
   padding-top: 120px;
   color: #81776c;
   text-align: center;
-}
-
-.setting {
-  position: fixed;
-  left: 50%;
-  right: auto;
-  width: min(calc(100vw - 24px), 456px);
-  bottom: 62px;
-  z-index: 11;
-  transform: translateX(-50%);
-  padding: 14px;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 8px 28px rgba(31, 42, 38, 0.18);
-}
-
-@media (max-width: 480px) {
-  .reader-top,
-  .reader-bottom {
-    left: 0;
-    right: 0;
-    width: 100vw;
-    transform: none;
-  }
-
-  .setting {
-    left: 12px;
-    right: 12px;
-    width: auto;
-    transform: none;
-  }
-}
-
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 8px 0;
-  color: #26312d;
-  font-size: 14px;
-}
-
-.stepper,
-.themes {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.stepper button,
-.theme {
-  width: 50px;
-  height: 30px;
-  line-height: 30px;
-  border-radius: 6px;
-  background: #f1e7dc;
-  color: #3f4a45;
-  font-size: 13px;
-}
-
-.theme.active {
-  background: #2f6f5e;
-  color: #fff;
 }
 </style>

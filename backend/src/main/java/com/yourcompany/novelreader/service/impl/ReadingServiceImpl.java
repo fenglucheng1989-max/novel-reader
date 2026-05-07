@@ -79,8 +79,13 @@ public class ReadingServiceImpl implements ReadingService {
                 .userId(userId)
                 .fontSize(18)
                 .lineHeight(30)
+                .marginX(22)
+                .marginY(28)
+                .paragraphSpacing(0)
                 .theme("DEFAULT")
                 .turnMode("SCROLL")
+                .autoPageEnabled(false)
+                .autoPageInterval(15)
                 .updatedAt(LocalDateTime.now())
                 .build();
     }
@@ -90,8 +95,13 @@ public class ReadingServiceImpl implements ReadingService {
         NovelReaderSetting setting = getSetting(userId);
         setting.setFontSize(dto.getFontSize() == null ? setting.getFontSize() : dto.getFontSize());
         setting.setLineHeight(dto.getLineHeight() == null ? setting.getLineHeight() : dto.getLineHeight());
+        setting.setMarginX(dto.getMarginX() == null ? setting.getMarginX() : dto.getMarginX());
+        setting.setMarginY(dto.getMarginY() == null ? setting.getMarginY() : dto.getMarginY());
+        setting.setParagraphSpacing(dto.getParagraphSpacing() == null ? setting.getParagraphSpacing() : dto.getParagraphSpacing());
         setting.setTheme(dto.getTheme() == null ? setting.getTheme() : dto.getTheme());
         setting.setTurnMode(dto.getTurnMode() == null ? setting.getTurnMode() : dto.getTurnMode());
+        setting.setAutoPageEnabled(dto.getAutoPageEnabled() == null ? setting.getAutoPageEnabled() : dto.getAutoPageEnabled());
+        setting.setAutoPageInterval(dto.getAutoPageInterval() == null ? setting.getAutoPageInterval() : dto.getAutoPageInterval());
         setting.setUpdatedAt(LocalDateTime.now());
         if (setting.getId() == null) {
             settingMapper.insert(setting);

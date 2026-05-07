@@ -22,17 +22,6 @@
       />
       <!-- #endif -->
     </view>
-
-    <view v-if="showTools" class="page-tools-top">
-      <button class="tool" @tap.stop="$emit('back')">返回</button>
-      <text class="top-title">{{ title }}</text>
-      <button class="tool" @tap.stop="$emit('setting')">设置</button>
-    </view>
-    <view v-if="showTools" class="page-tools-bottom">
-      <button class="nav" @tap.stop="$emit('prev')">上一章</button>
-      <text class="indicator">{{ pageIndicator }}</text>
-      <button class="nav" @tap.stop="$emit('next')">下一章</button>
-    </view>
   </view>
 </template>
 
@@ -45,15 +34,13 @@ const props = defineProps({
   content: { type: String, default: '' },
   prevContent: { type: String, default: '' },
   nextContent: { type: String, default: '' },
-  title: { type: String, default: '' },
   fontSize: { type: Number, default: 18 },
   lineHeight: { type: Number, default: 32 },
   theme: { type: String, default: 'DEFAULT' },
-  showTools: { type: Boolean, default: true },
   initialPage: { type: Number, default: 0 }
 })
 
-const emit = defineEmits(['back', 'setting', 'prev', 'next', 'pageChange', 'toggleTools'])
+const emit = defineEmits(['prev', 'next', 'pageChange', 'toggleTools'])
 
 const paddingX = 22
 const paddingY = 28
@@ -61,8 +48,8 @@ const fontFamily = "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', 
 const canvasId = 'readerFlipCanvas'
 const FLIP_DURATION = 260
 const DRAG_START_PX = 3
-const PAGE_COMMIT_RATIO = 0.08
-const BOUNDARY_COMMIT_RATIO = 0.05
+const PAGE_COMMIT_RATIO = 0.06
+const BOUNDARY_COMMIT_RATIO = 0.04
 const BOUNDARY_DRAG_VISUAL_RATIO = 0.72
 
 const viewWidth = ref(375)
@@ -108,8 +95,6 @@ const themeText = computed(() => themeObj.value.text)
 const totalPages = computed(() => pages.value.length)
 const prevPages = computed(() => paginateContent(props.prevContent))
 const nextPages = computed(() => paginateContent(props.nextContent))
-const pageIndicator = computed(() => (totalPages.value ? `${currentPage.value + 1} / ${totalPages.value} 页` : ''))
-
 function getViewportSize() {
   // #ifdef H5
   const root = document.querySelector('.page-reader')
@@ -532,7 +517,7 @@ function goToLastPage() {
   draw()
 }
 
-defineExpose({ goToLastPage })
+defineExpose({ goToLastPage, doFlip, currentPage, totalPages })
 
 watch(() => props.content, () => {
   currentPage.value = Number(props.initialPage || 0)
@@ -600,72 +585,4 @@ onBeforeUnmount(() => {
   inset: 0;
 }
 
-.page-tools-top,
-.page-tools-bottom {
-  position: fixed;
-  left: 50%;
-  right: auto;
-  width: min(100vw, 480px);
-  transform: translateX(-50%);
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.92);
-  box-sizing: border-box;
-}
-
-.page-tools-top {
-  top: 0;
-}
-
-.page-tools-bottom {
-  bottom: 0;
-}
-
-.top-title {
-  min-width: 0;
-  flex: 1;
-  padding: 0 10px;
-  overflow: hidden;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #2f3834;
-  font-size: 14px;
-}
-
-.tool,
-.nav {
-  height: 34px;
-  line-height: 34px;
-  border-radius: 6px;
-  background: #2f6f5e;
-  color: #fff;
-  font-size: 13px;
-}
-
-.tool {
-  width: 62px;
-}
-
-.nav {
-  width: 88px;
-}
-
-.indicator {
-  color: #62584d;
-  font-size: 13px;
-}
-
-@media (max-width: 480px) {
-  .page-tools-top,
-  .page-tools-bottom {
-    left: 0;
-    right: 0;
-    width: 100vw;
-    transform: none;
-  }
-}
 </style>

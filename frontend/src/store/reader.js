@@ -4,8 +4,13 @@ import { request } from '../utils/request'
 const defaultSetting = {
   fontSize: 18,
   lineHeight: 32,
+  marginX: 22,
+  marginY: 28,
+  paragraphSpacing: 0,
   theme: 'DEFAULT',
-  turnMode: 'SCROLL'
+  turnMode: 'SCROLL',
+  autoPageEnabled: false,
+  autoPageInterval: 15
 }
 
 export const useReaderStore = defineStore('reader', {
@@ -84,10 +89,15 @@ export const useReaderStore = defineStore('reader', {
       const res = await request({ url: '/api/v1/reading/setting' })
       if (res.code === 200 && res.data) {
         this.setting = {
-          fontSize: res.data.fontSize || 18,
-          lineHeight: res.data.lineHeight || 32,
-          theme: res.data.theme || 'DEFAULT',
-          turnMode: res.data.turnMode || 'SCROLL'
+          fontSize: res.data.fontSize || defaultSetting.fontSize,
+          lineHeight: res.data.lineHeight || defaultSetting.lineHeight,
+          marginX: res.data.marginX || defaultSetting.marginX,
+          marginY: res.data.marginY || defaultSetting.marginY,
+          paragraphSpacing: res.data.paragraphSpacing || defaultSetting.paragraphSpacing,
+          theme: res.data.theme || defaultSetting.theme,
+          turnMode: res.data.turnMode || defaultSetting.turnMode,
+          autoPageEnabled: res.data.autoPageEnabled != null ? res.data.autoPageEnabled : defaultSetting.autoPageEnabled,
+          autoPageInterval: res.data.autoPageInterval || defaultSetting.autoPageInterval
         }
         uni.setStorageSync('readerSetting', this.setting)
       }

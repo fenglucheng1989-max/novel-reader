@@ -1,5 +1,5 @@
 <template>
-  <view class="reader-root">
+  <view class="reader-root" :style="brightnessStyle">
     <!-- ==================== SCROLL mode ==================== -->
     <view v-if="readerStore.setting.turnMode === 'SCROLL'" class="reader" :style="pageStyle" @tap="onContentTap">
       <scroll-view class="content-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
@@ -22,6 +22,7 @@
       :fontSize="readerStore.setting.fontSize"
       :lineHeight="readerStore.setting.lineHeight"
       :theme="readerStore.setting.theme"
+      :brightness="brightness"
       :initialPage="pageModePage"
       @prev="prevChapter"
       @next="nextChapter"
@@ -86,7 +87,7 @@ const scrollTop = ref(0)
 const position = ref(0)
 const pageModePage = ref(0)
 const pageReaderRef = ref(null)
-const brightness = ref(80)
+const brightness = ref(Number(uni.getStorageSync('readerBrightness') || 80))
 let autoPageTimer = null
 
 // ---- computed ----
@@ -133,6 +134,10 @@ const textStyle = computed(() => themeStyle(readerStore.setting))
 const pageStyle = computed(() => {
   const theme = readerThemes[readerStore.setting.theme] || readerThemes.DEFAULT
   return { backgroundColor: theme.background }
+})
+const brightnessStyle = computed(() => {
+  const pct = brightness.value / 100
+  return { filter: `brightness(${pct})` }
 })
 
 // ---- load ----
@@ -229,6 +234,7 @@ function onMoreSettings() {
 
 function onBrightnessChange(val) {
   brightness.value = Math.max(20, Math.min(100, Number(val) || 80))
+  uni.setStorageSync('readerBrightness', brightness.value)
 }
 
 // ---- chapter nav ----

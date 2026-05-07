@@ -1,7 +1,7 @@
 <template>
   <view
     class="page-reader"
-    :style="{ backgroundColor: themeBg, color: themeText }"
+    :style="hostStyle"
     @tap="onTap"
     @touchstart="onTouchStart"
     @touchmove.stop.prevent="onTouchMove"
@@ -37,6 +37,7 @@ const props = defineProps({
   fontSize: { type: Number, default: 18 },
   lineHeight: { type: Number, default: 32 },
   theme: { type: String, default: 'DEFAULT' },
+  brightness: { type: Number, default: 80 },
   initialPage: { type: Number, default: 0 }
 })
 
@@ -92,6 +93,11 @@ function cancelFrame(frameId) {
 const themeObj = computed(() => readerThemes[props.theme] || readerThemes.DEFAULT)
 const themeBg = computed(() => themeObj.value.background)
 const themeText = computed(() => themeObj.value.text)
+const hostStyle = computed(() => ({
+  backgroundColor: themeBg.value,
+  color: themeText.value,
+  filter: `brightness(${props.brightness / 100})`
+}))
 const totalPages = computed(() => pages.value.length)
 const prevPages = computed(() => paginateContent(props.prevContent))
 const nextPages = computed(() => paginateContent(props.nextContent))

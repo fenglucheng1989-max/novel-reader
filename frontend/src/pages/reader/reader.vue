@@ -145,15 +145,16 @@ async function loadChapter({ restoreSavedProgress = true } = {}) {
   loading.value = true
   try {
     await readerStore.loadChapter(bookId.value, chapterNo.value)
-    if (restoreSavedProgress && userStore.isLoggedIn) {
-      const res = await readerStore.loadProgress(bookId.value)
-      restoreProgress(res.data)
-    }
   } catch (error) {
     readerStore.chapter = null
   } finally {
     loading.value = false
     preloadAdjacentChapters()
+  }
+  if (restoreSavedProgress && userStore.isLoggedIn) {
+    readerStore.loadProgress(bookId.value).then((res) => {
+      if (res?.code === 200) restoreProgress(res.data)
+    }).catch(() => {})
   }
 }
 

@@ -12,6 +12,9 @@
     @mouseleave="onMouseLeave"
   >
     <view ref="canvasHostRef" class="flip-canvas-host">
+      <!-- #ifdef H5 -->
+      <canvas ref="h5CanvasRef" class="native-flip-canvas" />
+      <!-- #endif -->
       <!-- #ifndef H5 -->
       <canvas
         id="readerFlipCanvas"
@@ -56,6 +59,7 @@ const BOUNDARY_DRAG_VISUAL_RATIO = 0.72
 const viewWidth = ref(375)
 const viewHeight = ref(667)
 const canvasHostRef = ref(null)
+const h5CanvasRef = ref(null)
 const pages = ref([])
 const currentPage = ref(0)
 const flipProgress = ref(0)
@@ -70,7 +74,6 @@ let touchHandled = false
 let mouseDragging = false
 let animationFrame = 0
 let resizeHandler = null
-let h5Canvas = null
 
 function requestFrame(callback) {
   // #ifdef H5
@@ -160,14 +163,7 @@ function hasTargetPage() {
 
 function withCanvas(drawer) {
   // #ifdef H5
-  const host = document.querySelector('.flip-canvas-host')
-  if (!host) return
-  if (!h5Canvas) {
-    h5Canvas = document.createElement('canvas')
-    h5Canvas.className = 'native-flip-canvas'
-    host.appendChild(h5Canvas)
-  }
-  const canvas = h5Canvas
+  const canvas = h5CanvasRef.value
   if (!canvas) return
   const dpr = window.devicePixelRatio || 1
   const pixelWidth = Math.max(1, Math.floor(viewWidth.value * dpr))
@@ -556,8 +552,6 @@ onBeforeUnmount(() => {
   cancelFrame(animationFrame)
   // #ifdef H5
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
-  if (h5Canvas?.parentNode) h5Canvas.parentNode.removeChild(h5Canvas)
-  h5Canvas = null
   // #endif
 })
 </script>

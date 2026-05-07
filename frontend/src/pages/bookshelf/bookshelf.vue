@@ -2,14 +2,20 @@
   <view class="page">
     <view class="shelf-shell">
       <view v-if="userStore.isLoggedIn" class="toolbar">
-        <view class="sync-pill">
-          <text class="sync-dot"></text>
-          <text>已同步 {{ bookStore.shelf.length }} 本</text>
+        <view>
+          <text class="page-title">书架</text>
+          <text class="page-subtitle">{{ syncText }}</text>
         </view>
         <view class="toolbar-actions">
           <view class="icon-button" @tap="goSearch">⌕</view>
+          <view v-if="bookStore.shelf.length" class="icon-button" @tap="toggleViewMode">
+            {{ viewMode === 'grid' ? '☷' : '▦' }}
+          </view>
+          <view v-if="editMode && filteredShelf.length" class="text-button" @tap="toggleSelectAll">
+            {{ allSelected ? '取消全选' : '全选' }}
+          </view>
           <view v-if="bookStore.shelf.length" class="text-button" @tap="toggleEdit">
-            {{ editMode ? '完成' : '编辑' }}
+            {{ editMode ? '完成' : '管理' }}
           </view>
         </view>
       </view>
@@ -34,6 +40,25 @@
       </view>
 
       <template v-else>
+        <view class="stats-grid">
+          <view class="stat-card">
+            <text class="stat-value">{{ stats.todayMinutes || 0 }}</text>
+            <text class="stat-label">今日分钟</text>
+          </view>
+          <view class="stat-card">
+            <text class="stat-value">{{ stats.streakDays || 0 }}</text>
+            <text class="stat-label">连续天数</text>
+          </view>
+          <view class="stat-card">
+            <text class="stat-value">{{ stats.updateCount || 0 }}</text>
+            <text class="stat-label">有更新</text>
+          </view>
+          <view class="stat-card">
+            <text class="stat-value">{{ stats.totalBooks || bookStore.shelf.length }}</text>
+            <text class="stat-label">总藏书</text>
+          </view>
+        </view>
+
         <view v-if="latestItem" class="continue-card">
           <view class="continue-cover">{{ coverText(latestItem.book.title) }}</view>
           <view class="continue-main">
@@ -66,23 +91,40 @@
           <text class="state-subtitle">切换到全部书籍看看。</text>
         </view>
 
-        <view v-else class="shelf-grid">
+        <view v-else :class="viewMode === 'grid' ? 'shelf-grid' : 'shelf-list'">
           <view
             v-for="item in filteredShelf"
             :key="item.shelfId"
-            class="book-card"
-            :class="{ editing: editMode }"
+            :class="viewMode === 'grid' ? 'book-card' : 'book-row'"
             @tap="handleBookTap(item)"
           >
             <view class="cover-wrap">
               <view class="cover">{{ coverText(item.book.title) }}</view>
-              <text v-if="remainingChapters(item) > 0" class="update-badge">更新</text>
-              <view v-if="editMode" class="remove-dot" @tap.stop="remove(item.book.id)">×</view>
+              <view v-if="editMode" class="select-check" :class="{ checked: selectedIds.has(item.shelfId) }">
+                <text v-if="selectedIds.has(item.shelfId)">✓</text>
+              </view>
+              <text v-if="!editMode && item.pinned" class="pin-badge">置顶</text>
+              <text v-else-if="!editMode && remainingChapters(item) > 0" class="update-badge">更新</text>
             </view>
-            <text class="book-name">{{ item.book.title }}</text>
-            <text class="book-progress">{{ unreadText(item) }}</text>
-            <view v-if="editMode" class="remove-button" @tap.stop="remove(item.book.id)">移出</view>
+
+            <view class="book-info">
+              <text class="book-name">{{ item.book.title }}</text>
+              <text class="book-author">{{ item.book.author || '佚名' }}</text>
+              <text class="book-progress">{{ progressText(item) }}</text>
+              <text class="book-update">{{ latestChapterText(item) }}</text>
+              <view v-if="editMode" class="manage-row">
+                <view class="manage-button" @tap.stop="togglePin(item)">
+                  {{ item.pinned ? '取消置顶' : '置顶' }}
+                </view>
+                <view class="manage-button danger" @tap.stop="remove(item.book.id)">移出</view>
+              </view>
+            </view>
           </view>
+        </view>
+
+        <view v-if="editMode && selectedIds.size > 0" class="batch-bar">
+          <text class="batch-label">已选 {{ selectedIds.size }} 本</text>
+          <view class="batch-button" @tap="batchRemove">移出 ({{ selectedIds.size }})</view>
         </view>
       </template>
     </view>
@@ -100,24 +142,29 @@ const userStore = useUserStore()
 const loading = ref(false)
 const editMode = ref(false)
 const activeFilter = ref('all')
+const viewMode = ref(uni.getStorageSync('bookshelfViewMode') || 'grid')
+const selectedIds = ref(new Set())
 
 const filters = [
   { key: 'all', label: '全部' },
+  { key: 'updated', label: '有更新' },
   { key: 'reading', label: '在读' },
   { key: 'unread', label: '未读' },
-  { key: 'serial', label: '连载' },
   { key: 'completed', label: '完结' }
 ]
 
+const stats = computed(() => bookStore.shelfStats || {})
+const syncText = computed(() => `已同步 ${bookStore.shelf.length} 本`)
+
 const filteredShelf = computed(() => {
+  if (activeFilter.value === 'updated') {
+    return bookStore.shelf.filter((item) => remainingChapters(item) > 0)
+  }
   if (activeFilter.value === 'reading') {
     return bookStore.shelf.filter((item) => progressChapter(item) > 1)
   }
   if (activeFilter.value === 'unread') {
     return bookStore.shelf.filter((item) => progressChapter(item) <= 1)
-  }
-  if (activeFilter.value === 'serial') {
-    return bookStore.shelf.filter((item) => item.book.status !== 'COMPLETED')
   }
   if (activeFilter.value === 'completed') {
     return bookStore.shelf.filter((item) => item.book.status === 'COMPLETED')
@@ -126,6 +173,11 @@ const filteredShelf = computed(() => {
 })
 
 const latestItem = computed(() => {
+  const latestBookId = stats.value.latestBookId
+  if (latestBookId) {
+    const latest = bookStore.shelf.find((item) => Number(item.book.id) === Number(latestBookId))
+    if (latest) return latest
+  }
   return bookStore.shelf.find((item) => progressChapter(item) > 1) || bookStore.shelf[0]
 })
 
@@ -133,17 +185,24 @@ const activeFilterLabel = computed(() => {
   return filters.find((item) => item.key === activeFilter.value)?.label || '全部'
 })
 
+const allSelected = computed(() => {
+  if (!filteredShelf.value.length) return false
+  return filteredShelf.value.every((item) => selectedIds.value.has(item.shelfId))
+})
+
 async function refresh() {
-  if (!userStore.isLoggedIn) {
-    return
-  }
+  if (!userStore.isLoggedIn) return
   loading.value = true
   try {
-    await bookStore.loadShelf()
+    await Promise.all([
+      bookStore.loadShelf(),
+      bookStore.loadShelfStats()
+    ])
   } catch (error) {
     if (error?.statusCode === 401 || error?.statusCode === 403) {
       userStore.syncFromStorage()
       bookStore.shelf = []
+      bookStore.shelfStats = null
       editMode.value = false
     }
   } finally {
@@ -153,14 +212,58 @@ async function refresh() {
 
 function selectFilter(key) {
   activeFilter.value = key
+  selectedIds.value = new Set()
 }
 
 function toggleEdit() {
   editMode.value = !editMode.value
+  selectedIds.value = new Set()
+}
+
+function toggleSelectAll() {
+  if (allSelected.value) {
+    selectedIds.value = new Set()
+  } else {
+    selectedIds.value = new Set(filteredShelf.value.map((item) => item.shelfId))
+  }
+}
+
+function toggleSelect(item) {
+  const next = new Set(selectedIds.value)
+  if (next.has(item.shelfId)) {
+    next.delete(item.shelfId)
+  } else {
+    next.add(item.shelfId)
+  }
+  selectedIds.value = next
+}
+
+async function batchRemove() {
+  uni.showModal({
+    title: '批量移出',
+    content: `确定要把选中的 ${selectedIds.value.size} 本书移出书架吗？`,
+    success: async (res) => {
+      if (!res.confirm) return
+      const ids = [...selectedIds.value].map((shelfId) => {
+        const item = bookStore.shelf.find((i) => i.shelfId === shelfId)
+        return item ? item.book.id : null
+      }).filter(Boolean)
+      await bookStore.removeShelfBatch(ids)
+      selectedIds.value = new Set()
+      await refresh()
+      if (!bookStore.shelf.length) editMode.value = false
+    }
+  })
+}
+
+function toggleViewMode() {
+  viewMode.value = viewMode.value === 'grid' ? 'list' : 'grid'
+  uni.setStorageSync('bookshelfViewMode', viewMode.value)
 }
 
 function handleBookTap(item) {
   if (editMode.value) {
+    toggleSelect(item)
     return
   }
   openBook(item)
@@ -171,6 +274,15 @@ function openBook(item) {
   uni.navigateTo({ url: `/pages/reader/reader?bookId=${item.book.id}&chapterNo=${chapterNo}` })
 }
 
+async function togglePin(item) {
+  if (item.pinned) {
+    await bookStore.unpinShelf(item.book.id)
+  } else {
+    await bookStore.pinShelf(item.book.id)
+  }
+  await refresh()
+}
+
 async function remove(bookId) {
   uni.showModal({
     title: '移出书架',
@@ -179,9 +291,7 @@ async function remove(bookId) {
       if (!res.confirm) return
       await bookStore.removeShelf(bookId)
       await refresh()
-      if (!bookStore.shelf.length) {
-        editMode.value = false
-      }
+      if (!bookStore.shelf.length) editMode.value = false
     }
   })
 }
@@ -209,11 +319,19 @@ function remainingChapters(item) {
 }
 
 function unreadText(item) {
-  if (!Number(item.book.chapterCount || 0)) {
-    return '暂无章节'
-  }
+  if (!Number(item.book.chapterCount || 0)) return '暂无章节'
   const count = remainingChapters(item)
   return count > 0 ? `${count} 章未读` : '已读完'
+}
+
+function progressText(item) {
+  const total = Number(item.book.chapterCount || 0)
+  if (!total) return '暂无章节'
+  return `读到 ${progressChapter(item)} / ${total} 章`
+}
+
+function latestChapterText(item) {
+  return item.book.latestChapterTitle ? `最新：${item.book.latestChapterTitle}` : unreadText(item)
 }
 
 function coverText(title) {
@@ -248,20 +366,35 @@ onShow(() => {
   margin-bottom: 12px;
 }
 
-.sync-pill {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #6f655b;
-  font-size: 13px;
+.page-title,
+.page-subtitle,
+.state-mark,
+.state-title,
+.state-subtitle,
+.stat-value,
+.stat-label,
+.continue-eyebrow,
+.continue-title,
+.continue-meta,
+.summary-title,
+.summary-count,
+.book-name,
+.book-author,
+.book-progress,
+.book-update {
+  display: block;
 }
 
-.sync-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #d99a45;
+.page-title {
+  color: #1f2a26;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.page-subtitle {
+  margin-top: 3px;
+  color: #81776c;
+  font-size: 12px;
 }
 
 .toolbar-actions {
@@ -286,7 +419,7 @@ onShow(() => {
 
 .icon-button {
   width: 36px;
-  font-size: 19px;
+  font-size: 18px;
 }
 
 .text-button {
@@ -294,19 +427,6 @@ onShow(() => {
   padding: 0 10px;
   font-size: 13px;
   box-sizing: border-box;
-}
-
-.state-mark,
-.state-title,
-.state-subtitle,
-.continue-eyebrow,
-.continue-title,
-.continue-meta,
-.summary-title,
-.summary-count,
-.book-name,
-.book-progress {
-  display: block;
 }
 
 .state-card {
@@ -350,6 +470,35 @@ onShow(() => {
   color: #fff;
   font-size: 14px;
   font-weight: 800;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stat-card {
+  min-width: 0;
+  padding: 12px 6px;
+  border-radius: 8px;
+  background: #fff;
+  text-align: center;
+  border: 1px solid #eee5da;
+}
+
+.stat-value {
+  color: #1f2a26;
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 900;
+}
+
+.stat-label {
+  margin-top: 4px;
+  color: #8d8175;
+  font-size: 11px;
 }
 
 .continue-card {
@@ -472,13 +621,34 @@ onShow(() => {
   row-gap: 18px;
 }
 
-.book-card {
+.shelf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.book-card,
+.book-row {
   min-width: 0;
+}
+
+.book-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #eee5da;
 }
 
 .cover-wrap {
   position: relative;
   width: 100%;
+}
+
+.book-row .cover-wrap {
+  flex: 0 0 64px;
+  width: 64px;
 }
 
 .cover {
@@ -496,32 +666,33 @@ onShow(() => {
   box-sizing: border-box;
 }
 
+.book-row .cover {
+  height: 86px;
+  font-size: 16px;
+}
+
+.pin-badge,
 .update-badge {
   position: absolute;
   top: 6px;
   right: 6px;
   padding: 2px 6px;
   border-radius: 999px;
-  background: rgba(221, 122, 76, 0.92);
   color: #fff;
   font-size: 10px;
   font-weight: 800;
 }
 
-.remove-dot {
-  position: absolute;
-  top: -8px;
-  right: -6px;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: #8c3c32;
-  color: #fff;
-  font-size: 17px;
-  font-weight: 500;
+.pin-badge {
+  background: rgba(47, 111, 94, 0.94);
+}
+
+.update-badge {
+  background: rgba(221, 122, 76, 0.92);
+}
+
+.book-info {
+  min-width: 0;
 }
 
 .book-name {
@@ -539,21 +710,99 @@ onShow(() => {
   -webkit-box-orient: vertical;
 }
 
-.book-progress {
-  margin-top: 3px;
-  color: #8b8176;
-  font-size: 12px;
+.book-row .book-name {
+  height: auto;
+  margin-top: 0;
+  font-size: 16px;
+  line-height: 22px;
+  -webkit-line-clamp: 1;
 }
 
-.remove-button {
+.book-author,
+.book-progress,
+.book-update {
+  margin-top: 4px;
+  color: #8b8176;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manage-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.manage-button {
   height: 28px;
   line-height: 28px;
-  margin-top: 8px;
+  padding: 0 10px;
   border-radius: 7px;
   background: #f1e7dc;
   color: #7a5136;
   text-align: center;
   font-size: 12px;
+  font-weight: 800;
+}
+
+.manage-button.danger {
+  background: #f7e2dd;
+  color: #8c3c32;
+}
+
+.select-check {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid #ccc;
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  color: #fff;
+  z-index: 2;
+}
+
+.select-check.checked {
+  background: #2f6f5e;
+  border-color: #2f6f5e;
+}
+
+.batch-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1px solid #e5ddd2;
+  box-shadow: 0 -4px 16px rgba(31, 42, 38, 0.08);
+  z-index: 100;
+}
+
+.batch-label {
+  color: #1f2a26;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.batch-button {
+  height: 34px;
+  line-height: 34px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: #8c3c32;
+  color: #fff;
+  font-size: 13px;
   font-weight: 800;
 }
 

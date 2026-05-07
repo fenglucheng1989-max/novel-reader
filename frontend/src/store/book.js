@@ -6,6 +6,7 @@ export const useBookStore = defineStore('book', {
     categories: [],
     books: [],
     shelf: [],
+    shelfStats: null,
     currentBook: null,
     chapters: [],
     selectedCategoryId: 0
@@ -58,11 +59,31 @@ export const useBookStore = defineStore('book', {
       }
       return res
     },
+    async loadShelfStats() {
+      const res = await request({ url: '/api/v1/bookshelf/stats' })
+      if (res.code === 200) {
+        this.shelfStats = res.data || null
+      }
+      return res
+    },
     async addShelf(bookId) {
       return request({ url: `/api/v1/bookshelf/${bookId}`, method: 'POST' })
     },
     async removeShelf(bookId) {
       return request({ url: `/api/v1/bookshelf/${bookId}`, method: 'DELETE' })
+    },
+    async pinShelf(bookId) {
+      return request({ url: `/api/v1/bookshelf/${bookId}/pin`, method: 'PUT' })
+    },
+    async unpinShelf(bookId) {
+      return request({ url: `/api/v1/bookshelf/${bookId}/pin`, method: 'DELETE' })
+    },
+    async removeShelfBatch(bookIds) {
+      const results = []
+      for (const bookId of bookIds) {
+        results.push(await request({ url: `/api/v1/bookshelf/${bookId}`, method: 'DELETE' }))
+      }
+      return results
     },
     async loadRecommendations(bookId, limit = 6) {
       return request({ url: `/api/v1/books/${bookId}/recommendations?limit=${limit}` })

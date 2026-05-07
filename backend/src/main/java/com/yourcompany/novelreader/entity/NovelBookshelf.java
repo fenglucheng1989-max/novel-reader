@@ -22,7 +22,9 @@ public class NovelBookshelf {
     private Long id;
     private Long userId;
     private Long bookId;
+    private Boolean pinned;
     private Integer sortOrder;
+    private LocalDateTime lastReadAt;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
     @TableField(fill = FieldFill.INSERT_UPDATE)

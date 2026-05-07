@@ -6,9 +6,11 @@ import com.yourcompany.novelreader.dto.ReadingProgressDTO;
 import com.yourcompany.novelreader.entity.NovelReaderSetting;
 import com.yourcompany.novelreader.entity.NovelReadingHistory;
 import com.yourcompany.novelreader.entity.NovelReadingProgress;
+import com.yourcompany.novelreader.entity.NovelBookshelf;
 import com.yourcompany.novelreader.mapper.NovelReaderSettingMapper;
 import com.yourcompany.novelreader.mapper.NovelReadingHistoryMapper;
 import com.yourcompany.novelreader.mapper.NovelReadingProgressMapper;
+import com.yourcompany.novelreader.mapper.NovelBookshelfMapper;
 import com.yourcompany.novelreader.service.ReadingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,6 +26,7 @@ public class ReadingServiceImpl implements ReadingService {
     private final NovelReadingProgressMapper progressMapper;
     private final NovelReadingHistoryMapper historyMapper;
     private final NovelReaderSettingMapper settingMapper;
+    private final NovelBookshelfMapper bookshelfMapper;
 
     @Override
     public NovelReadingProgress getProgress(Long userId, Long bookId) {
@@ -56,6 +59,13 @@ public class ReadingServiceImpl implements ReadingService {
                     .durationSeconds(dto.getDurationSeconds() == null ? 0 : dto.getDurationSeconds())
                     .readAt(LocalDateTime.now())
                     .build());
+        }
+        NovelBookshelf shelf = bookshelfMapper.selectOne(new LambdaQueryWrapper<NovelBookshelf>()
+                .eq(NovelBookshelf::getUserId, userId)
+                .eq(NovelBookshelf::getBookId, bookId));
+        if (shelf != null) {
+            shelf.setLastReadAt(LocalDateTime.now());
+            bookshelfMapper.updateById(shelf);
         }
         return progress;
     }

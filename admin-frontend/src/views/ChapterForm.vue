@@ -65,10 +65,10 @@ async function submit() {
 onMounted(async () => {
   if (id) {
     const res = await getChapter(id)
-    Object.assign(form, res.data)
+    Object.assign(form, res)
     return
   }
-  const chapters = (await listChapters(bookId)).data || []
+  const chapters = (await listChapters(bookId)) || []
   form.chapterNo = chapters.length + 1
 })
 </script>

@@ -12,10 +12,29 @@ export const useReaderStore = defineStore('reader', {
   state: () => ({
     chapter: null,
     chapters: [],
+    chapterCache: {},
     progress: null,
     setting: uni.getStorageSync('readerSetting') || defaultSetting
   }),
   actions: {
+    getChapterCacheKey(bookId, chapterNo) {
+      return `chapter:${bookId}:${chapterNo}`
+    },
+    getCachedChapter(bookId, chapterNo) {
+      const cacheKey = this.getChapterCacheKey(bookId, chapterNo)
+      if (this.chapterCache[cacheKey]) return this.chapterCache[cacheKey]
+      const cached = uni.getStorageSync(cacheKey)
+      if (cached) {
+        this.chapterCache = { ...this.chapterCache, [cacheKey]: cached }
+        return cached
+      }
+      return null
+    },
+    setCachedChapter(bookId, chapterNo, chapter) {
+      const cacheKey = this.getChapterCacheKey(bookId, chapterNo)
+      this.chapterCache = { ...this.chapterCache, [cacheKey]: chapter }
+      uni.setStorageSync(cacheKey, chapter)
+    },
     async loadChapters(bookId) {
       const res = await request({ url: `/api/v1/books/${bookId}/chapters` })
       if (res.code === 200) {
@@ -24,17 +43,28 @@ export const useReaderStore = defineStore('reader', {
       return res
     },
     async loadChapter(bookId, chapterNo) {
-      const cacheKey = `chapter:${bookId}:${chapterNo}`
-      const cached = uni.getStorageSync(cacheKey)
+      const cached = this.getCachedChapter(bookId, chapterNo)
       if (cached) {
         this.chapter = cached
+        return { code: 200, message: 'success', data: cached, cached: true }
       }
       const res = await request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}` })
       if (res.code === 200) {
         this.chapter = res.data
-        uni.setStorageSync(cacheKey, res.data)
+        this.setCachedChapter(bookId, chapterNo, res.data)
       }
       return res
+    },
+    async preloadChapter(bookId, chapterNo) {
+      if (!bookId || !chapterNo) return null
+      const cached = this.getCachedChapter(bookId, chapterNo)
+      if (cached) return cached
+      const res = await request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}` })
+      if (res.code === 200) {
+        this.setCachedChapter(bookId, chapterNo, res.data)
+        return res.data
+      }
+      return null
     },
     async loadProgress(bookId) {
       const res = await request({ url: `/api/v1/reading/progress/${bookId}` })

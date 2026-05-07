@@ -5,7 +5,7 @@ import lombok.Data;
 
 @Data
 public class BookDTO {
-    @NotBlank
+    @NotBlank(message = "Title is required")
     private String title;
     private String author;
     private Long categoryId;

@@ -172,7 +172,7 @@ async function loadUrlPreview() {
   previewing.value = true
   try {
     const res = await previewImport({ url: url.value.trim() })
-    resetPreview(res.data)
+    resetPreview(res)
   } finally {
     previewing.value = false
   }
@@ -192,7 +192,7 @@ async function loadTxtPreview() {
   previewing.value = true
   try {
     const res = await previewTxtImport(data)
-    resetPreview(res.data)
+    resetPreview(res)
   } finally {
     previewing.value = false
   }
@@ -225,7 +225,7 @@ async function submit() {
     }
     const res = await confirmImport(payload)
     ElMessage.success('已导入书籍和章节')
-    router.push(`/books/${res.data.id}/chapters`)
+    router.push(`/books/${res.id}/chapters`)
   } finally {
     saving.value = false
   }
@@ -236,6 +236,6 @@ function countWords(content) {
 }
 
 onMounted(async () => {
-  categories.value = (await listCategories()).data || []
+  categories.value = (await listCategories()) || []
 })
 </script>

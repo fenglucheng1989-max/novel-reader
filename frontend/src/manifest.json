@@ -1,6 +1,6 @@
 {
   "name": "悦读",
-  "appid": "__UNI__893F2EE",
+  "appid": "__UNI__893F2EF",
   "description": "个人小说阅读工具",
   "versionName": "1.0.0",
   "versionCode": "100",
@@ -8,6 +8,7 @@
   "transformPx": false,
   "h5": {
     "devServer": {
+      "host": "0.0.0.0",
       "port": 5175,
       "proxy": {
         "/api": {

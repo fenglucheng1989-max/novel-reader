@@ -60,7 +60,7 @@ async function load() {
   loading.value = true
   try {
     const res = await listBooks({ keyword: keyword.value, categoryId: categoryId.value })
-    books.value = res.data || []
+    books.value = res || []
   } finally {
     loading.value = false
   }
@@ -68,7 +68,7 @@ async function load() {
 
 async function loadCategoriesData() {
   const res = await listCategories()
-  categories.value = res.data || []
+  categories.value = res || []
 }
 
 async function remove(id) {

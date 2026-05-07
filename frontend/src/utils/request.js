@@ -1,12 +1,17 @@
-let BASE_URL = ''
+import { getApiBaseUrl } from '../config/api'
 
-// #ifdef H5
-BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
-// #endif
+function getResponseMessage(res, fallback) {
+  if (!res) return fallback
+  if (res.data && typeof res.data === 'object' && res.data.message) return res.data.message
+  if (res.data && typeof res.data === 'string') return res.data
+  return fallback
+}
 
-// #ifdef APP-PLUS
-BASE_URL = 'http://192.168.101.12:8080'
-// #endif
+function rejectWithMessage(reject, message, payload) {
+  const error = new Error(message)
+  error.payload = payload
+  reject(error)
+}
 
 export function request(options) {
   return new Promise((resolve, reject) => {
@@ -17,7 +22,7 @@ export function request(options) {
     }
 
     uni.request({
-      url: BASE_URL + options.url,
+      url: getApiBaseUrl() + options.url,
       method: options.method || 'GET',
       data: options.data || {},
       header,
@@ -27,24 +32,78 @@ export function request(options) {
           return
         }
 
-        if (res.statusCode === 401 || res.statusCode === 403) {
+        if (res.statusCode === 401) {
+          const msg = (res.data && res.data.message) || '请先登录'
           uni.removeStorageSync('token')
           uni.removeStorageSync('username')
-          uni.showToast({ title: '登录已过期，请重新登录', icon: 'none' })
+          uni.showToast({ title: msg, icon: 'none' })
           setTimeout(() => {
             uni.switchTab({ url: '/pages/mine/mine' })
           }, 1500)
-          reject({ ...(res.data || {}), statusCode: res.statusCode })
+          rejectWithMessage(reject, msg, res.data)
           return
         }
 
-        const message = res.data && res.data.message ? res.data.message : '请求失败'
+        if (res.statusCode === 403) {
+          const msg = (res.data && res.data.message) || '权限不足'
+          uni.showToast({ title: msg, icon: 'none' })
+          rejectWithMessage(reject, msg, res.data)
+          return
+        }
+
+        const message = getResponseMessage(res, '请求失败')
         uni.showToast({ title: message, icon: 'none' })
-        reject({ ...(res.data || {}), statusCode: res.statusCode })
+        rejectWithMessage(reject, message, res.data)
       },
       fail: (err) => {
-        uni.showToast({ title: '网络错误', icon: 'none' })
-        reject(err)
+        const message = err && err.errMsg ? err.errMsg : '网络错误'
+        uni.showToast({ title: message, icon: 'none' })
+        rejectWithMessage(reject, message, err)
+      }
+    })
+  })
+}
+
+export function requestRaw(options) {
+  return new Promise((resolve, reject) => {
+    const token = uni.getStorageSync('token')
+    const header = {
+      ...(options.header || {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    }
+
+    uni.request({
+      url: getApiBaseUrl() + options.url,
+      method: options.method || 'GET',
+      data: options.data || {},
+      header,
+      responseType: options.responseType || 'text',
+      success: (res) => {
+        if (res.statusCode === 200) {
+          resolve(res.data)
+          return
+        }
+
+        if (res.statusCode === 401) {
+          const msg = (res.data && res.data.message) || '请先登录'
+          uni.removeStorageSync('token')
+          uni.removeStorageSync('username')
+          uni.showToast({ title: msg, icon: 'none' })
+          setTimeout(() => {
+            uni.switchTab({ url: '/pages/mine/mine' })
+          }, 1500)
+          rejectWithMessage(reject, msg, res.data)
+          return
+        }
+
+        const message = getResponseMessage(res, `请求失败(${res.statusCode})`)
+        uni.showToast({ title: message, icon: 'none' })
+        rejectWithMessage(reject, message, res.data)
+      },
+      fail: (err) => {
+        const message = err && err.errMsg ? err.errMsg : '网络错误'
+        uni.showToast({ title: message, icon: 'none' })
+        rejectWithMessage(reject, message, err)
       }
     })
   })

@@ -5,7 +5,7 @@ import lombok.Data;
 
 @Data
 public class CategoryDTO {
-    @NotBlank
+    @NotBlank(message = "Name is required")
     private String name;
     private Long parentId;
     private Integer sortOrder;

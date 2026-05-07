@@ -36,9 +36,9 @@ const loading = ref(false)
 async function load() {
   loading.value = true
   try {
-    chapters.value = (await listChapters(bookId)).data || []
+    chapters.value = (await listChapters(bookId)) || []
     const detail = await getBook(bookId)
-    bookTitle.value = detail.data.book.title
+    bookTitle.value = detail.book.title
   } finally {
     loading.value = false
   }

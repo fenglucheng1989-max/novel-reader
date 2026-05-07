@@ -32,7 +32,7 @@ onMounted(async () => {
   loading.value = true
   try {
     const res = await dashboard()
-    data.value = res.data || {}
+    data.value = res || {}
   } finally {
     loading.value = false
   }

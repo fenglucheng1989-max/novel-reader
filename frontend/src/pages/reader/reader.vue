@@ -1,26 +1,51 @@
 <template>
-  <view class="reader" :style="pageStyle" @tap="toggleTools">
-    <view v-if="showTools" class="reader-top">
-      <button class="tool" @tap.stop="goBack">返回</button>
-      <text class="top-title">{{ chapter ? chapter.title : '阅读' }}</text>
-      <button class="tool" @tap.stop="openSetting">设置</button>
-    </view>
-
-    <scroll-view class="content-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
-      <view v-if="loading" class="empty">正在加载章节...</view>
-      <view v-else-if="chapter" class="chapter-content" :style="textStyle">
-        <text class="chapter-title">{{ chapter.title }}</text>
-        <view v-for="(line, index) in paragraphs" :key="index" class="paragraph">{{ line }}</view>
+  <view class="reader-root">
+    <!-- ==================== SCROLL mode ==================== -->
+    <view v-if="readerStore.setting.turnMode === 'SCROLL'" class="reader" :style="pageStyle" @tap="toggleTools">
+      <view v-if="showTools" class="reader-top">
+        <button class="tool" @tap.stop="goBack">返回</button>
+        <text class="top-title">{{ chapter ? chapter.title : '阅读' }}</text>
+        <button class="tool" @tap.stop="openSetting">设置</button>
       </view>
-      <view v-else class="empty">章节不存在</view>
-    </scroll-view>
 
-    <view v-if="showTools" class="reader-bottom">
-      <button class="nav" @tap.stop="prevChapter">上一章</button>
-      <text class="chapter-indicator">{{ chapterIndicator }}</text>
-      <button class="nav" @tap.stop="nextChapter">下一章</button>
+      <scroll-view class="content-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
+        <view v-if="loading" class="empty">正在加载章节...</view>
+        <view v-else-if="chapter" class="chapter-content" :style="textStyle">
+          <text class="chapter-title">{{ chapter.title }}</text>
+          <view v-for="(line, index) in paragraphs" :key="index" class="paragraph">{{ line }}</view>
+        </view>
+        <view v-else class="empty">章节不存在</view>
+      </scroll-view>
+
+      <view v-if="showTools" class="reader-bottom">
+        <button class="nav" @tap.stop="prevChapter">上一章</button>
+        <text class="chapter-indicator">{{ chapterIndicator }}</text>
+        <button class="nav" @tap.stop="nextChapter">下一章</button>
+      </view>
     </view>
 
+    <!-- ==================== PAGE mode ==================== -->
+    <PageReader
+      v-else
+      ref="pageReaderRef"
+      :content="rawContent"
+      :prevContent="prevChapterContent"
+      :nextContent="nextChapterContent"
+      :title="chapter?.title || ''"
+      :fontSize="readerStore.setting.fontSize"
+      :lineHeight="readerStore.setting.lineHeight"
+      :theme="readerStore.setting.theme"
+      :showTools="showTools"
+      :initialPage="pageModePage"
+      @back="goBack"
+      @setting="openSetting"
+      @prev="prevChapter"
+      @next="nextChapter"
+      @pageChange="onPageChange"
+      @toggleTools="toggleTools"
+    />
+
+    <!-- ==================== Setting panel ==================== -->
     <view v-if="settingVisible" class="setting" @tap.stop>
       <view class="setting-row">
         <text>字号</text>
@@ -39,6 +64,13 @@
         </view>
       </view>
       <view class="setting-row">
+        <text>翻页</text>
+        <view class="themes">
+          <button :class="{ active: readerStore.setting.turnMode === 'SCROLL' }" class="theme" @tap="setTurnMode('SCROLL')">滚动</button>
+          <button :class="{ active: readerStore.setting.turnMode === 'PAGE' }" class="theme" @tap="setTurnMode('PAGE')">Canvas</button>
+        </view>
+      </view>
+      <view class="setting-row">
         <text>主题</text>
         <view class="themes">
           <button :class="{ active: readerStore.setting.theme === 'DEFAULT' }" class="theme" @tap="setTheme('DEFAULT')">米白</button>
@@ -51,11 +83,12 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, nextTick } from 'vue'
 import { onLoad, onUnload } from '@dcloudio/uni-app'
 import { useReaderStore } from '../../store/reader'
 import { useUserStore } from '../../store/user'
 import { readerThemes, themeStyle } from '../../utils/reader'
+import PageReader from './page-reader.vue'
 
 const readerStore = useReaderStore()
 const userStore = useUserStore()
@@ -66,12 +99,25 @@ const showTools = ref(true)
 const settingVisible = ref(false)
 const scrollTop = ref(0)
 const position = ref(0)
+const pageModePage = ref(0)
+const pageReaderRef = ref(null)
 
 const chapter = computed(() => readerStore.chapter)
+const rawContent = computed(() => chapter.value?.content || '')
 const maxChapterNo = computed(() => {
   const list = readerStore.chapters || []
   return list.length ? Math.max(...list.map((item) => Number(item.chapterNo || 0))) : 0
 })
+const cachedPrevChapter = computed(() => {
+  if (chapterNo.value <= 1) return null
+  return readerStore.getCachedChapter(bookId.value, chapterNo.value - 1)
+})
+const cachedNextChapter = computed(() => {
+  if (maxChapterNo.value && chapterNo.value >= maxChapterNo.value) return null
+  return readerStore.getCachedChapter(bookId.value, chapterNo.value + 1)
+})
+const prevChapterContent = computed(() => cachedPrevChapter.value?.content || '')
+const nextChapterContent = computed(() => cachedNextChapter.value?.content || '')
 const chapterIndicator = computed(() => {
   if (!maxChapterNo.value) return `第 ${chapterNo.value} 章`
   return `第 ${chapterNo.value} / ${maxChapterNo.value} 章`
@@ -80,7 +126,7 @@ const paragraphs = computed(() => {
   if (!chapter.value?.content) return []
   return chapter.value.content
     .replace(/\r\n/g, '\n')
-    .split(/\n{1,}|(?<=。|！|？|”)\s+/)
+    .split(/\n{1,}|(?<=。|！|？|"|”)\s+/)
     .map((line) => line.trim())
     .filter(Boolean)
 })
@@ -90,11 +136,11 @@ const pageStyle = computed(() => {
   return { backgroundColor: theme.background }
 })
 
-async function loadChapter() {
+async function loadChapter({ restoreSavedProgress = true } = {}) {
   loading.value = true
   try {
     await readerStore.loadChapter(bookId.value, chapterNo.value)
-    if (userStore.isLoggedIn) {
+    if (restoreSavedProgress && userStore.isLoggedIn) {
       const res = await readerStore.loadProgress(bookId.value)
       restoreProgress(res.data)
     }
@@ -102,6 +148,17 @@ async function loadChapter() {
     readerStore.chapter = null
   } finally {
     loading.value = false
+    preloadAdjacentChapters()
+  }
+}
+
+function preloadAdjacentChapters() {
+  if (!bookId.value) return
+  if (chapterNo.value > 1) {
+    readerStore.preloadChapter(bookId.value, chapterNo.value - 1).catch(() => {})
+  }
+  if (!maxChapterNo.value || chapterNo.value < maxChapterNo.value) {
+    readerStore.preloadChapter(bookId.value, chapterNo.value + 1).catch(() => {})
   }
 }
 
@@ -109,13 +166,23 @@ function restoreProgress(progress) {
   if (!progress || Number(progress.chapterNo) !== Number(chapterNo.value)) {
     scrollTop.value = 0
     position.value = 0
+    pageModePage.value = 0
     return
   }
   const savedPosition = Number(progress.position || 0)
   position.value = savedPosition
-  setTimeout(() => {
-    scrollTop.value = savedPosition
-  }, 80)
+  if (readerStore.setting.turnMode === 'PAGE') {
+    pageModePage.value = savedPosition
+  } else {
+    setTimeout(() => {
+      scrollTop.value = savedPosition
+    }, 80)
+  }
+}
+
+function onPageChange(pageIdx) {
+  pageModePage.value = pageIdx
+  position.value = pageIdx
 }
 
 function toggleTools() {
@@ -151,8 +218,12 @@ async function prevChapter() {
   }
   await saveProgress()
   chapterNo.value -= 1
-  resetScroll()
-  await loadChapter()
+  position.value = 0
+  scrollTop.value = 0
+  pageModePage.value = Number.MAX_SAFE_INTEGER
+  await loadChapter({ restoreSavedProgress: false })
+  await nextTick()
+  pageReaderRef.value?.goToLastPage()
 }
 
 async function nextChapter() {
@@ -162,8 +233,10 @@ async function nextChapter() {
   }
   await saveProgress()
   chapterNo.value += 1
-  resetScroll()
-  await loadChapter()
+  position.value = 0
+  scrollTop.value = 0
+  pageModePage.value = 0
+  await loadChapter({ restoreSavedProgress: false })
   if (!chapter.value) {
     chapterNo.value -= 1
     uni.showToast({ title: '已经是最后一章', icon: 'none' })
@@ -174,10 +247,15 @@ async function nextChapter() {
 function resetScroll() {
   position.value = 0
   scrollTop.value = 0
+  pageModePage.value = 0
 }
 
 function onScroll(event) {
   position.value = Math.floor(event.detail.scrollTop || 0)
+}
+
+function setTurnMode(mode) {
+  saveSetting({ turnMode: mode })
 }
 
 function changeFont(delta) {
@@ -203,9 +281,7 @@ function saveSetting(setting) {
 }
 
 async function saveProgress() {
-  if (!userStore.isLoggedIn || !chapter.value) {
-    return null
-  }
+  if (!userStore.isLoggedIn || !chapter.value) return null
   return readerStore.saveProgress(bookId.value, {
     chapterId: chapter.value.id,
     chapterNo: chapterNo.value,
@@ -218,6 +294,7 @@ async function saveProgress() {
 async function initReader(query) {
   bookId.value = query.bookId
   chapterNo.value = Number(query.chapterNo || 1)
+  pageModePage.value = 0
   if (userStore.isLoggedIn) {
     await readerStore.loadSetting()
   }
@@ -233,6 +310,11 @@ onUnload(saveProgress)
 </script>
 
 <style scoped>
+.reader-root {
+  width: 100%;
+  min-height: 100vh;
+}
+
 .reader {
   position: relative;
   width: 100%;

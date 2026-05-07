@@ -56,7 +56,7 @@ const form = reactive({
 async function load() {
   loading.value = true
   try {
-    categories.value = (await listCategories()).data || []
+    categories.value = (await listCategories()) || []
   } finally {
     loading.value = false
   }

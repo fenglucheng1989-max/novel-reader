@@ -9,10 +9,10 @@ import java.util.List;
 @Data
 public class ImportConfirmDTO {
     private String sourceUrl;
-    @NotBlank
+    @NotBlank(message = "Title is required")
     private String title;
     private String author;
-    @NotNull
+    @NotNull(message = "Category is required")
     private Long categoryId;
     private String description;
     private String chapterTitle;
@@ -23,9 +23,9 @@ public class ImportConfirmDTO {
     @Data
     public static class ChapterItem {
         private Integer chapterNo;
-        @NotBlank
+        @NotBlank(message = "Title is required")
         private String title;
-        @NotBlank
+        @NotBlank(message = "Content is required")
         private String content;
     }
 }

@@ -78,10 +78,10 @@ async function submit() {
 }
 
 onMounted(async () => {
-  categories.value = (await listCategories()).data || []
+  categories.value = (await listCategories()) || []
   if (id) {
     const res = await getBook(id)
-    Object.assign(form, res.data.book)
+    Object.assign(form, res.book)
   }
 })
 </script>

@@ -5,9 +5,11 @@ import com.yourcompany.novelreader.entity.NovelCategory;
 import com.yourcompany.novelreader.entity.NovelChapter;
 import com.yourcompany.novelreader.mapper.AppUserMapper;
 import com.yourcompany.novelreader.service.BookService;
+import com.yourcompany.novelreader.dto.BookFilterDTO;
 import com.yourcompany.novelreader.vo.ApiResponse;
 import com.yourcompany.novelreader.vo.BookDetailVO;
 import com.yourcompany.novelreader.vo.ChapterItemVO;
+import com.yourcompany.novelreader.vo.PageResult;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -76,6 +78,16 @@ public class BookController extends BaseUserController {
     @GetMapping("/search/books")
     public ApiResponse<List<NovelBook>> search(@RequestParam String keyword) {
         return ApiResponse.success(bookService.list(null, keyword));
+    }
+
+    @GetMapping("/books/filter")
+    public ApiResponse<PageResult<NovelBook>> filter(BookFilterDTO filter) {
+        return ApiResponse.success(bookService.filter(filter));
+    }
+
+    @GetMapping("/books/featured")
+    public ApiResponse<List<NovelBook>> featured(@RequestParam(required = false, defaultValue = "6") Integer limit) {
+        return ApiResponse.success(bookService.featured(limit));
     }
 
     private boolean isRealUser(Authentication authentication) {

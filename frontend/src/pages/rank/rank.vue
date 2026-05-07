@@ -7,10 +7,14 @@
         <view class="nav-placeholder"></view>
       </view>
 
-      <view class="rank-head">
-        <text class="eyebrow">推荐榜</text>
-        <text class="title">{{ categoryName }}</text>
-        <text class="subtitle">按章节量、字数和更新时间综合排序。</text>
+      <view class="rank-tabs">
+        <view
+          v-for="tab in tabs"
+          :key="tab.key"
+          class="rank-tab"
+          :class="{ active: activeTab === tab.key }"
+          @tap="switchTab(tab.key)"
+        >{{ tab.label }}</view>
       </view>
 
       <view v-if="loading" class="empty">正在加载榜单...</view>
@@ -26,16 +30,16 @@
           @tap="goDetail(book.id)"
         >
           <view class="rank-no" :class="{ top: index < 3 }">{{ index + 1 }}</view>
-          <view class="cover">{{ coverText(book.title) }}</view>
+          <BookCover :title="book.title" size="md" />
           <view class="book-main">
             <view class="book-line">
               <text class="book-title">{{ book.title }}</text>
-              <text class="status">{{ statusText(book.status) }}</text>
+              <text class="status-badge" :class="book.status === 'COMPLETED' ? 'status-done' : 'status-ongoing'">{{ statusLabel(book.status) }}</text>
             </view>
             <text class="meta">{{ book.author || '佚名' }} · {{ book.chapterCount || 0 }}章 · {{ wordText(book.wordCount) }}</text>
             <text class="latest">{{ book.latestChapterTitle || '暂无章节' }}</text>
             <view class="score-row">
-              <text class="score-label">综合热度</text>
+              <text class="score-label">{{ scoreLabel }}</text>
               <view class="score-track">
                 <view class="score-fill" :style="{ width: scoreWidth(book) }"></view>
               </view>
@@ -51,16 +55,26 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
+import BookCover from '../../components/BookCover.vue'
 
 const bookStore = useBookStore()
 const loading = ref(false)
 const rankBooks = ref([])
 const categoryId = ref(0)
+const activeTab = ref('recommend')
 
-const categoryName = computed(() => {
-  if (!categoryId.value) return '全部频道'
-  const category = bookStore.categories.find((item) => Number(item.id) === Number(categoryId.value))
-  return category ? `${category.name}频道` : '当前频道'
+const tabs = [
+  { key: 'recommend', label: '推荐榜' },
+  { key: 'hot', label: '热门榜' },
+  { key: 'new', label: '新书榜' },
+  { key: 'completed', label: '完结榜' }
+]
+
+const scoreLabel = computed(() => {
+  if (activeTab.value === 'recommend') return '综合热度'
+  if (activeTab.value === 'hot') return '章节数'
+  if (activeTab.value === 'new') return '最近更新'
+  return '总字数'
 })
 
 const maxScore = computed(() => {
@@ -72,11 +86,36 @@ async function load() {
   loading.value = true
   try {
     await bookStore.loadCategories()
-    const res = await bookStore.loadRank(categoryId.value || null, 100)
-    rankBooks.value = res.code === 200 ? (res.data || []) : []
+    const cid = categoryId.value || null
+    let res
+
+    switch (activeTab.value) {
+      case 'recommend':
+        res = await bookStore.loadRank(cid, 50)
+        rankBooks.value = res.code === 200 ? (res.data || []) : []
+        break
+      case 'hot':
+        res = await bookStore.loadFilter({ categoryId: cid, sortBy: 'chapterCount', pageSize: 50 })
+        rankBooks.value = res.code === 200 ? (res.data?.records || []) : []
+        break
+      case 'new':
+        res = await bookStore.loadFilter({ categoryId: cid, sortBy: 'latest', pageSize: 50 })
+        rankBooks.value = res.code === 200 ? (res.data?.records || []) : []
+        break
+      case 'completed':
+        res = await bookStore.loadFilter({ categoryId: cid, status: 'COMPLETED', sortBy: 'wordCount', pageSize: 50 })
+        rankBooks.value = res.code === 200 ? (res.data?.records || []) : []
+        break
+    }
   } finally {
     loading.value = false
   }
+}
+
+function switchTab(key) {
+  if (activeTab.value === key) return
+  activeTab.value = key
+  load()
 }
 
 function goBack() {
@@ -89,14 +128,9 @@ function goDetail(id) {
   uni.navigateTo({ url: `/pages/book/detail?id=${id}` })
 }
 
-function statusText(status) {
+function statusLabel(status) {
   if (status === 'COMPLETED') return '完结'
-  if (status === 'PAUSED') return '暂停'
   return '连载'
-}
-
-function coverText(title) {
-  return (title || '书').slice(0, 2)
 }
 
 function wordText(count) {
@@ -106,6 +140,7 @@ function wordText(count) {
 }
 
 function rankScore(book) {
+  if (activeTab.value === 'completed') return Number(book.wordCount || 0)
   return Number(book.chapterCount || 0) * 1000 + Number(book.wordCount || 0)
 }
 
@@ -116,6 +151,9 @@ function scoreWidth(book) {
 
 onLoad((query) => {
   categoryId.value = Number(query?.categoryId || 0)
+  if (query?.type && tabs.some((t) => t.key === query.type)) {
+    activeTab.value = query.type
+  }
   load()
 })
 </script>
@@ -175,42 +213,31 @@ onLoad((query) => {
   transform: translateX(-50%);
 }
 
-.rank-head {
+.rank-tabs {
+  display: flex;
+  gap: 8px;
   margin-bottom: 14px;
-  padding: 18px;
+  padding: 6px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(31, 42, 38, 0.04);
+}
+
+.rank-tab {
+  flex: 1;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 8px;
-  background: #20342d;
-  color: #fff;
-}
-
-.eyebrow,
-.title,
-.subtitle,
-.empty-title,
-.empty-subtitle,
-.book-title,
-.meta,
-.latest,
-.score-label {
-  display: block;
-}
-
-.eyebrow {
-  color: #d9b17c;
-  font-size: 12px;
+  color: #81776c;
+  font-size: 14px;
   font-weight: 800;
 }
 
-.title {
-  margin-top: 5px;
-  font-size: 24px;
-  font-weight: 900;
-}
-
-.subtitle {
-  margin-top: 8px;
-  color: #d8e4dd;
-  font-size: 13px;
+.rank-tab.active {
+  background: #2f6f5e;
+  color: #fff;
 }
 
 .rank-list {
@@ -241,19 +268,6 @@ onLoad((query) => {
   color: #2f6f5e;
 }
 
-.cover {
-  flex: 0 0 58px;
-  height: 78px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: linear-gradient(145deg, #2f6f5e, #9a6b45);
-  color: #fff;
-  font-size: 17px;
-  font-weight: 900;
-}
-
 .book-main {
   min-width: 0;
   flex: 1;
@@ -275,12 +289,25 @@ onLoad((query) => {
   color: #1f2a26;
   font-size: 16px;
   font-weight: 900;
+  display: block;
 }
 
-.status {
+.status-badge {
   flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.status-ongoing {
+  background: #e8f0ed;
   color: #2f6f5e;
-  font-size: 12px;
+}
+
+.status-done {
+  background: #f0e8e3;
+  color: #9a6b45;
 }
 
 .meta,
@@ -291,6 +318,7 @@ onLoad((query) => {
   white-space: nowrap;
   color: #81776c;
   font-size: 12px;
+  display: block;
 }
 
 .latest {
@@ -334,18 +362,17 @@ onLoad((query) => {
   color: #333b37;
   font-size: 17px;
   font-weight: 800;
+  display: block;
 }
 
 .empty-subtitle {
   margin-top: 8px;
   color: #94897c;
   font-size: 13px;
+  display: block;
 }
 
 @media (min-width: 720px) {
-  .page {
-    padding-left: 22px;
-    padding-right: 22px;
-  }
+  .page { padding-left: 22px; padding-right: 22px; }
 }
 </style>

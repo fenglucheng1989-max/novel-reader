@@ -87,6 +87,21 @@ export const useBookStore = defineStore('book', {
     },
     async loadRecommendations(bookId, limit = 6) {
       return request({ url: `/api/v1/books/${bookId}/recommendations?limit=${limit}` })
+    },
+    async loadFilter(params = {}) {
+      const queryParts = []
+      if (params.categoryId) queryParts.push(`categoryId=${encodeURIComponent(params.categoryId)}`)
+      if (params.status) queryParts.push(`status=${encodeURIComponent(params.status)}`)
+      if (params.minWordCount != null) queryParts.push(`minWordCount=${params.minWordCount}`)
+      if (params.maxWordCount != null) queryParts.push(`maxWordCount=${params.maxWordCount}`)
+      if (params.keyword) queryParts.push(`keyword=${encodeURIComponent(params.keyword)}`)
+      if (params.sortBy) queryParts.push(`sortBy=${encodeURIComponent(params.sortBy)}`)
+      if (params.page != null) queryParts.push(`page=${params.page}`)
+      if (params.pageSize != null) queryParts.push(`pageSize=${params.pageSize}`)
+      return request({ url: `/api/v1/books/filter?${queryParts.join('&')}` })
+    },
+    async loadFeatured(limit = 6) {
+      return request({ url: `/api/v1/books/featured?limit=${limit}` })
     }
   }
 })

@@ -1,12 +1,14 @@
 package com.yourcompany.novelreader.service;
 
 import com.yourcompany.novelreader.dto.BookDTO;
+import com.yourcompany.novelreader.dto.BookFilterDTO;
 import com.yourcompany.novelreader.dto.ChapterDTO;
 import com.yourcompany.novelreader.entity.NovelBook;
 import com.yourcompany.novelreader.entity.NovelCategory;
 import com.yourcompany.novelreader.entity.NovelChapter;
 import com.yourcompany.novelreader.vo.BookDetailVO;
 import com.yourcompany.novelreader.vo.ChapterItemVO;
+import com.yourcompany.novelreader.vo.PageResult;
 
 import java.util.List;
 
@@ -25,4 +27,6 @@ public interface BookService {
     NovelChapter updateChapter(Long id, ChapterDTO dto);
     void deleteChapter(Long id);
     List<NovelBook> recommendations(Long bookId, Integer limit);
+    PageResult<NovelBook> filter(BookFilterDTO filter);
+    List<NovelBook> featured(Integer limit);
 }

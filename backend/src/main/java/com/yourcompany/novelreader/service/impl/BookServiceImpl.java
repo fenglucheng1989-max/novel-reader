@@ -1,7 +1,9 @@
 package com.yourcompany.novelreader.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yourcompany.novelreader.dto.BookDTO;
+import com.yourcompany.novelreader.dto.BookFilterDTO;
 import com.yourcompany.novelreader.dto.ChapterDTO;
 import com.yourcompany.novelreader.entity.NovelBook;
 import com.yourcompany.novelreader.entity.NovelBookStats;
@@ -23,6 +25,7 @@ import com.yourcompany.novelreader.mapper.NovelReadingProgressMapper;
 import com.yourcompany.novelreader.service.BookService;
 import com.yourcompany.novelreader.vo.BookDetailVO;
 import com.yourcompany.novelreader.vo.ChapterItemVO;
+import com.yourcompany.novelreader.vo.PageResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -113,6 +116,52 @@ public class BookServiceImpl implements BookService {
                 .eq(book.getCategoryId() != null, NovelBook::getCategoryId, book.getCategoryId())
                 .ne(NovelBook::getId, bookId)
                 .orderByDesc(NovelBook::getUpdatedAt))
+                .stream().limit(size).toList();
+    }
+
+    @Override
+    public PageResult<NovelBook> filter(BookFilterDTO filter) {
+        int page = Math.max(1, filter.getPage() != null ? filter.getPage() : 1);
+        int pageSize = Math.min(100, Math.max(1, filter.getPageSize() != null ? filter.getPageSize() : 20));
+
+        LambdaQueryWrapper<NovelBook> query = new LambdaQueryWrapper<>();
+        query.eq(filter.getCategoryId() != null, NovelBook::getCategoryId, filter.getCategoryId());
+        query.eq(filter.getStatus() != null && !filter.getStatus().isBlank(),
+                NovelBook::getStatus, filter.getStatus());
+        query.ge(filter.getMinWordCount() != null, NovelBook::getWordCount, filter.getMinWordCount());
+        query.le(filter.getMaxWordCount() != null, NovelBook::getWordCount, filter.getMaxWordCount());
+        if (filter.getKeyword() != null && !filter.getKeyword().isBlank()) {
+            query.and(q -> q.like(NovelBook::getTitle, filter.getKeyword())
+                    .or().like(NovelBook::getAuthor, filter.getKeyword()));
+        }
+
+        String sortBy = filter.getSortBy();
+        if ("wordCount".equals(sortBy)) {
+            query.orderByDesc(NovelBook::getWordCount);
+        } else if ("chapterCount".equals(sortBy)) {
+            query.orderByDesc(NovelBook::getChapterCount);
+        } else {
+            query.orderByDesc(NovelBook::getCreatedAt);
+        }
+        query.orderByAsc(NovelBook::getSortOrder);
+
+        Page<NovelBook> mpPage = new Page<>(page, pageSize);
+        Page<NovelBook> result = bookMapper.selectPage(mpPage, query);
+
+        return PageResult.<NovelBook>builder()
+                .records(result.getRecords())
+                .total(result.getTotal())
+                .page(result.getCurrent())
+                .pageSize(result.getSize())
+                .build();
+    }
+
+    @Override
+    public List<NovelBook> featured(Integer limit) {
+        int size = limit != null ? Math.min(20, Math.max(1, limit)) : 6;
+        return bookMapper.selectList(new LambdaQueryWrapper<NovelBook>()
+                .orderByDesc(NovelBook::getUpdatedAt)
+                .orderByAsc(NovelBook::getSortOrder))
                 .stream().limit(size).toList();
     }
 

@@ -25,77 +25,95 @@
       </scroll-view>
 
       <view v-if="loading" class="empty">正在加载书城...</view>
-      <view v-else-if="!bookStore.books.length" class="empty">
-        <text class="empty-title">暂无书籍</text>
-        <text class="empty-subtitle">可以先去后台新增小说和章节。</text>
-      </view>
       <template v-else>
-        <view class="rank-panel">
-          <view class="section-head">
-            <text class="section-title">推荐榜</text>
-            <text class="section-action" @tap="goRank">完整榜单 ›</text>
-          </view>
-          <view class="rank-grid">
+        <!-- Banner -->
+        <swiper v-if="bannerBooks.length" class="banner-swiper" :indicator-dots="true" :autoplay="true" :interval="4000" :duration="500" circular>
+          <swiper-item v-for="book in bannerBooks" :key="book.id">
+            <view class="banner-card" @tap="goDetail(book.id)">
+              <view class="banner-cover">
+                <text class="banner-cover-text">{{ (book.title || '书').slice(0, 3) }}</text>
+              </view>
+              <view class="banner-info">
+                <text class="banner-title">{{ book.title }}</text>
+                <text class="banner-meta">{{ book.author || '佚名' }} · {{ statusLabel(book.status) }}</text>
+                <text class="banner-desc">{{ (book.description || '').slice(0, 60) }}</text>
+              </view>
+            </view>
+          </swiper-item>
+        </swiper>
+
+        <view v-if="!bannerBooks.length && !editorialBooks.length && !hotBooks.length && !newBooks.length && !completedBooks.length" class="empty">
+          <text class="empty-title">暂无书籍</text>
+          <text class="empty-subtitle">可以先去后台新增小说和章节。</text>
+        </view>
+
+        <!-- Editor Picks -->
+        <template v-if="editorialBooks.length">
+          <SectionHead title="编辑精选" />
+          <view class="feature-grid">
             <view
-              v-for="(book, index) in rankedBooks"
+              v-for="book in editorialBooks.slice(0, 2)"
               :key="book.id"
-              class="rank-item"
+              class="feature-card"
               @tap="goDetail(book.id)"
             >
-              <view class="mini-cover">
-                <text>{{ coverText(book.title) }}</text>
+              <BookCover :title="book.title" size="xl" />
+              <view class="feature-info">
+                <text class="feature-title">{{ book.title }}</text>
+                <text class="feature-meta">{{ book.author || '佚名' }} · {{ book.chapterCount || 0 }}章</text>
+                <text class="feature-desc">{{ (book.description || '').slice(0, 80) }}</text>
               </view>
-              <view class="rank-copy">
-                <view class="rank-title-line">
-                  <text class="rank-no">{{ index + 1 }}</text>
+            </view>
+          </view>
+        </template>
+
+        <!-- Hot Ranking -->
+        <template v-if="hotBooks.length">
+          <view class="panel">
+            <SectionHead title="热门榜" action-text="完整榜单 >" @action="goRank('hot')" />
+            <view class="rank-grid">
+              <view v-for="(book, index) in hotBooks" :key="book.id" class="rank-item" @tap="goDetail(book.id)">
+                <text class="rank-no" :class="{ 'rank-top': index < 3 }">{{ index + 1 }}</text>
+                <BookCover :title="book.title" size="sm" />
+                <view class="rank-copy">
                   <text class="rank-title">{{ book.title }}</text>
+                  <text class="rank-meta">{{ book.author || '佚名' }} · {{ statusLabel(book.status) }}</text>
                 </view>
-                <text class="rank-meta">{{ book.author || '佚名' }} · {{ statusText(book.status) }}</text>
               </view>
             </view>
           </view>
-        </view>
+        </template>
 
-        <view class="feature-grid">
-          <view
-            v-for="book in featuredBooks"
-            :key="book.id"
-            class="feature-card"
-            @tap="goDetail(book.id)"
-          >
-            <view class="feature-cover">
-              <text>{{ coverText(book.title) }}</text>
-            </view>
-            <view class="feature-info">
-              <text class="feature-title">{{ book.title }}</text>
-              <text class="feature-meta">{{ book.author || '佚名' }} · {{ book.chapterCount || 0 }}章</text>
-              <text class="feature-desc">{{ book.description || '暂无简介' }}</text>
-            </view>
+        <!-- Latest -->
+        <template v-if="newBooks.length">
+          <view class="panel">
+            <SectionHead title="最新上架" />
+            <BookCardHorizontal
+              v-for="book in newBooks"
+              :key="book.id"
+              :book="book"
+              :show-status="true"
+              :show-latest-chapter="true"
+              @tap="goDetail(book.id)"
+            />
           </view>
-        </view>
+        </template>
 
-        <view class="list-section">
-          <view class="section-head">
-            <text class="section-title">最新上架</text>
-            <text class="section-count">{{ bookStore.books.length }} 本</text>
+        <!-- Completed -->
+        <template v-if="completedBooks.length">
+          <view class="panel">
+            <SectionHead title="完结精选" />
+            <BookCardHorizontal
+              v-for="book in completedBooks"
+              :key="book.id"
+              :book="book"
+              :show-status="true"
+              @tap="goDetail(book.id)"
+            />
           </view>
-          <view class="book-list">
-            <view v-for="book in listBooks" :key="book.id" class="book-row" @tap="goDetail(book.id)">
-              <view class="small-cover">{{ coverText(book.title) }}</view>
-              <view class="book-info">
-                <view class="book-line">
-                  <text class="book-title">{{ book.title }}</text>
-                  <text class="status">{{ statusText(book.status) }}</text>
-                </view>
-                <text class="author">{{ book.author || '佚名' }}</text>
-                <text class="latest">{{ book.latestChapterTitle || '暂无章节' }}</text>
-              </view>
-            </view>
-          </view>
-        </view>
+        </template>
       </template>
     </view>
-
   </view>
 </template>
 
@@ -103,20 +121,39 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
+import BookCover from '../../components/BookCover.vue'
+import SectionHead from '../../components/SectionHead.vue'
+import BookCardHorizontal from '../../components/BookCardHorizontal.vue'
 
 const bookStore = useBookStore()
 const activeCategory = ref(0)
 const loading = ref(false)
-const rankedBooks = computed(() => bookStore.books.slice(0, 6))
-const featuredBooks = computed(() => bookStore.books.slice(0, 2))
-const listBooks = computed(() => bookStore.books.slice(2))
+
+const bannerBooks = ref([])
+const editorialBooks = ref([])
+const hotBooks = ref([])
+const newBooks = ref([])
+const completedBooks = ref([])
 
 async function load() {
   loading.value = true
   try {
     await bookStore.loadCategories()
-    activeCategory.value = bookStore.selectedCategoryId || 0
-    await bookStore.loadRecommend(activeCategory.value || null)
+    const cid = activeCategory.value || null
+
+    const [featuredRes, hotRes, newRes, completedRes] = await Promise.all([
+      bookStore.loadFeatured(5),
+      bookStore.loadFilter({ categoryId: cid, sortBy: 'chapterCount', pageSize: 6 }),
+      bookStore.loadFilter({ categoryId: cid, sortBy: 'latest', pageSize: 10 }),
+      bookStore.loadFilter({ categoryId: cid, status: 'COMPLETED', pageSize: 6 })
+    ])
+
+    const featuredData = featuredRes.code === 200 ? (featuredRes.data || []) : []
+    bannerBooks.value = featuredData.slice(0, 3)
+    editorialBooks.value = featuredData
+    hotBooks.value = hotRes.code === 200 ? (hotRes.data?.records || []) : []
+    newBooks.value = newRes.code === 200 ? (newRes.data?.records || []) : []
+    completedBooks.value = completedRes.code === 200 ? (completedRes.data?.records || []) : []
   } finally {
     loading.value = false
   }
@@ -125,7 +162,7 @@ async function load() {
 function selectCategory(id) {
   activeCategory.value = id
   bookStore.selectCategory(id)
-  bookStore.loadRecommend(id || null)
+  load()
 }
 
 function goDetail(id) {
@@ -140,22 +177,23 @@ function goCategory() {
   uni.navigateTo({ url: '/pages/category/category' })
 }
 
-function goRank() {
-  const query = activeCategory.value ? `?categoryId=${activeCategory.value}` : ''
-  uni.navigateTo({ url: `/pages/rank/rank${query}` })
+function goRank(type) {
+  const cid = activeCategory.value ? `categoryId=${activeCategory.value}&` : ''
+  uni.navigateTo({ url: `/pages/rank/rank?${cid}type=${type}` })
 }
 
-function statusText(status) {
+function statusLabel(status) {
   if (status === 'COMPLETED') return '完结'
-  if (status === 'PAUSED') return '暂停'
   return '连载'
 }
 
-function coverText(title) {
-  return (title || '书').slice(0, 2)
-}
-
-onShow(load)
+onShow(() => {
+  if (activeCategory.value) load()
+  else {
+    activeCategory.value = bookStore.selectedCategoryId || 0
+    load()
+  }
+})
 </script>
 
 <style scoped>
@@ -195,31 +233,7 @@ onShow(load)
   box-sizing: border-box;
 }
 
-.search-icon,
-.search-placeholder,
-.category-button,
-.channel-item,
-.section-title,
-.section-action,
-.section-count,
-.rank-no,
-.rank-title,
-.rank-meta,
-.feature-title,
-.feature-meta,
-.feature-desc,
-.book-title,
-.author,
-.latest,
-.empty-title,
-.empty-subtitle {
-  display: block;
-}
-
-.search-icon {
-  color: #8b8176;
-  font-size: 17px;
-}
+.search-icon { color: #8b8176; font-size: 17px; }
 
 .search-placeholder {
   min-width: 0;
@@ -242,11 +256,7 @@ onShow(load)
   font-weight: 700;
 }
 
-.channel-row {
-  width: 100%;
-  margin-bottom: 14px;
-  white-space: nowrap;
-}
+.channel-row { width: 100%; margin-bottom: 14px; white-space: nowrap; }
 
 .channel-item {
   position: relative;
@@ -260,9 +270,7 @@ onShow(load)
   font-weight: 700;
 }
 
-.channel-item.active {
-  color: #141c19;
-}
+.channel-item.active { color: #141c19; }
 
 .channel-item.active::after {
   content: "";
@@ -276,112 +284,71 @@ onShow(load)
   transform: translateX(-50%);
 }
 
-.rank-panel,
-.list-section {
-  padding: 14px;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 10px 26px rgba(31, 42, 38, 0.05);
+/* Banner */
+.banner-swiper {
+  width: 100%;
+  height: 170px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  overflow: hidden;
 }
 
-.section-head {
+.banner-card {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+  height: 100%;
+  background: linear-gradient(135deg, #2f6f5e 0%, #1a3d33 50%, #3c2a1a 100%);
 }
 
-.section-title {
-  color: #1f2a26;
-  font-size: 18px;
-  font-weight: 800;
-}
-
-.section-action,
-.section-count {
-  color: #8d8175;
-  font-size: 13px;
-}
-
-.section-action {
-  padding: 4px 0 4px 12px;
-}
-
-.rank-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 12px;
-  row-gap: 12px;
-}
-
-.rank-item {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-}
-
-.mini-cover,
-.small-cover {
-  flex: 0 0 auto;
+.banner-cover {
+  flex: 0 0 100px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  background: linear-gradient(145deg, #2f6f5e, #9a6b45);
-  color: #fff;
-  font-weight: 800;
 }
 
-.mini-cover {
-  width: 48px;
-  height: 64px;
-  font-size: 15px;
+.banner-cover-text {
+  color: rgba(255,255,255,0.7);
+  font-size: 32px;
+  font-weight: 900;
 }
 
-.rank-copy {
-  min-width: 0;
+.banner-info {
   flex: 1;
-  margin-left: 9px;
-}
-
-.rank-title-line {
   min-width: 0;
+  padding: 28px 18px 28px 6px;
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  flex-direction: column;
+  justify-content: center;
 }
 
-.rank-no {
-  flex: 0 0 auto;
-  color: #9a6b45;
+.banner-title {
+  color: #fff;
+  font-size: 19px;
+  font-weight: 900;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.banner-meta {
+  margin-top: 6px;
+  color: rgba(255,255,255,0.65);
   font-size: 13px;
-  font-weight: 800;
 }
 
-.rank-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #27322e;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.rank-meta {
-  margin-top: 5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #92877c;
+.banner-desc {
+  margin-top: 8px;
+  color: rgba(255,255,255,0.45);
   font-size: 12px;
+  line-height: 18px;
 }
 
+/* Feature grid */
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 14px;
+  margin-bottom: 14px;
 }
 
 .feature-card {
@@ -390,17 +357,6 @@ onShow(load)
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 10px 26px rgba(31, 42, 38, 0.05);
-}
-
-.feature-cover {
-  height: 156px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(145deg, #efe1cb, #2f6f5e);
-  color: #fff;
-  font-size: 26px;
-  font-weight: 900;
 }
 
 .feature-info {
@@ -414,6 +370,7 @@ onShow(load)
   color: #1f2a26;
   font-size: 16px;
   font-weight: 800;
+  display: block;
 }
 
 .feature-meta {
@@ -423,6 +380,7 @@ onShow(load)
   white-space: nowrap;
   color: #9a6b45;
   font-size: 12px;
+  display: block;
 }
 
 .feature-desc {
@@ -438,69 +396,65 @@ onShow(load)
   -webkit-box-orient: vertical;
 }
 
-.list-section {
-  margin-top: 14px;
+/* Panel */
+.panel {
+  padding: 14px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 26px rgba(31, 42, 38, 0.05);
+  margin-bottom: 14px;
 }
 
-.book-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+/* Rank grid */
+.rank-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 12px;
+  row-gap: 12px;
 }
 
-.book-row {
-  display: flex;
+.rank-item {
   min-width: 0;
-}
-
-.small-cover {
-  width: 58px;
-  height: 78px;
-  font-size: 17px;
-}
-
-.book-info {
-  min-width: 0;
-  flex: 1;
-  margin-left: 11px;
-}
-
-.book-line {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
 }
 
-.book-title {
+.rank-no {
+  flex: 0 0 22px;
+  text-align: center;
+  color: #999;
+  font-size: 14px;
+  font-weight: 900;
+  margin-right: 8px;
+}
+
+.rank-no.rank-top { color: #e07b4c; }
+
+.rank-copy {
+  min-width: 0;
+  flex: 1;
+  margin-left: 8px;
+}
+
+.rank-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #232a27;
-  font-size: 16px;
+  color: #27322e;
+  font-size: 14px;
   font-weight: 800;
+  display: block;
 }
 
-.status {
-  flex: 0 0 auto;
-  color: #2f6f5e;
-  font-size: 12px;
-}
-
-.author {
-  margin-top: 6px;
-  color: #82786d;
-  font-size: 13px;
-}
-
-.latest {
-  margin-top: 8px;
+.rank-meta {
+  margin-top: 5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #9a6b45;
+  color: #92877c;
   font-size: 12px;
+  display: block;
 }
 
 .empty {
@@ -513,22 +467,18 @@ onShow(load)
   color: #333b37;
   font-size: 17px;
   font-weight: 800;
+  display: block;
 }
 
 .empty-subtitle {
   margin-top: 8px;
   color: #94897c;
   font-size: 13px;
+  display: block;
 }
 
 @media (min-width: 720px) {
-  .page {
-    padding-left: 22px;
-    padding-right: 22px;
-  }
-
-  .feature-cover {
-    height: 190px;
-  }
+  .page { padding-left: 22px; padding-right: 22px; }
+  .banner-swiper { height: 210px; }
 }
 </style>

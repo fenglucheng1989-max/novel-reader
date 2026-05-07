@@ -162,6 +162,42 @@
 - PUT /api/v1/bookshelf/{bookId}/pin、DELETE /api/v1/bookshelf/{bookId}/pin：置顶/取消置顶。
 - PUT /api/v1/bookshelf/sort：排序（按 bookIds 顺序更新 sort_order）。
 
+### Phase 4：书城与分类 (2026-05-08)
+
+**后端**
+
+- MyBatis-Plus 分页插件配置（MyBatisPlusConfig）。
+- 通用分页响应 PageResult、复合筛选 DTO BookFilterDTO。
+- GET /api/v1/books/filter：支持 categoryId、status、minWordCount、maxWordCount、keyword、sortBy（latest/wordCount/chapterCount）、page、pageSize 复合筛选。
+- GET /api/v1/books/featured：编辑精选/Banner 数据源（按更新时间排序）。
+
+**前端共享组件**
+
+- BookCover.vue：渐变色封面占位，支持 sm/md/lg/xl 尺寸。
+- SectionHead.vue：区块标题 + 右侧操作入口。
+- BookCardHorizontal.vue：横排书卡，支持排名/状态/最新章节显示。
+
+**书城首页（index.vue）重做**
+
+- Banner 轮播（swiper，featured 前 3 本）。
+- 编辑精选（featured 大卡片）。
+- 热门榜（filter sortBy=chapterCount，排行网格）。
+- 新书榜（filter sortBy=latest，横排列表）。
+- 完结榜（filter status=COMPLETED，横排列表）。
+- 4 个数据源并行加载，频道 Tab 切换联动。
+
+**榜单页（rank.vue）重做**
+
+- 4 个榜单 Tab：推荐榜/热门榜/新书榜/完结榜。
+- 支持从首页传入榜单类型和分类参数。
+
+**分类页（category.vue）重做**
+
+- 标签选择后当前页展示筛选结果（不再跳转搜索）。
+- 筛选工具栏：状态（全部/连载/完结）、排序（最新/最多字数/最多章节）。
+- 结果列表 + 加载更多分页。
+- 活跃筛选标签展示。
+
 ## 当前文档状态
 
 - `docs/design.md`：总体设计与前后端开发方案。
@@ -171,14 +207,13 @@
 ## 当前问题
 
 - 章节末承接页尚未实现。
-- 书城缺少搜索框、频道 Tab、Banner、榜单模块。
 - 管理端不支持标签和统计编辑。
 
 ## 下一阶段建议
 
-优先进入 Phase 4：书城与分类。
+优先进入 Phase 5：章节末承接与轻社区。
 
 ## 验证记录
 
-- `frontend`: `npm run build:h5` 通过 (2026-05-08, Phase 3)。
-- `backend`: `.\mvnw.cmd test` 通过 (2026-05-08, Phase 3)。
+- `frontend`: `npm run build:h5` 通过 (2026-05-08, Phase 4)。
+- `backend`: `.\mvnw.cmd test` 通过 (2026-05-08, Phase 4)。

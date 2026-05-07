@@ -21,30 +21,26 @@
             :key="group.key"
             class="rail-item"
             :class="{ active: activeGroup === group.key }"
-            @tap="activeGroup = group.key"
+            @tap="selectGroup(group.key)"
           >{{ group.name }}</view>
         </view>
 
-        <scroll-view class="tag-scroll" scroll-y>
+        <scroll-view class="main-scroll" scroll-y>
+          <!-- Tag Section -->
           <view v-if="activeGroup === 'category'" class="tag-section">
             <view class="section-head">
               <text class="section-title">频道分类</text>
               <text class="section-note">{{ bookStore.categories.length }} 个</text>
             </view>
-
             <view class="tag-grid">
-              <view class="tag-card featured" @tap="chooseCategory(0)">
-                <text>推荐</text>
-              </view>
+              <view class="tag-card featured" @tap="chooseCategory(0)"><text>推荐</text></view>
               <view
                 v-for="item in bookStore.categories"
                 :key="item.id"
                 class="tag-card"
                 :class="{ active: bookStore.selectedCategoryId === item.id }"
                 @tap="chooseCategory(item.id)"
-              >
-                <text>{{ item.name }}</text>
-              </view>
+              ><text>{{ item.name }}</text></view>
             </view>
 
             <view class="section-head spaced">
@@ -52,14 +48,7 @@
               <text class="section-note">{{ activeGenderName }}</text>
             </view>
             <view class="tag-grid">
-              <view
-                v-for="tag in hotTags"
-                :key="tag"
-                class="tag-card soft"
-                @tap="searchTag(tag)"
-              >
-                <text>{{ tag }}</text>
-              </view>
+              <view v-for="tag in hotTags" :key="tag" class="tag-card soft" @tap="pickTag(tag)"><text>{{ tag }}</text></view>
             </view>
           </view>
 
@@ -69,22 +58,62 @@
               <text class="section-note">偏好标签</text>
             </view>
             <view class="tag-grid">
-              <view
-                v-for="tag in currentTags"
-                :key="tag"
-                class="tag-card"
-                @tap="searchTag(tag)"
-              >
-                <text>{{ tag }}</text>
-              </view>
+              <view v-for="tag in currentTags" :key="tag" class="tag-card" @tap="pickTag(tag)"><text>{{ tag }}</text></view>
             </view>
           </view>
 
+          <!-- Filter + Results (shown when keyword active) -->
+          <template v-if="currentKeyword">
+            <view class="divider" />
+
+            <view class="filter-bar">
+              <view class="filter-row">
+                <text class="filter-label">状态</text>
+                <view class="filter-chips">
+                  <view class="f-chip" :class="{ active: statusFilter === '' }" @tap="setFilter('status', '')">全部</view>
+                  <view class="f-chip" :class="{ active: statusFilter === 'ONGOING' }" @tap="setFilter('status', 'ONGOING')">连载</view>
+                  <view class="f-chip" :class="{ active: statusFilter === 'COMPLETED' }" @tap="setFilter('status', 'COMPLETED')">完结</view>
+                </view>
+              </view>
+              <view class="filter-row">
+                <text class="filter-label">排序</text>
+                <view class="filter-chips">
+                  <view class="f-chip" :class="{ active: sortBy === 'latest' }" @tap="setFilter('sort', 'latest')">最新</view>
+                  <view class="f-chip" :class="{ active: sortBy === 'wordCount' }" @tap="setFilter('sort', 'wordCount')">最多字数</view>
+                  <view class="f-chip" :class="{ active: sortBy === 'chapterCount' }" @tap="setFilter('sort', 'chapterCount')">最多章节</view>
+                </view>
+              </view>
+            </view>
+
+            <view class="active-tags">
+              <view class="active-tag">
+                <text>{{ currentKeyword }}</text>
+                <text class="tag-close" @tap="clearKeyword">×</text>
+              </view>
+              <text class="result-total">共 {{ total }} 本</text>
+            </view>
+
+            <view v-if="searchLoading" class="empty">正在查找...</view>
+            <view v-else-if="!books.length" class="empty">
+              <text class="empty-title">没有找到符合条件的书</text>
+              <text class="empty-subtitle">试试其他标签或筛选条件。</text>
+            </view>
+            <view v-else class="results-list">
+              <BookCardHorizontal
+                v-for="book in books"
+                :key="book.id"
+                :book="book"
+                :show-status="true"
+                :show-latest-chapter="true"
+                @tap="goDetail(book.id)"
+              />
+              <view v-if="hasMore" class="load-more" @tap="loadMore">
+                <text>加载更多 ({{ books.length }} / {{ total }})</text>
+              </view>
+            </view>
+          </template>
+
           <view v-if="loading" class="empty">正在整理分类...</view>
-          <view v-else-if="activeGroup === 'category' && !bookStore.categories.length" class="empty">
-            <text class="empty-title">暂无分类</text>
-            <text class="empty-subtitle">可以先在后台维护书籍分类。</text>
-          </view>
         </scroll-view>
       </view>
     </view>
@@ -95,11 +124,21 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
+import BookCardHorizontal from '../../components/BookCardHorizontal.vue'
 
 const bookStore = useBookStore()
 const loading = ref(false)
 const activeGender = ref('male')
 const activeGroup = ref('category')
+
+const currentKeyword = ref('')
+const statusFilter = ref('')
+const sortBy = ref('latest')
+const books = ref([])
+const searchLoading = ref(false)
+const page = ref(1)
+const total = ref(0)
+const hasMore = computed(() => books.value.length < total.value)
 
 const genderTabs = [
   { key: 'male', name: '男生' },
@@ -150,11 +189,64 @@ const hotTags = computed(() => activeTagSet.value.hot || [])
 
 async function load() {
   loading.value = true
+  try { await bookStore.loadCategories() } finally { loading.value = false }
+}
+
+function selectGroup(key) {
+  activeGroup.value = key
+  clearKeyword()
+}
+
+function pickTag(tag) {
+  currentKeyword.value = tag
+  page.value = 1
+  books.value = []
+  total.value = 0
+  doSearch()
+}
+
+function clearKeyword() {
+  currentKeyword.value = ''
+  books.value = []
+  total.value = 0
+}
+
+function setFilter(type, value) {
+  if (type === 'status') statusFilter.value = value
+  if (type === 'sort') sortBy.value = value
+  page.value = 1
+  books.value = []
+  total.value = 0
+  if (currentKeyword.value) doSearch()
+}
+
+async function doSearch() {
+  searchLoading.value = true
   try {
-    await bookStore.loadCategories()
+    const res = await bookStore.loadFilter({
+      keyword: currentKeyword.value,
+      status: statusFilter.value || undefined,
+      sortBy: sortBy.value,
+      page: page.value,
+      pageSize: 20
+    })
+    if (res.code === 200) {
+      const newRecords = res.data?.records || []
+      if (page.value === 1) {
+        books.value = newRecords
+      } else {
+        books.value = [...books.value, ...newRecords]
+      }
+      total.value = res.data?.total || 0
+    }
   } finally {
-    loading.value = false
+    searchLoading.value = false
   }
+}
+
+function loadMore() {
+  page.value++
+  doSearch()
 }
 
 function chooseCategory(id) {
@@ -162,8 +254,8 @@ function chooseCategory(id) {
   uni.switchTab({ url: '/pages/index/index' })
 }
 
-function searchTag(tag) {
-  uni.navigateTo({ url: `/pages/search/search?keyword=${encodeURIComponent(tag)}` })
+function goDetail(id) {
+  uni.navigateTo({ url: `/pages/book/detail?id=${id}` })
 }
 
 function goBack() {
@@ -203,9 +295,6 @@ onShow(load)
   flex: 0 0 38px;
   width: 38px;
   height: 38px;
-}
-
-.nav-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -261,7 +350,6 @@ onShow(load)
 }
 
 .content-card {
-  min-height: calc(100vh - 128px);
   display: grid;
   grid-template-columns: 84px minmax(0, 1fr);
   overflow: hidden;
@@ -301,7 +389,7 @@ onShow(load)
   background: #2f6f5e;
 }
 
-.tag-scroll {
+.main-scroll {
   height: calc(100vh - 128px);
 }
 
@@ -316,17 +404,7 @@ onShow(load)
   margin-bottom: 12px;
 }
 
-.section-head.spaced {
-  margin-top: 22px;
-}
-
-.section-title,
-.section-note,
-.tag-card,
-.empty-title,
-.empty-subtitle {
-  display: block;
-}
+.section-head.spaced { margin-top: 22px; }
 
 .section-title {
   color: #1f2a26;
@@ -366,19 +444,98 @@ onShow(load)
   white-space: nowrap;
 }
 
-.tag-card.featured {
-  background: #20342d;
-  color: #fff;
+.tag-card.featured { background: #20342d; color: #fff; }
+.tag-card.active { background: #2f6f5e; color: #fff; }
+.tag-card.soft { background: #fbfaf7; border: 1px solid #efe8df; }
+
+.divider {
+  height: 1px;
+  margin: 0 12px;
+  background: #f0ebe2;
 }
 
-.tag-card.active {
+/* Filter */
+.filter-bar {
+  padding: 10px 12px 6px;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.filter-label {
+  flex: 0 0 36px;
+  color: #8d8175;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.filter-chips {
+  display: flex;
+  gap: 6px;
+}
+
+.f-chip {
+  height: 28px;
+  line-height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: #f6f3ee;
+  color: #62584d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.f-chip.active {
   background: #2f6f5e;
   color: #fff;
 }
 
-.tag-card.soft {
-  background: #fbfaf7;
-  border: 1px solid #efe8df;
+/* Active tags */
+.active-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 8px;
+}
+
+.active-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #e8f0ed;
+  color: #2f6f5e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.tag-close {
+  color: #8d8175;
+  font-size: 15px;
+}
+
+.result-total {
+  margin-left: auto;
+  color: #8d8175;
+  font-size: 12px;
+}
+
+/* Results */
+.results-list {
+  padding: 4px 12px 24px;
+}
+
+.load-more {
+  padding: 16px 0;
+  text-align: center;
+  color: #2f6f5e;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .empty {
@@ -391,22 +548,18 @@ onShow(load)
   color: #333b37;
   font-size: 17px;
   font-weight: 800;
+  display: block;
 }
 
 .empty-subtitle {
   margin-top: 8px;
   color: #94897c;
   font-size: 13px;
+  display: block;
 }
 
 @media (min-width: 720px) {
-  .page {
-    padding-left: 22px;
-    padding-right: 22px;
-  }
-
-  .content-card {
-    grid-template-columns: 108px minmax(0, 1fr);
-  }
+  .page { padding-left: 22px; padding-right: 22px; }
+  .content-card { grid-template-columns: 108px minmax(0, 1fr); }
 }
 </style>

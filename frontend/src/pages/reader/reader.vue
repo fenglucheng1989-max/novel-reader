@@ -15,6 +15,7 @@
     <!-- ==================== PAGE mode ==================== -->
     <PageReader
       v-else
+      :key="bookId"
       ref="pageReaderRef"
       :content="rawContent"
       :prevContent="prevChapterContent"
@@ -33,7 +34,7 @@
     <!-- ==================== Tool layers ==================== -->
     <ReaderTopBar
       :visible="showTools && !settingVisible"
-      :title="chapter?.title || '阅读'"
+      :title="currentTitle || chapter?.title || '阅读'"
       @back="goBack"
       @bookshelf="toggleBookshelf"
       @setting="toggleSetting"
@@ -66,8 +67,8 @@
 </template>
 
 <script setup>
-import { computed, ref, nextTick, watch, onBeforeUnmount } from 'vue'
-import { onLoad, onUnload } from '@dcloudio/uni-app'
+import { computed, ref, nextTick, watch, onBeforeUnmount, onMounted, getCurrentInstance } from 'vue'
+import { onLoad, onUnload, onShow } from '@dcloudio/uni-app'
 import { useReaderStore } from '../../store/reader'
 import { useUserStore } from '../../store/user'
 import { readerThemes, themeStyle } from '../../utils/reader'
@@ -78,6 +79,7 @@ import ReaderSettingSheet from './components/ReaderSettingSheet.vue'
 
 const readerStore = useReaderStore()
 const userStore = useUserStore()
+const instance = getCurrentInstance()
 const bookId = ref('')
 const chapterNo = ref(1)
 const loading = ref(false)
@@ -88,11 +90,16 @@ const position = ref(0)
 const pageModePage = ref(0)
 const pageReaderRef = ref(null)
 const brightness = ref(Number(uni.getStorageSync('readerBrightness') || 80))
+const currentChapter = ref(null)
+const currentTitle = ref('')
+const currentContent = ref('')
 let autoPageTimer = null
+let initializing = false
+let showRetryTimer = null
 
 // ---- computed ----
-const chapter = computed(() => readerStore.chapter)
-const rawContent = computed(() => chapter.value?.content || '')
+const chapter = computed(() => currentChapter.value || readerStore.chapter)
+const rawContent = computed(() => currentContent.value || chapter.value?.content || '')
 const maxChapterNo = computed(() => {
   const list = readerStore.chapters || []
   return list.length ? Math.max(...list.map((item) => Number(item.chapterNo || 0))) : 0
@@ -144,9 +151,24 @@ const brightnessStyle = computed(() => {
 async function loadChapter({ restoreSavedProgress = true } = {}) {
   loading.value = true
   try {
-    await readerStore.loadChapter(bookId.value, chapterNo.value)
+    const res = await readerStore.loadChapter(bookId.value, chapterNo.value)
+    if (res?.code !== 200 || !res?.data?.content) {
+      currentChapter.value = null
+      currentTitle.value = ''
+      currentContent.value = ''
+      readerStore.$patch({ chapter: null })
+    } else {
+      currentChapter.value = { ...res.data }
+      currentTitle.value = res.data.title || ''
+      currentContent.value = res.data.content || ''
+      await nextTick()
+      instance?.proxy?.$forceUpdate?.()
+    }
   } catch (error) {
-    readerStore.chapter = null
+    currentChapter.value = null
+    currentTitle.value = ''
+    currentContent.value = ''
+    readerStore.$patch({ chapter: null })
   } finally {
     loading.value = false
     preloadAdjacentChapters()
@@ -263,8 +285,8 @@ async function prevChapter() {
   chapterNo.value -= 1
   position.value = 0
   scrollTop.value = 0
-  pageModePage.value = Number.MAX_SAFE_INTEGER
   await loadChapter({ restoreSavedProgress: false })
+  pageModePage.value = Number.MAX_SAFE_INTEGER
   await nextTick()
   pageReaderRef.value?.goToLastPage()
   restartAutoPage()
@@ -279,8 +301,8 @@ async function nextChapter() {
   chapterNo.value += 1
   position.value = 0
   scrollTop.value = 0
-  pageModePage.value = 0
   await loadChapter({ restoreSavedProgress: false })
+  pageModePage.value = 0
   if (!chapter.value) {
     chapterNo.value -= 1
     uni.showToast({ title: '已经是最后一章', icon: 'none' })
@@ -354,26 +376,87 @@ async function saveProgress() {
 }
 
 // ---- init ----
-async function initReader(query) {
-  bookId.value = query.bookId
-  chapterNo.value = Number(query.chapterNo || 1)
-  pageModePage.value = 0
-  if (userStore.isLoggedIn) {
-    readerStore.loadSetting().catch(() => {})
+function resolveReaderQuery(query = {}) {
+  const resolved = { ...(query || {}) }
+  // #ifdef H5
+  if ((!resolved.bookId || !resolved.chapterNo) && typeof window !== 'undefined') {
+    const hash = window.location.hash || ''
+    const queryText = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : ''
+    const params = new URLSearchParams(queryText)
+    if (!resolved.bookId) resolved.bookId = params.get('bookId') || ''
+    if (!resolved.chapterNo) resolved.chapterNo = params.get('chapterNo') || ''
   }
-  await readerStore.loadChapters(bookId.value)
-  await loadChapter()
-  startAutoPage()
+  // #endif
+  return resolved
+}
+
+async function initReader(query) {
+  if (initializing) return
+  initializing = true
+  const resolved = resolveReaderQuery(query)
+  bookId.value = resolved.bookId
+  chapterNo.value = Number(resolved.chapterNo || 1)
+  pageModePage.value = 0
+    if (!bookId.value) {
+      currentChapter.value = null
+      currentTitle.value = ''
+      currentContent.value = ''
+      readerStore.$patch({ chapter: null })
+    uni.showToast({ title: '缺少书籍参数', icon: 'none' })
+    initializing = false
+    return
+  }
+  try {
+    if (userStore.isLoggedIn) {
+      readerStore.loadSetting().catch(() => {})
+    }
+    await readerStore.loadChapters(bookId.value)
+    await loadChapter()
+    startAutoPage()
+  } finally {
+    initializing = false
+  }
+}
+
+function hasLoadedChapter(targetBookId, targetChapterNo) {
+  const loaded = currentChapter.value || readerStore.chapter
+  return !!loaded?.content &&
+    String(loaded.bookId) === String(targetBookId) &&
+    Number(loaded.chapterNo) === Number(targetChapterNo)
+}
+
+async function ensureReaderReady() {
+  if (initializing) {
+    showRetryTimer = setTimeout(ensureReaderReady, 120)
+    return
+  }
+  const resolved = resolveReaderQuery()
+  const targetBookId = resolved.bookId || bookId.value
+  const targetChapterNo = Number(resolved.chapterNo || chapterNo.value || 1)
+  if (!targetBookId || hasLoadedChapter(targetBookId, targetChapterNo)) return
+  await initReader({ bookId: targetBookId, chapterNo: targetChapterNo })
 }
 
 onLoad((query) => { initReader(query) })
 
+onMounted(() => {
+  if (showRetryTimer) clearTimeout(showRetryTimer)
+  showRetryTimer = setTimeout(ensureReaderReady, 0)
+})
+
+onShow(() => {
+  if (showRetryTimer) clearTimeout(showRetryTimer)
+  showRetryTimer = setTimeout(ensureReaderReady, 0)
+})
+
 onUnload(() => {
+  if (showRetryTimer) clearTimeout(showRetryTimer)
   stopAutoPage()
   saveProgress()
 })
 
 onBeforeUnmount(() => {
+  if (showRetryTimer) clearTimeout(showRetryTimer)
   stopAutoPage()
 })
 </script>

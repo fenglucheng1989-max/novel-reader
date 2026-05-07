@@ -13,29 +13,45 @@ const defaultSetting = {
   autoPageInterval: 15
 }
 
+function isFullChapter(chapter) {
+  return !!chapter &&
+    typeof chapter === 'object' &&
+    chapter.id != null &&
+    chapter.bookId != null &&
+    chapter.chapterNo != null &&
+    typeof chapter.title === 'string' &&
+    chapter.title.length > 0 &&
+    typeof chapter.content === 'string' &&
+    chapter.content.length > 0
+}
+
 export const useReaderStore = defineStore('reader', {
   state: () => ({
     chapter: null,
     chapters: [],
     chapterCache: {},
     progress: null,
-    setting: uni.getStorageSync('readerSetting') || defaultSetting
+    setting: { ...defaultSetting, ...(uni.getStorageSync('readerSetting') || {}) }
   }),
   actions: {
     getChapterCacheKey(bookId, chapterNo) {
-      return `chapter:${bookId}:${chapterNo}`
+      return `chapter:v2:${bookId}:${chapterNo}`
     },
     getCachedChapter(bookId, chapterNo) {
       const cacheKey = this.getChapterCacheKey(bookId, chapterNo)
-      if (this.chapterCache[cacheKey]) return this.chapterCache[cacheKey]
+      if (isFullChapter(this.chapterCache[cacheKey])) return this.chapterCache[cacheKey]
       const cached = uni.getStorageSync(cacheKey)
-      if (cached) {
+      if (isFullChapter(cached)) {
         this.chapterCache = { ...this.chapterCache, [cacheKey]: cached }
         return cached
       }
+      uni.removeStorageSync(cacheKey)
+      const { [cacheKey]: _invalid, ...rest } = this.chapterCache
+      this.chapterCache = rest
       return null
     },
     setCachedChapter(bookId, chapterNo, chapter) {
+      if (!isFullChapter(chapter)) return
       const cacheKey = this.getChapterCacheKey(bookId, chapterNo)
       this.chapterCache = { ...this.chapterCache, [cacheKey]: chapter }
       uni.setStorageSync(cacheKey, chapter)
@@ -50,12 +66,12 @@ export const useReaderStore = defineStore('reader', {
     async loadChapter(bookId, chapterNo) {
       const cached = this.getCachedChapter(bookId, chapterNo)
       if (cached) {
-        this.chapter = cached
+        this.$patch({ chapter: cached })
         return { code: 200, message: 'success', data: cached, cached: true }
       }
       const res = await request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}` })
       if (res.code === 200) {
-        this.chapter = res.data
+        this.$patch({ chapter: res.data })
         this.setCachedChapter(bookId, chapterNo, res.data)
       }
       return res

@@ -4,7 +4,7 @@
     <view v-if="readerStore.setting.turnMode === 'SCROLL'" class="reader" :style="pageStyle" @tap="onContentTap">
       <scroll-view class="content-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
         <view v-if="loading" class="empty">正在加载章节...</view>
-        <view v-else-if="chapter" class="chapter-content" :style="textStyle">
+        <view v-else-if="chapter" class="chapter-content" :style="scrollTextStyle">
           <text class="chapter-title">{{ chapter.title }}</text>
           <view v-for="(line, index) in paragraphs" :key="index" class="paragraph">{{ line }}</view>
         </view>
@@ -22,6 +22,9 @@
       :nextContent="nextChapterContent"
       :fontSize="readerStore.setting.fontSize"
       :lineHeight="readerStore.setting.lineHeight"
+      :marginX="readerStore.setting.marginX"
+      :marginY="readerStore.setting.marginY"
+      :paragraphSpacing="readerStore.setting.paragraphSpacing"
       :theme="readerStore.setting.theme"
       :brightness="brightness"
       :initialPage="pageModePage"
@@ -138,6 +141,11 @@ const paragraphs = computed(() => {
     .filter(Boolean)
 })
 const textStyle = computed(() => themeStyle(readerStore.setting))
+const scrollTextStyle = computed(() => ({
+  ...textStyle.value,
+  padding: `62px ${readerStore.setting.marginX || 22}px 82px`,
+  '--paragraph-spacing': `${16 + Number(readerStore.setting.paragraphSpacing || 0)}px`
+}))
 const pageStyle = computed(() => {
   const theme = readerThemes[readerStore.setting.theme] || readerThemes.DEFAULT
   return { backgroundColor: theme.background }
@@ -499,7 +507,7 @@ onBeforeUnmount(() => {
 .paragraph {
   display: block;
   width: 100%;
-  margin-bottom: 16px;
+  margin-bottom: var(--paragraph-spacing, 16px);
   text-align: justify;
   white-space: normal;
   word-break: break-all;

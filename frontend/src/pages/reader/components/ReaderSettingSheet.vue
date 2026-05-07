@@ -2,7 +2,6 @@
   <view v-if="visible" class="setting-sheet-root">
     <view class="setting-backdrop" @tap.stop="emit('close')" />
     <view class="setting-sheet" @tap.stop>
-      <!-- Brightness -->
       <view class="sheet-row">
         <text class="row-label">亮度</text>
         <view class="brightness-wrap">
@@ -21,7 +20,6 @@
         </view>
       </view>
 
-      <!-- Font size -->
       <view class="sheet-row">
         <text class="row-label">字号</text>
         <view class="stepper">
@@ -35,7 +33,6 @@
         </view>
       </view>
 
-      <!-- Line height -->
       <view class="sheet-row">
         <text class="row-label">行距</text>
         <view class="stepper">
@@ -49,7 +46,32 @@
         </view>
       </view>
 
-      <!-- Turn mode -->
+      <view class="sheet-row">
+        <text class="row-label">页距</text>
+        <view class="stepper">
+          <view class="stepper-btn" @tap.stop="emit('update:setting', { marginX: Math.max(12, setting.marginX - 2) })">
+            <text>-</text>
+          </view>
+          <text class="stepper-value">{{ setting.marginX }}</text>
+          <view class="stepper-btn" @tap.stop="emit('update:setting', { marginX: Math.min(48, setting.marginX + 2) })">
+            <text>+</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="sheet-row">
+        <text class="row-label">段距</text>
+        <view class="stepper">
+          <view class="stepper-btn" @tap.stop="emit('update:setting', { paragraphSpacing: Math.max(0, setting.paragraphSpacing - 2) })">
+            <text>-</text>
+          </view>
+          <text class="stepper-value">{{ setting.paragraphSpacing }}</text>
+          <view class="stepper-btn" @tap.stop="emit('update:setting', { paragraphSpacing: Math.min(24, setting.paragraphSpacing + 2) })">
+            <text>+</text>
+          </view>
+        </view>
+      </view>
+
       <view class="sheet-row">
         <text class="row-label">翻页</text>
         <view class="segmented">
@@ -65,7 +87,6 @@
         </view>
       </view>
 
-      <!-- Theme -->
       <view class="sheet-row">
         <text class="row-label">主题</text>
         <view class="theme-chips">
@@ -82,7 +103,6 @@
         </view>
       </view>
 
-      <!-- Auto page -->
       <view class="sheet-row">
         <text class="row-label">自动翻页</text>
         <view class="auto-page-wrap">
@@ -91,18 +111,19 @@
             @change="onAutoPageToggle"
             color="#2f6f5e"
           />
-          <select
+          <picker
             v-if="setting.autoPageEnabled"
             class="interval-select"
-            :value="setting.autoPageInterval"
+            mode="selector"
+            :range="intervalLabels"
+            :value="intervalIndex"
             @change="onIntervalChange"
           >
-            <option v-for="o in intervalOptions" :key="o" :value="o">{{ o }}s</option>
-          </select>
+            <view class="interval-value">{{ intervalLabel }}</view>
+          </picker>
         </view>
       </view>
 
-      <!-- More settings -->
       <view class="sheet-row more-row" @tap.stop="emit('more')">
         <text class="row-label">更多设置</text>
         <text class="more-arrow">&#x203A;</text>
@@ -112,6 +133,8 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+
 const props = defineProps({
   visible: { type: Boolean, default: false },
   setting: { type: Object, required: true },
@@ -122,7 +145,7 @@ const emit = defineEmits(['close', 'update:setting', 'update:brightness', 'more'
 
 const turnOptions = [
   { label: '滚动', value: 'SCROLL' },
-  { label: 'Canvas', value: 'PAGE' }
+  { label: '仿真', value: 'PAGE' }
 ]
 
 const themes = [
@@ -132,6 +155,12 @@ const themes = [
 ]
 
 const intervalOptions = [10, 15, 20, 30, 60]
+const intervalLabels = intervalOptions.map((item) => `${item}s`)
+const intervalIndex = computed(() => {
+  const idx = intervalOptions.indexOf(Number(props.setting.autoPageInterval || 15))
+  return idx >= 0 ? idx : 1
+})
+const intervalLabel = computed(() => intervalLabels[intervalIndex.value])
 
 function onBrightness(e) {
   emit('update:brightness', Number(e.detail.value || 80))
@@ -142,7 +171,8 @@ function onAutoPageToggle(e) {
 }
 
 function onIntervalChange(e) {
-  emit('update:setting', { autoPageInterval: Number(e.detail.value || e.target?.value || 15) })
+  const index = Number(e.detail.value || 0)
+  emit('update:setting', { autoPageInterval: intervalOptions[index] || 15 })
 }
 </script>
 
@@ -164,7 +194,9 @@ function onIntervalChange(e) {
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+  max-height: 82vh;
+  overflow-y: auto;
+  padding: 18px 20px calc(18px + env(safe-area-inset-bottom));
   border-radius: 16px 16px 0 0;
   background: #fff;
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
@@ -174,8 +206,8 @@ function onIntervalChange(e) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 44px;
-  padding: 6px 0;
+  min-height: 42px;
+  padding: 5px 0;
 }
 
 .sheet-row + .sheet-row {
@@ -293,12 +325,18 @@ function onIntervalChange(e) {
 }
 
 .interval-select {
+  min-width: 58px;
+}
+
+.interval-value {
   height: 30px;
   padding: 0 8px;
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 13px;
+  line-height: 30px;
   color: #333;
+  text-align: center;
   background: #fff;
 }
 

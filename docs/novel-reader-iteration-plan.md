@@ -1,148 +1,270 @@
-# novel-reader 迭代方案
+# 悦读 Novel Reader 迭代开发计划
 
-> 对齐 asset-manager 的**基础设施**，为后续抽取公共架构做准备。只对齐骨架层，不动业务层。
+更新时间：2026-05-07
 
----
+总设计来源：[docs/design.md](./design.md)
 
-## 对齐原则
+## 1. 当前基线
 
-**对齐的**：项目骨架、API 规范、认证机制、前端工具链、异常处理、工程配置、管理端骨架
-**不对齐的**：username 登录保留（小说 app 不需要 email）、阅读器主题保留（3 套阅读场景主题足够，不需要 CSS 变量引擎）、理财 app 业务特性（数据导出/反馈/协议等）不搬运
+当前项目已经具备小说阅读产品的基础闭环：
 
----
+- 用户注册、登录、JWT 会话。
+- 书城、书架、书籍详情、章节目录、章节正文。
+- 阅读进度、阅读历史、阅读设置。
+- 管理端书籍、章节、分类维护。
+- 导入预览、TXT 解析、确认入库。
+- 滚动阅读模式。
+- Canvas 分页阅读模式。
+- 点击翻页、滑动翻页。
+- 跨章节预加载与 Canvas 背面绘制。
 
-## 迭代 1：前端工具链对齐
+当前主要问题：
 
-**改动量**：小（2 个文件新增，1 个文件修改）
+- 阅读器工具层和设置面板仍偏工程化，不够像成熟小说 App。
+- 书籍详情页缺少评分、标签、阅读人数、推荐承接。
+- 书架缺少阅读数据卡、筛选、管理和视图切换。
+- 书城和分类信息架构不够完整。
+- 后端缺少书籍统计、标签、阅读统计、推荐增强接口。
 
-### 1.1 抽取 API 配置
+## 2. 迭代原则
 
-新建 `frontend/src/config/api.js`，从 request.js 中分离环境判断逻辑：
+- 先阅读器，后书架和书城。
+- 先体验闭环，后运营模块。
+- 先本地规则推荐，后算法推荐。
+- 先只读评论展示，后发布和审核。
+- 每个阶段都要同时考虑前端 UI、后端接口和数据结构。
 
-```js
-// 参考 asset-manager frontend/src/config/api.js
-export function getApiBaseUrl() {
-  // #ifdef H5
-  return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
-  // #endif
-  // #ifdef APP-PLUS
-  return 'http://192.168.101.12:8080'
-  // #endif
-}
-```
+## 3. Phase 1：阅读器体验升级
 
-### 1.2 增加 requestRaw
+目标：把阅读器做成项目的核心优势。
 
-在 `utils/request.js` 中补齐 `requestRaw`，用于文件下载等非 JSON 响应场景（导入中心 TXT 预览可用）。
+### 前端任务
 
-### 1.3 统一错误处理
+- 抽离 `ReaderTopBar`。
+- 抽离 `ReaderBottomBar`。
+- 抽离 `ReaderSettingSheet`。
+- 抽离 `ReaderProgressBar`。
+- 阅读设置底部抽屉 UI 重做。
+- 增加亮度滑杆 UI。
+- 增加翻页方式分段控件。
+- 增加夜间模式快捷开关。
+- 增加自动翻页基础能力。
+- 优化 Canvas 滑动阈值和拖拽反馈。
+- 保留滚动阅读作为兜底。
 
-`request.js` 对齐 asset-manager 的 `rejectWithMessage` 模式：
-- 401 时清除 token 并跳转登录
-- 错误消息从 `res.data.message` 提取
-- 网络错误统一 toast
+### 后端任务
 
-### 修改清单
+- 扩展 `novel_reader_setting` 或 VO 字段：
+  - `marginX`
+  - `marginY`
+  - `paragraphSpacing`
+  - `turnMode`
+  - `autoPageEnabled`
+  - `autoPageInterval`
+- 保持 `GET /api/v1/reading/setting` 和 `PUT /api/v1/reading/setting` 兼容旧字段。
 
-| 文件 | 操作 |
-|------|------|
-| `frontend/src/config/api.js` | **新增** |
-| `frontend/src/utils/request.js` | 修改（使用 getApiBaseUrl + 增加 requestRaw + 对齐错误处理） |
+### 验收标准
 
----
+- 手机端点击翻页流畅。
+- 手机端滑动翻页灵敏。
+- 跨章节无明显刷新跳动。
+- 字号、行距、主题、翻页方式切换后分页正确。
+- 设置面板在小屏手机不遮挡关键操作。
 
-## 迭代 2：后端基础设施对齐
+## 4. Phase 2：书籍详情页升级
 
-**改动量**：中（5-6 个文件修改）
+目标：让用户进入详情页后能快速判断是否阅读。
 
-### 2.1 GlobalExceptionHandler 补齐
+### 前端任务
 
-对齐 asset-manager 捕获的异常类型，确保覆盖：`MethodArgumentNotValidException`（参数校验）、`HttpMessageNotReadableException`（JSON 解析失败）、`BadCredentialsException`（认证失败）。两个项目的 handler 结构已经很接近，主要是补齐遗漏的异常类型。
+- 重做详情页顶部：
+  - 封面
+  - 书名
+  - 作者
+  - 状态
+  - 字数
+- 增加三列数据：
+  - 评分
+  - 阅读人数
+  - 收藏数
+- 增加标签 chips。
+- 增加预计阅读时长。
+- 增加目录预览。
+- 增加热门评论占位。
+- 底部固定 CTA：
+  - 加入书架
+  - 开始阅读
 
-### 2.2 DTO 校验补齐
+### 后端任务
 
-给所有接收用户输入的 DTO 补齐 `@Valid` 和校验注解（`@NotBlank`、`@NotNull` 等），目前 novel-reader 部分 DTO 缺少校验。
+- 新增或扩展书籍详情 VO。
+- 新增书籍统计表 `novel_book_stats`。
+- 新增标签表 `novel_book_tag`。
+- 提供相似推荐接口：
+  - `GET /api/v1/books/{id}/recommendations?limit=6`
 
-### 2.3 SecurityConfig 对齐
+### 验收标准
 
-对比两项目的 `SecurityConfig`，确保：CORS 配置模式一致、公开路由声明方式一致、异常处理入口一致。
+- 详情页不依赖 mock 也能展示核心数据。
+- 无统计数据时有合理默认值。
+- 开始阅读、加入书架路径清晰。
 
-### 2.4 BaseUserController 对比确认
+## 5. Phase 3：书架升级
 
-两项目 `BaseUserController` 结构已一致（仅查询字段不同：username vs email）。小说 app 保留 username 查询，无需修改。后续抽取公共模块时，将查询字段抽象为可配置项即可。
+目标：强化继续阅读和书籍管理。
 
-### 修改清单
+### 前端任务
 
-| 文件 | 操作 |
-|------|------|
-| `exception/GlobalExceptionHandler.java` | 补齐异常类型覆盖 |
-| `dto/AuthRegisterDTO.java` | 补齐 @NotBlank |
-| `dto/AuthLoginDTO.java` | 补齐 @NotBlank |
-| 其他 DTO | 按需补齐校验 |
-| `security/SecurityConfig.java` | 对比对齐 |
+- 增加书架顶部统计卡：
+  - 今日阅读
+  - 连续阅读
+  - 最近阅读
+  - 更新数量
+- 重做书架列表项。
+- 增加列表/宫格切换。
+- 增加筛选：
+  - 全部
+  - 更新
+  - 完结
+  - 最近阅读
+- 增加管理模式：
+  - 批量移除
+  - 置顶
 
----
+### 后端任务
 
-## 迭代 3：工程化 & 管理端对齐
+- 新增书架统计接口：
+  - `GET /api/v1/bookshelf/stats`
+- 新增置顶接口：
+  - `PUT /api/v1/bookshelf/{bookId}/pin`
+  - `DELETE /api/v1/bookshelf/{bookId}/pin`
+- 新增排序接口：
+  - `PUT /api/v1/bookshelf/sort`
+- 如当前 `novel_bookshelf` 缺少字段，则补充：
+  - `pinned`
+  - `sort_order`
+  - `last_read_at`
 
-**改动量**：小（3-4 个文件新增/修改）
+### 验收标准
 
-### 3.1 CLAUDE.md
+- 最近阅读入口明显。
+- 更新状态明确。
+- 书架可管理、可筛选。
 
-创建 `CLAUDE.md`，对齐 asset-manager 格式：
-- 构建 & 运行命令
-- 架构概述（技术栈 + 分层说明）
-- API 响应约定
-- 前端 Store 说明
-- 关键设计决策
+## 6. Phase 4：书城与分类
 
-### 3.2 ITERATION.md
+目标：提升找书效率。
 
-创建 `docs/ITERATION.md`，记录已完成阶段和当前迭代。
+### 前端任务
 
-### 3.3 .gitignore 对齐
+- 书城首页模块化：
+  - 搜索
+  - 频道 Tab
+  - Banner
+  - 编辑精选
+  - 热门榜
+  - 新书榜
+  - 完结榜
+- 分类页支持复合筛选。
+- 榜单页支持多榜单切换。
 
-对比两项目 `.gitignore`，补齐缺失项（确保 H2 数据文件、构建产物等忽略规则一致）。
+### 后端任务
 
-### 3.4 AdminLayout 确认
+- 新增筛选接口：
+  - `GET /api/v1/books/filter`
+- 新增推荐模块接口：
+  - `GET /api/v1/books/featured`
+  - `GET /api/v1/books/latest`
+  - `GET /api/v1/books/completed`
+- 管理端支持推荐排序或 `sort_order` 维护。
 
-检查 novel-reader 管理端的 `AdminLayout.vue`，确认是否已抽取为独立 layout 组件（与 asset-manager 模式一致）。如果不是，则抽取。
+### 验收标准
 
-### 修改清单
+- 用户可按分类、状态、字数、排序找书。
+- 书城模块都有稳定数据来源。
+- 书城到详情到阅读链路顺畅。
 
-| 文件 | 操作 |
-|------|------|
-| `CLAUDE.md` | **新增** |
-| `docs/ITERATION.md` | **新增** |
-| `.gitignore` | 修改（对齐） |
-| `admin-frontend/src/layout/AdminLayout.vue` | 确认/抽取 |
+## 7. Phase 5：章节末承接与轻社区
 
----
+目标：减少章节结束时的断裂感，增强继续阅读和发现。
 
-## 迭代总结
+### 前端任务
 
-| 迭代 | 内容 | 预计工作量 | 说明 |
-|------|------|-----------|------|
-| 1 | 前端工具链 | 0.5天 | config/api.js + requestRaw + 错误处理对齐 |
-| 2 | 后端基础设施 | 1天 | 异常处理 + DTO 校验 + SecurityConfig 对齐 |
-| 3 | 工程化补齐 | 0.5天 | CLAUDE.md + ITERATION.md + .gitignore + AdminLayout |
+- 增加 `ChapterEndPanel`。
+- 普通章节末展示：
+  - 下一章
+  - 本章完成提示
+  - 当前书小卡
+  - 相似推荐
+- 最后一章展示：
+  - 完结提示
+  - 返回详情
+  - 推荐下一本
+- 评论展示。
+- 评论气泡显示开关。
 
-**总计约 2 天**。完成后两项目在基础设施层代码级一致。
+### 后端任务
 
----
+- 新增评论表 `novel_comment`。
+- 新增书籍评论接口。
+- 新增章节评论接口。
+- 管理端评论审核。
 
-## 完成后：公共基础设施抽取
+### 验收标准
 
-3 个迭代完成后，可进行物理抽取：
+- 章节末不会出现突兀空白。
+- 相似推荐可点击进入详情。
+- 评论关闭时不影响阅读器性能。
 
-```
-common/
-├── common-security/     # JWT + SecurityConfig + BaseUserController（查询字段注入）
-├── common-web/          # ApiResponse + GlobalExceptionHandler + BusinessException
-├── common-config/       # RedisConfig + MyBatisPlusMetaObjectHandler
-├── common-frontend/     # request.js + requestRaw + storage.js + api config 模板
-├── common-admin/        # AdminLayout + auth store + Axios 拦截器
-└── common-deploy/       # Docker Compose + Nginx 模板
-```
+## 8. Phase 6：管理端增强
 
-各项目特有代码（实体、业务 Service、业务 Controller、页面组件）保留在项目内，不进入公共模块。
+目标：支撑用户端新增数据。
+
+### 前端任务
+
+- 书籍编辑支持标签。
+- 书籍编辑支持评分/统计默认值。
+- 推荐排序维护。
+- 评论审核列表。
+
+### 后端任务
+
+- 管理端标签 CRUD。
+- 管理端推荐排序。
+- 管理端评论审核。
+
+### 验收标准
+
+- 用户端新增展示字段可以在管理端维护。
+- 不需要直接改数据库填数据。
+
+## 9. 推荐执行顺序
+
+1. Phase 1 阅读器体验升级。
+2. Phase 2 后端书籍统计与标签。
+3. Phase 2 前端详情页升级。
+4. Phase 3 书架升级。
+5. Phase 4 书城分类。
+6. Phase 5 章节末与轻社区。
+7. Phase 6 管理端增强。
+
+## 10. 每阶段验证要求
+
+前端：
+
+- `npm run build:h5`
+- H5 预览本机验证。
+- 手机局域网验证。
+- 阅读器必须验证点击、滑动、跨章、返回上一章末页。
+
+后端：
+
+- `.\mvnw.cmd test`
+- Flyway 迁移可启动。
+- 新接口至少用本地请求验证 200 和关键字段。
+
+文档：
+
+- 阶段完成后更新 `docs/ITERATION.md`。
+- 如设计发生变化，同步更新 `docs/design.md`。
+

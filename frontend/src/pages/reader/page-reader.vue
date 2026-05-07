@@ -36,6 +36,9 @@ const props = defineProps({
   nextContent: { type: String, default: '' },
   fontSize: { type: Number, default: 18 },
   lineHeight: { type: Number, default: 32 },
+  marginX: { type: Number, default: 22 },
+  marginY: { type: Number, default: 28 },
+  paragraphSpacing: { type: Number, default: 0 },
   theme: { type: String, default: 'DEFAULT' },
   brightness: { type: Number, default: 80 },
   initialPage: { type: Number, default: 0 }
@@ -43,8 +46,6 @@ const props = defineProps({
 
 const emit = defineEmits(['prev', 'next', 'pageChange', 'toggleTools'])
 
-const paddingX = 22
-const paddingY = 28
 const fontFamily = "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', serif"
 const canvasId = 'readerFlipCanvas'
 const FLIP_DURATION = 260
@@ -93,6 +94,10 @@ function cancelFrame(frameId) {
 const themeObj = computed(() => readerThemes[props.theme] || readerThemes.DEFAULT)
 const themeBg = computed(() => themeObj.value.background)
 const themeText = computed(() => themeObj.value.text)
+const paddingX = computed(() => Math.max(12, Math.min(48, Number(props.marginX || 22))))
+const paddingY = computed(() => Math.max(16, Math.min(72, Number(props.marginY || 28))))
+const paragraphGap = computed(() => Math.max(0, Math.min(24, Number(props.paragraphSpacing || 0))))
+const effectiveLineHeight = computed(() => Number(props.lineHeight || 32) + Math.round(paragraphGap.value / 3))
 const hostStyle = computed(() => ({
   backgroundColor: themeBg.value,
   color: themeText.value,
@@ -126,9 +131,10 @@ function paginateContent(content) {
     width: viewWidth.value,
     height: viewHeight.value,
     fontSize: props.fontSize,
-    lineHeight: props.lineHeight,
-    paddingX,
-    paddingY,
+    lineHeight: effectiveLineHeight.value,
+    paddingX: paddingX.value,
+    paddingY: paddingY.value,
+    paragraphSpacing: paragraphGap.value,
     fontFamily
   })
 }
@@ -208,7 +214,7 @@ function drawPageData(ctx, page, x, clipWidth) {
     ctx.font = `${props.fontSize}px ${fontFamily}`
     ctx.textBaseline = 'top'
     page.lines.forEach((line, index) => {
-      ctx.fillText(line || ' ', x + paddingX, paddingY + index * props.lineHeight)
+      ctx.fillText(line || ' ', x + paddingX.value, paddingY.value + index * effectiveLineHeight.value)
     })
   }
 
@@ -542,6 +548,7 @@ watch(() => props.initialPage, (page) => {
 })
 watch(() => props.fontSize, repaginate)
 watch(() => props.lineHeight, repaginate)
+watch(() => [props.marginX, props.marginY, props.paragraphSpacing], repaginate)
 watch(() => props.theme, draw)
 
 onMounted(async () => {

@@ -1,6 +1,14 @@
+/**
+ * @file 阅读器状态管理
+ * @typedef {import('../types').Chapter} Chapter
+ * @typedef {import('../types').ReadingSetting} ReadingSetting
+ * @typedef {import('../types').ReadingProgress} ReadingProgress
+ * @typedef {import('../types').ApiResponse} ApiResponse
+ */
 import { defineStore } from 'pinia'
 import { request } from '../utils/request'
 
+/** @type {ReadingSetting} */
 const defaultSetting = {
   fontSize: 18,
   lineHeight: 32,
@@ -10,7 +18,8 @@ const defaultSetting = {
   theme: 'DEFAULT',
   turnMode: 'SCROLL',
   autoPageEnabled: false,
-  autoPageInterval: 15
+  autoPageInterval: 15,
+  showComments: false
 }
 
 function isFullChapter(chapter) {
@@ -27,10 +36,15 @@ function isFullChapter(chapter) {
 
 export const useReaderStore = defineStore('reader', {
   state: () => ({
+    /** @type {Chapter|null} */
     chapter: null,
+    /** @type {Chapter[]} */
     chapters: [],
+    /** @type {Record<string, Chapter>} */
     chapterCache: {},
+    /** @type {ReadingProgress|null} */
     progress: null,
+    /** @type {ReadingSetting} */
     setting: { ...defaultSetting, ...(uni.getStorageSync('readerSetting') || {}) }
   }),
   actions: {
@@ -57,7 +71,7 @@ export const useReaderStore = defineStore('reader', {
       uni.setStorageSync(cacheKey, chapter)
     },
     async loadChapters(bookId) {
-      const res = await request({ url: `/api/v1/books/${bookId}/chapters` })
+      const res = await request({ url: `/api/v1/books/${bookId}/chapters`, noAuth: true })
       if (res.code === 200) {
         this.chapters = res.data || []
       }
@@ -69,7 +83,7 @@ export const useReaderStore = defineStore('reader', {
         this.$patch({ chapter: cached })
         return { code: 200, message: 'success', data: cached, cached: true }
       }
-      const res = await request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}` })
+      const res = await request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}`, noAuth: true })
       if (res.code === 200) {
         this.$patch({ chapter: res.data })
         this.setCachedChapter(bookId, chapterNo, res.data)
@@ -80,7 +94,7 @@ export const useReaderStore = defineStore('reader', {
       if (!bookId || !chapterNo) return null
       const cached = this.getCachedChapter(bookId, chapterNo)
       if (cached) return cached
-      const res = await request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}` })
+      const res = await request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}`, noAuth: true })
       if (res.code === 200) {
         this.setCachedChapter(bookId, chapterNo, res.data)
         return res.data
@@ -88,7 +102,7 @@ export const useReaderStore = defineStore('reader', {
       return null
     },
     async loadProgress(bookId) {
-      const res = await request({ url: `/api/v1/reading/progress/${bookId}` })
+      const res = await request({ url: `/api/v1/reading/progress/${bookId}`, silentAuth: true })
       if (res.code === 200) {
         this.progress = res.data
       }
@@ -102,7 +116,7 @@ export const useReaderStore = defineStore('reader', {
       })
     },
     async loadSetting() {
-      const res = await request({ url: '/api/v1/reading/setting' })
+      const res = await request({ url: '/api/v1/reading/setting', silentAuth: true })
       if (res.code === 200 && res.data) {
         this.setting = {
           fontSize: res.data.fontSize || defaultSetting.fontSize,
@@ -113,7 +127,8 @@ export const useReaderStore = defineStore('reader', {
           theme: res.data.theme || defaultSetting.theme,
           turnMode: res.data.turnMode || defaultSetting.turnMode,
           autoPageEnabled: res.data.autoPageEnabled != null ? res.data.autoPageEnabled : defaultSetting.autoPageEnabled,
-          autoPageInterval: res.data.autoPageInterval || defaultSetting.autoPageInterval
+          autoPageInterval: res.data.autoPageInterval || defaultSetting.autoPageInterval,
+          showComments: res.data.showComments != null ? res.data.showComments : defaultSetting.showComments
         }
         uni.setStorageSync('readerSetting', this.setting)
       }

@@ -18,7 +18,7 @@ export function request(options) {
     const token = uni.getStorageSync('token')
     const header = {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+      ...(token && !options.noAuth ? { Authorization: `Bearer ${token}` } : {})
     }
 
     uni.request({
@@ -36,6 +36,10 @@ export function request(options) {
           const msg = (res.data && res.data.message) || '请先登录'
           uni.removeStorageSync('token')
           uni.removeStorageSync('username')
+          if (options.silentAuth) {
+            rejectWithMessage(reject, msg, res.data)
+            return
+          }
           uni.showToast({ title: msg, icon: 'none' })
           setTimeout(() => {
             uni.switchTab({ url: '/pages/mine/mine' })
@@ -69,7 +73,7 @@ export function requestRaw(options) {
     const token = uni.getStorageSync('token')
     const header = {
       ...(options.header || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+      ...(token && !options.noAuth ? { Authorization: `Bearer ${token}` } : {})
     }
 
     uni.request({
@@ -88,6 +92,10 @@ export function requestRaw(options) {
           const msg = (res.data && res.data.message) || '请先登录'
           uni.removeStorageSync('token')
           uni.removeStorageSync('username')
+          if (options.silentAuth) {
+            rejectWithMessage(reject, msg, res.data)
+            return
+          }
           uni.showToast({ title: msg, icon: 'none' })
           setTimeout(() => {
             uni.switchTab({ url: '/pages/mine/mine' })

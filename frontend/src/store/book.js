@@ -1,13 +1,29 @@
+/**
+ * @file 书籍状态管理
+ * @typedef {import('../types').Book} Book
+ * @typedef {import('../types').Chapter} Chapter
+ * @typedef {import('../types').ShelfItem} ShelfItem
+ * @typedef {import('../types').ShelfStats} ShelfStats
+ * @typedef {import('../types').BookDetail} BookDetail
+ * @typedef {import('../types').PageResult} PageResult
+ * @typedef {import('../types').ApiResponse} ApiResponse
+ */
 import { defineStore } from 'pinia'
 import { request } from '../utils/request'
 
 export const useBookStore = defineStore('book', {
   state: () => ({
+    /** @type {Array<{id:number,name:string}>} */
     categories: [],
+    /** @type {Book[]} */
     books: [],
+    /** @type {ShelfItem[]} */
     shelf: [],
+    /** @type {ShelfStats|null} */
     shelfStats: null,
+    /** @type {Book|null} */
     currentBook: null,
+    /** @type {Chapter[]} */
     chapters: [],
     selectedCategoryId: 0
   }),
@@ -16,7 +32,7 @@ export const useBookStore = defineStore('book', {
       this.selectedCategoryId = categoryId || 0
     },
     async loadCategories() {
-      const res = await request({ url: '/api/v1/categories' })
+      const res = await request({ url: '/api/v1/categories', noAuth: true })
       if (res.code === 200) {
         this.categories = res.data || []
       }
@@ -24,7 +40,7 @@ export const useBookStore = defineStore('book', {
     },
     async loadRecommend(categoryId) {
       const query = categoryId ? `?categoryId=${categoryId}` : ''
-      const res = await request({ url: `/api/v1/books/recommend${query}` })
+      const res = await request({ url: `/api/v1/books/recommend${query}`, noAuth: true })
       if (res.code === 200) {
         this.books = res.data || []
       }
@@ -35,17 +51,17 @@ export const useBookStore = defineStore('book', {
       if (categoryId) {
         params.push(`categoryId=${encodeURIComponent(categoryId)}`)
       }
-      return request({ url: `/api/v1/books/rank?${params.join('&')}` })
+      return request({ url: `/api/v1/books/rank?${params.join('&')}`, noAuth: true })
     },
     async search(keyword) {
-      const res = await request({ url: `/api/v1/search/books?keyword=${encodeURIComponent(keyword || '')}` })
+      const res = await request({ url: `/api/v1/search/books?keyword=${encodeURIComponent(keyword || '')}`, noAuth: true })
       if (res.code === 200) {
         this.books = res.data || []
       }
       return res
     },
     async loadDetail(bookId) {
-      const res = await request({ url: `/api/v1/books/${bookId}` })
+      const res = await request({ url: `/api/v1/books/${bookId}`, noAuth: true })
       if (res.code === 200) {
         this.currentBook = res.data.book
         this.chapters = res.data.chapters || []
@@ -86,7 +102,7 @@ export const useBookStore = defineStore('book', {
       return results
     },
     async loadRecommendations(bookId, limit = 6) {
-      return request({ url: `/api/v1/books/${bookId}/recommendations?limit=${limit}` })
+      return request({ url: `/api/v1/books/${bookId}/recommendations?limit=${limit}`, noAuth: true })
     },
     async loadFilter(params = {}) {
       const queryParts = []
@@ -98,10 +114,22 @@ export const useBookStore = defineStore('book', {
       if (params.sortBy) queryParts.push(`sortBy=${encodeURIComponent(params.sortBy)}`)
       if (params.page != null) queryParts.push(`page=${params.page}`)
       if (params.pageSize != null) queryParts.push(`pageSize=${params.pageSize}`)
-      return request({ url: `/api/v1/books/filter?${queryParts.join('&')}` })
+      return request({ url: `/api/v1/books/filter?${queryParts.join('&')}`, noAuth: true })
     },
     async loadFeatured(limit = 6) {
-      return request({ url: `/api/v1/books/featured?limit=${limit}` })
+      return request({ url: `/api/v1/books/featured?limit=${limit}`, noAuth: true })
+    },
+    async loadBookComments(bookId, page = 1, pageSize = 10) {
+      return request({ url: `/api/v1/books/${bookId}/comments?page=${page}&pageSize=${pageSize}`, noAuth: true })
+    },
+    async loadChapterComments(chapterId, page = 1, pageSize = 10) {
+      return request({ url: `/api/v1/chapters/${chapterId}/comments?page=${page}&pageSize=${pageSize}`, noAuth: true })
+    },
+    async createComment(payload) {
+      return request({ url: '/api/v1/comments', method: 'POST', data: payload })
+    },
+    async loadMyComments(page = 1, pageSize = 20) {
+      return request({ url: `/api/v1/comments/mine?page=${page}&pageSize=${pageSize}` })
     }
   }
 })

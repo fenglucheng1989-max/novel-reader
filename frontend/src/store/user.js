@@ -1,9 +1,17 @@
+/**
+ * @file 用户状态管理
+ * @typedef {import('../types').UserState} UserState
+ * @typedef {import('../types').LoginResult} LoginResult
+ * @typedef {import('../types').ApiResponse} ApiResponse
+ */
 import { defineStore } from 'pinia'
 import { request } from '../utils/request'
 
 export const useUserStore = defineStore('user', {
   state: () => ({
+    /** @type {string} */
     token: uni.getStorageSync('token') || '',
+    /** @type {string} */
     username: uni.getStorageSync('username') || ''
   }),
   getters: {

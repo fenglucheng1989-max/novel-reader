@@ -97,9 +97,17 @@
             :key="item.shelfId"
             :class="viewMode === 'grid' ? 'book-card' : 'book-row'"
             @tap="handleBookTap(item)"
+            @longpress.stop="showContextMenu(item)"
           >
             <view class="cover-wrap">
               <view class="cover">{{ coverText(item.book.title) }}</view>
+              <view
+                v-if="viewMode === 'grid' && progressPercent(item) > 0 && progressPercent(item) < 100"
+                class="progress-ring"
+                :style="{ background: `conic-gradient(#3A3A3A ${progressPercent(item) * 3.6}deg, rgba(0,0,0,0.08) ${progressPercent(item) * 3.6}deg)` }"
+              >
+                <view class="ring-inner"></view>
+              </view>
               <view v-if="editMode" class="select-check" :class="{ checked: selectedIds.has(item.shelfId) }">
                 <text v-if="selectedIds.has(item.shelfId)">✓</text>
               </view>
@@ -136,9 +144,11 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import { useUserStore } from '../../store/user'
+import { useReaderStore } from '../../store/reader'
 
 const bookStore = useBookStore()
 const userStore = useUserStore()
+const readerStore = useReaderStore()
 const loading = ref(false)
 const editMode = ref(false)
 const activeFilter = ref('all')
@@ -322,6 +332,38 @@ function unreadText(item) {
   if (!Number(item.book.chapterCount || 0)) return '暂无章节'
   const count = remainingChapters(item)
   return count > 0 ? `${count} 章未读` : '已读完'
+}
+
+function progressPercent(item) {
+  const total = Number(item.book.chapterCount || 0)
+  if (!total) return 0
+  return Math.round((progressChapter(item) / total) * 100)
+}
+
+function showContextMenu(item) {
+  uni.showActionSheet({
+    itemList: ['从书架移除', '标记为已读'],
+    success: (res) => {
+      if (res.tapIndex === 0) {
+        remove(item.book.id)
+      } else if (res.tapIndex === 1) {
+        markAsRead(item)
+      }
+    }
+  })
+}
+
+async function markAsRead(item) {
+  const total = Number(item.book.chapterCount || 0)
+  if (!total) return
+  await readerStore.saveProgress(item.book.id, {
+    chapterNo: total,
+    position: 0,
+    progressPercent: 100,
+    durationSeconds: 0
+  })
+  await refresh()
+  uni.showToast({ title: '已标记为已读', icon: 'success' })
 }
 
 function progressText(item) {
@@ -669,6 +711,27 @@ onShow(() => {
 .book-row .cover {
   height: 86px;
   font-size: 16px;
+}
+
+.progress-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.ring-inner {
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  border-radius: 6px;
+  background: transparent;
 }
 
 .pin-badge,

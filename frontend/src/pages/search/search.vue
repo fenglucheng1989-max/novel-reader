@@ -91,7 +91,7 @@ onLoad((options) => {
   width: 100%;
   min-height: 100vh;
   padding: 18px;
-  background: #f6f3ee;
+  background: #F8F8F6;
   box-sizing: border-box;
   overflow-x: hidden;
 }
@@ -106,9 +106,9 @@ onLoad((options) => {
   height: 44px;
   padding: 0 12px;
   border-radius: 8px;
-  border: 1px solid #e4ddd3;
+  border: 1px solid #EBEBE5;
   background: #fff;
-  color: #202a26;
+  color: #1F1F1F;
   font-size: 15px;
   box-sizing: border-box;
 }
@@ -118,19 +118,19 @@ onLoad((options) => {
   height: 44px;
   line-height: 44px;
   border-radius: 8px;
-  background: #2f6f5e;
+  background: #3A3A3A;
   color: #fff;
   font-size: 14px;
 }
 
 .empty {
   padding: 70px 0;
-  color: #81776c;
+  color: #8C8C8C;
   text-align: center;
 }
 
 .hint {
-  color: #9a8f83;
+  color: #B0B0B0;
 }
 
 .quick-tags {
@@ -147,7 +147,7 @@ onLoad((options) => {
   justify-content: center;
   border-radius: 8px;
   background: #fff;
-  color: #4c5550;
+  color: #3A3A3A;
   font-size: 14px;
   font-weight: 800;
 }
@@ -171,7 +171,7 @@ onLoad((options) => {
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  background: #2f6f5e;
+  background: #3A3A3A;
   color: #fff;
   font-weight: 700;
 }
@@ -189,21 +189,21 @@ onLoad((options) => {
 }
 
 .name {
-  color: #232a27;
+  color: #1F1F1F;
   font-size: 16px;
   font-weight: 700;
 }
 
 .meta {
   margin-top: 5px;
-  color: #81776c;
+  color: #8C8C8C;
   font-size: 13px;
 }
 
 .desc {
   width: 100%;
   margin-top: 6px;
-  color: #4c5550;
+  color: #6E6E6E;
   font-size: 13px;
   line-height: 20px;
   word-break: break-all;

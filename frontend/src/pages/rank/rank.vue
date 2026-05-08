@@ -30,7 +30,7 @@
           @tap="goDetail(book.id)"
         >
           <view class="rank-no" :class="{ top: index < 3 }">{{ index + 1 }}</view>
-          <BookCover :title="book.title" size="md" />
+          <BookCover :title="book.title" :cover-url="book.coverUrl" size="md" />
           <view class="book-main">
             <view class="book-line">
               <text class="book-title">{{ book.title }}</text>
@@ -162,7 +162,7 @@ onLoad((query) => {
 .page {
   min-height: 100vh;
   padding: 14px 14px 88px;
-  background: #f6f3ee;
+  background: #F8F8F6;
   box-sizing: border-box;
 }
 
@@ -194,8 +194,8 @@ onLoad((query) => {
   justify-content: center;
   border-radius: 8px;
   background: #fff;
-  border: 1px solid #e5ddd2;
-  color: #25332e;
+  border: 1px solid #EBEBE5;
+  color: #3A3A3A;
   font-size: 28px;
   font-weight: 500;
 }
@@ -207,7 +207,7 @@ onLoad((query) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #17221e;
+  color: #1F1F1F;
   font-size: 17px;
   font-weight: 900;
   transform: translateX(-50%);
@@ -220,7 +220,7 @@ onLoad((query) => {
   padding: 6px;
   border-radius: 10px;
   background: #fff;
-  box-shadow: 0 4px 14px rgba(31, 42, 38, 0.04);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.04);
 }
 
 .rank-tab {
@@ -230,13 +230,13 @@ onLoad((query) => {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  color: #81776c;
+  color: #8C8C8C;
   font-size: 14px;
   font-weight: 800;
 }
 
 .rank-tab.active {
-  background: #2f6f5e;
+  background: #3A3A3A;
   color: #fff;
 }
 
@@ -253,19 +253,19 @@ onLoad((query) => {
   padding: 12px;
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 10px 26px rgba(31, 42, 38, 0.05);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
 }
 
 .rank-no {
   flex: 0 0 28px;
-  color: #9a6b45;
+  color: #A09080;
   font-size: 18px;
   font-weight: 900;
   text-align: center;
 }
 
 .rank-no.top {
-  color: #2f6f5e;
+  color: #3A3A3A;
 }
 
 .book-main {
@@ -286,7 +286,7 @@ onLoad((query) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 16px;
   font-weight: 900;
   display: block;
@@ -301,13 +301,13 @@ onLoad((query) => {
 }
 
 .status-ongoing {
-  background: #e8f0ed;
-  color: #2f6f5e;
+  background: #F0F0ED;
+  color: #3A3A3A;
 }
 
 .status-done {
-  background: #f0e8e3;
-  color: #9a6b45;
+  background: #F0F0ED;
+  color: #A09080;
 }
 
 .meta,
@@ -316,13 +316,13 @@ onLoad((query) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #81776c;
+  color: #8C8C8C;
   font-size: 12px;
   display: block;
 }
 
 .latest {
-  color: #9a6b45;
+  color: #A09080;
 }
 
 .score-row {
@@ -334,7 +334,7 @@ onLoad((query) => {
 
 .score-label {
   flex: 0 0 auto;
-  color: #8d8175;
+  color: #8C8C8C;
   font-size: 11px;
 }
 
@@ -343,23 +343,23 @@ onLoad((query) => {
   height: 5px;
   overflow: hidden;
   border-radius: 999px;
-  background: #f1e7dc;
+  background: #EBEBE5;
 }
 
 .score-fill {
   height: 100%;
   border-radius: 999px;
-  background: #2f6f5e;
+  background: #3A3A3A;
 }
 
 .empty {
   padding: 64px 0;
-  color: #81776c;
+  color: #8C8C8C;
   text-align: center;
 }
 
 .empty-title {
-  color: #333b37;
+  color: #1F1F1F;
   font-size: 17px;
   font-weight: 800;
   display: block;
@@ -367,7 +367,7 @@ onLoad((query) => {
 
 .empty-subtitle {
   margin-top: 8px;
-  color: #94897c;
+  color: #B0B0B0;
   font-size: 13px;
   display: block;
 }

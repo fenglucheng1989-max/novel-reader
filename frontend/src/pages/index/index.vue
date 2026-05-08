@@ -30,7 +30,7 @@
         <swiper v-if="bannerBooks.length" class="banner-swiper" :indicator-dots="true" :autoplay="true" :interval="4000" :duration="500" circular>
           <swiper-item v-for="book in bannerBooks" :key="book.id">
             <view class="banner-card" @tap="goDetail(book.id)">
-              <view class="banner-cover">
+              <view class="banner-cover" :style="bannerCoverStyle(book)">
                 <text class="banner-cover-text">{{ (book.title || '书').slice(0, 3) }}</text>
               </view>
               <view class="banner-info">
@@ -57,7 +57,7 @@
               class="feature-card"
               @tap="goDetail(book.id)"
             >
-              <BookCover :title="book.title" size="xl" />
+              <BookCover :title="book.title" :cover-url="book.coverUrl" size="xl" />
               <view class="feature-info">
                 <text class="feature-title">{{ book.title }}</text>
                 <text class="feature-meta">{{ book.author || '佚名' }} · {{ book.chapterCount || 0 }}章</text>
@@ -74,7 +74,7 @@
             <view class="rank-grid">
               <view v-for="(book, index) in hotBooks" :key="book.id" class="rank-item" @tap="goDetail(book.id)">
                 <text class="rank-no" :class="{ 'rank-top': index < 3 }">{{ index + 1 }}</text>
-                <BookCover :title="book.title" size="sm" />
+                <BookCover :title="book.title" :cover-url="book.coverUrl" size="sm" />
                 <view class="rank-copy">
                   <text class="rank-title">{{ book.title }}</text>
                   <text class="rank-meta">{{ book.author || '佚名' }} · {{ statusLabel(book.status) }}</text>
@@ -182,6 +182,10 @@ function goRank(type) {
   uni.navigateTo({ url: `/pages/rank/rank?${cid}type=${type}` })
 }
 
+function bannerCoverStyle(book) {
+  return book?.coverUrl ? { background: `center / cover no-repeat url("${book.coverUrl}")` } : {}
+}
+
 function statusLabel(status) {
   if (status === 'COMPLETED') return '完结'
   return '连载'
@@ -200,8 +204,8 @@ onShow(() => {
 .page {
   width: 100%;
   min-height: 100vh;
-  padding: 14px 14px 88px;
-  background: #f6f3ee;
+  padding: 10px 10px 76px;
+  background: #F8F8F6;
   box-sizing: border-box;
   overflow-x: hidden;
 }
@@ -215,62 +219,62 @@ onShow(() => {
 .search-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .search-entry {
   min-width: 0;
   flex: 1;
-  height: 38px;
+  height: 32px;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid #e7e0d7;
+  border-radius: 7px;
+  background: #FFFFFF;
+  border: 1px solid #EBEBE5;
   box-sizing: border-box;
 }
 
-.search-icon { color: #8b8176; font-size: 17px; }
+.search-icon { color: #8C8C8C; font-size: 17px; }
 
 .search-placeholder {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #8b8176;
-  font-size: 14px;
+  color: #8C8C8C;
+  font-size: 12px;
 }
 
 .category-button {
-  flex: 0 0 66px;
-  height: 38px;
-  line-height: 38px;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid #e7e0d7;
-  color: #25332e;
-  font-size: 14px;
+  flex: 0 0 56px;
+  height: 32px;
+  line-height: 32px;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.82);
+  border: 1px solid #EBEBE5;
+  color: #3A3A3A;
+  font-size: 12px;
   font-weight: 700;
 }
 
-.channel-row { width: 100%; margin-bottom: 14px; white-space: nowrap; }
+.channel-row { width: 100%; margin-bottom: 10px; white-space: nowrap; }
 
 .channel-item {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 32px;
-  margin-right: 20px;
-  color: #7f766d;
-  font-size: 15px;
+  height: 28px;
+  margin-right: 16px;
+  color: #8C8C8C;
+  font-size: 13px;
   font-weight: 700;
 }
 
-.channel-item.active { color: #141c19; }
+.channel-item.active { color: #1F1F1F; }
 
 .channel-item.active::after {
   content: "";
@@ -280,27 +284,27 @@ onShow(() => {
   width: 18px;
   height: 3px;
   border-radius: 99px;
-  background: #2f6f5e;
+  background: #3A3A3A;
   transform: translateX(-50%);
 }
 
 /* Banner */
 .banner-swiper {
   width: 100%;
-  height: 170px;
-  margin-bottom: 14px;
-  border-radius: 10px;
+  height: 118px;
+  margin-bottom: 10px;
+  border-radius: 8px;
   overflow: hidden;
 }
 
 .banner-card {
   display: flex;
   height: 100%;
-  background: linear-gradient(135deg, #2f6f5e 0%, #1a3d33 50%, #3c2a1a 100%);
+  background: linear-gradient(135deg, #2D2D2D 0%, #5A5A5A 58%, #8A8A8A 100%);
 }
 
 .banner-cover {
-  flex: 0 0 100px;
+  flex: 0 0 78px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -308,14 +312,15 @@ onShow(() => {
 
 .banner-cover-text {
   color: rgba(255,255,255,0.7);
-  font-size: 32px;
+  font-size: 24px;
   font-weight: 900;
+  opacity: 0;
 }
 
 .banner-info {
   flex: 1;
   min-width: 0;
-  padding: 28px 18px 28px 6px;
+  padding: 16px 14px 16px 4px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -323,7 +328,7 @@ onShow(() => {
 
 .banner-title {
   color: #fff;
-  font-size: 19px;
+  font-size: 16px;
   font-weight: 900;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -333,42 +338,42 @@ onShow(() => {
 .banner-meta {
   margin-top: 6px;
   color: rgba(255,255,255,0.65);
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .banner-desc {
   margin-top: 8px;
   color: rgba(255,255,255,0.45);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 11px;
+  line-height: 16px;
 }
 
 /* Feature grid */
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .feature-card {
   min-width: 0;
   overflow: hidden;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 10px 26px rgba(31, 42, 38, 0.05);
+  border-radius: 7px;
+  background: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
 }
 
 .feature-info {
-  padding: 11px 12px 13px;
+  padding: 8px 9px 10px;
 }
 
 .feature-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #1f2a26;
-  font-size: 16px;
+  color: #1F1F1F;
+  font-size: 13px;
   font-weight: 800;
   display: block;
 }
@@ -378,16 +383,16 @@ onShow(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #9a6b45;
-  font-size: 12px;
+  color: #A09080;
+  font-size: 10px;
   display: block;
 }
 
 .feature-desc {
   margin-top: 7px;
-  color: #5c625f;
-  font-size: 12px;
-  line-height: 18px;
+  color: #6E6E6E;
+  font-size: 11px;
+  line-height: 16px;
   word-break: break-all;
   overflow-wrap: anywhere;
   display: -webkit-box;
@@ -398,19 +403,19 @@ onShow(() => {
 
 /* Panel */
 .panel {
-  padding: 14px;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 10px 26px rgba(31, 42, 38, 0.05);
-  margin-bottom: 14px;
+  padding: 10px;
+  border-radius: 7px;
+  background: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+  margin-bottom: 10px;
 }
 
 /* Rank grid */
 .rank-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 12px;
-  row-gap: 12px;
+  column-gap: 8px;
+  row-gap: 8px;
 }
 
 .rank-item {
@@ -422,13 +427,13 @@ onShow(() => {
 .rank-no {
   flex: 0 0 22px;
   text-align: center;
-  color: #999;
-  font-size: 14px;
+  color: #B0B0B0;
+  font-size: 12px;
   font-weight: 900;
   margin-right: 8px;
 }
 
-.rank-no.rank-top { color: #e07b4c; }
+.rank-no.rank-top { color: #C4A882; }
 
 .rank-copy {
   min-width: 0;
@@ -441,8 +446,8 @@ onShow(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #27322e;
-  font-size: 14px;
+  color: #1F1F1F;
+  font-size: 12px;
   font-weight: 800;
   display: block;
 }
@@ -452,19 +457,19 @@ onShow(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #92877c;
-  font-size: 12px;
+  color: #8C8C8C;
+  font-size: 10px;
   display: block;
 }
 
 .empty {
   padding: 52px 0;
-  color: #8b8176;
+  color: #8C8C8C;
   text-align: center;
 }
 
 .empty-title {
-  color: #333b37;
+  color: #1F1F1F;
   font-size: 17px;
   font-weight: 800;
   display: block;
@@ -472,7 +477,7 @@ onShow(() => {
 
 .empty-subtitle {
   margin-top: 8px;
-  color: #94897c;
+  color: #B0B0B0;
   font-size: 13px;
   display: block;
 }

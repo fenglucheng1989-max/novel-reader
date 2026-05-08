@@ -50,9 +50,9 @@
     }
   ],
   "tabBar": {
-    "color": "#8A8F98",
-    "selectedColor": "#2F6F5E",
-    "backgroundColor": "#FFFFFF",
+    "color": "#999999",
+    "selectedColor": "#3A3A3A",
+    "backgroundColor": "#F8F8F6",
     "borderStyle": "black",
     "list": [
       {
@@ -72,7 +72,7 @@
   "globalStyle": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "悦读",
-    "navigationBarBackgroundColor": "#FFFFFF",
-    "backgroundColor": "#F6F3EE"
+    "navigationBarBackgroundColor": "#F8F8F6",
+    "backgroundColor": "#F8F8F6"
   }
 }

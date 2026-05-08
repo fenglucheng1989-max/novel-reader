@@ -1,7 +1,7 @@
 <template>
   <view class="book-card-h" @tap="$emit('tap')">
     <text v-if="showRank" class="rank-num" :class="{ 'rank-top': showRank <= 3 }">{{ showRank }}</text>
-    <BookCover :title="book.title" size="sm" />
+    <BookCover :title="book.title" :cover-url="book.coverUrl" size="sm" />
     <view class="card-info">
       <text class="card-title">{{ book.title }}</text>
       <text class="card-meta">{{ metaLine }}</text>
@@ -60,7 +60,7 @@ function formatWordCount(n) {
 }
 
 .rank-num.rank-top {
-  color: #e07b4c;
+  color: #C4A882;
 }
 
 .card-info {
@@ -70,7 +70,7 @@ function formatWordCount(n) {
 
 .card-title {
   display: block;
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 14px;
   font-weight: 800;
   overflow: hidden;
@@ -81,7 +81,7 @@ function formatWordCount(n) {
 .card-meta {
   display: block;
   margin-top: 3px;
-  color: #8b8176;
+  color: #8C8C8C;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -97,12 +97,12 @@ function formatWordCount(n) {
 }
 
 .status-ongoing {
-  background: #e8f0ed;
-  color: #2f6f5e;
+  background: #F0F0ED;
+  color: #3A3A3A;
 }
 
 .status-done {
-  background: #f0e8e3;
-  color: #9a6b45;
+  background: #F0F0ED;
+  color: #A09080;
 }
 </style>

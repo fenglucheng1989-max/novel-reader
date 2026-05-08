@@ -14,8 +14,9 @@ export default {
 
 <style>
 page {
-  background-color: #f5f5f5;
+  background-color: #F8F8F6;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: #1F1F1F;
 }
 
 view,
@@ -32,7 +33,7 @@ button::after {
 /* #ifdef H5 */
 body {
   margin: 0;
-  background: #e9ecef;
+  background: #E8E8E4;
   overflow-x: hidden;
 }
 
@@ -40,9 +41,38 @@ body {
   width: min(100vw, 480px);
   min-height: 100vh;
   margin: 0 auto;
-  background: #f5f5f5;
-  box-shadow: 0 0 32px rgba(15, 23, 42, 0.08);
+  background:
+    linear-gradient(180deg, #FAFAF8 0%, #F5F5F2 40%, #F8F8F6 100%);
+  box-shadow: 0 0 42px rgba(0, 0, 0, 0.08);
   overflow-x: hidden;
+}
+
+.product-page {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(240, 238, 234, 0.75), rgba(248, 248, 246, 0.96) 42%),
+    #F5F5F2;
+}
+
+.product-card {
+  border-radius: 8px;
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.text-cut-2 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.text-cut-3 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 uni-page-head .uni-page-head {
@@ -78,7 +108,7 @@ uni-tabbar .uni-tabbar__item {
 
 @media (max-width: 480px) {
   body {
-    background: #f5f5f5;
+    background: #F0F0ED;
   }
 
   #app {

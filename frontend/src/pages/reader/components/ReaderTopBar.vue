@@ -62,7 +62,7 @@ defineEmits(['back', 'bookshelf', 'setting'])
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
-  color: #2f3834;
+  color: #3A3A3A;
   font-size: 15px;
   font-weight: 500;
 }
@@ -82,7 +82,7 @@ defineEmits(['back', 'bookshelf', 'setting'])
 
 .top-icon {
   font-size: 20px;
-  color: #2f3834;
+  color: #3A3A3A;
   line-height: 1;
 }
 </style>

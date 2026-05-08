@@ -348,7 +348,7 @@ onShow(() => {
 .page {
   min-height: 100vh;
   padding: 14px 14px 88px;
-  background: #f6f3ee;
+  background: #F8F8F6;
   box-sizing: border-box;
 }
 
@@ -386,14 +386,14 @@ onShow(() => {
 }
 
 .page-title {
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 24px;
   font-weight: 900;
 }
 
 .page-subtitle {
   margin-top: 3px;
-  color: #81776c;
+  color: #8C8C8C;
   font-size: 12px;
 }
 
@@ -412,8 +412,8 @@ onShow(() => {
   justify-content: center;
   border-radius: 8px;
   background: #fff;
-  border: 1px solid #e5ddd2;
-  color: #25332e;
+  border: 1px solid #EBEBE5;
+  color: #3A3A3A;
   font-weight: 800;
 }
 
@@ -434,7 +434,7 @@ onShow(() => {
   border-radius: 8px;
   background: #fff;
   text-align: center;
-  box-shadow: 0 10px 28px rgba(31, 42, 38, 0.06);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
 }
 
 .state-card.compact {
@@ -442,20 +442,20 @@ onShow(() => {
 }
 
 .state-mark {
-  color: #9a6b45;
+  color: #A09080;
   font-size: 13px;
 }
 
 .state-title {
   margin-top: 8px;
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 20px;
   font-weight: 800;
 }
 
 .state-subtitle {
   margin-top: 8px;
-  color: #81776c;
+  color: #8C8C8C;
   font-size: 14px;
   line-height: 22px;
 }
@@ -466,7 +466,7 @@ onShow(() => {
   line-height: 40px;
   margin: 18px auto 0;
   border-radius: 8px;
-  background: #2f6f5e;
+  background: #3A3A3A;
   color: #fff;
   font-size: 14px;
   font-weight: 800;
@@ -485,11 +485,11 @@ onShow(() => {
   border-radius: 8px;
   background: #fff;
   text-align: center;
-  border: 1px solid #eee5da;
+  border: 1px solid #EBEBE5;
 }
 
 .stat-value {
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 20px;
   line-height: 24px;
   font-weight: 900;
@@ -497,7 +497,7 @@ onShow(() => {
 
 .stat-label {
   margin-top: 4px;
-  color: #8d8175;
+  color: #8C8C8C;
   font-size: 11px;
 }
 
@@ -509,8 +509,8 @@ onShow(() => {
   margin-bottom: 14px;
   padding: 12px;
   border-radius: 8px;
-  background: linear-gradient(145deg, #fff, #f2e8de);
-  border: 1px solid #ebe1d5;
+  background: linear-gradient(145deg, #FFFFFF, #F5F5F2);
+  border: 1px solid #EBEBE5;
   box-sizing: border-box;
 }
 
@@ -521,7 +521,7 @@ onShow(() => {
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  background: linear-gradient(145deg, #2f6f5e, #9a6b45);
+  background: linear-gradient(145deg, #3A3A3A, #A09080);
   color: #fff;
   font-size: 15px;
   font-weight: 900;
@@ -533,7 +533,7 @@ onShow(() => {
 }
 
 .continue-eyebrow {
-  color: #9a6b45;
+  color: #A09080;
   font-size: 12px;
   font-weight: 800;
 }
@@ -543,7 +543,7 @@ onShow(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 16px;
   font-weight: 900;
 }
@@ -553,7 +553,7 @@ onShow(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #81776c;
+  color: #8C8C8C;
   font-size: 12px;
 }
 
@@ -564,7 +564,7 @@ onShow(() => {
   padding: 0 13px;
   border-radius: 999px;
   background: #fff;
-  color: #2f6f5e;
+  color: #3A3A3A;
   font-size: 13px;
   font-weight: 900;
 }
@@ -585,14 +585,14 @@ onShow(() => {
   padding: 0 14px;
   border-radius: 8px;
   background: #fff;
-  color: #62584d;
+  color: #5A5A5A;
   font-size: 13px;
   font-weight: 800;
   box-sizing: border-box;
 }
 
 .filter-chip.active {
-  background: #2f6f5e;
+  background: #3A3A3A;
   color: #fff;
 }
 
@@ -604,13 +604,13 @@ onShow(() => {
 }
 
 .summary-title {
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 17px;
   font-weight: 900;
 }
 
 .summary-count {
-  color: #8d8175;
+  color: #8C8C8C;
   font-size: 13px;
 }
 
@@ -638,7 +638,7 @@ onShow(() => {
   padding: 12px;
   border-radius: 8px;
   background: #fff;
-  border: 1px solid #eee5da;
+  border: 1px solid #EBEBE5;
 }
 
 .cover-wrap {
@@ -658,11 +658,11 @@ onShow(() => {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  background: linear-gradient(145deg, #355f50, #a7794e);
+  background: linear-gradient(145deg, #3A3A3A, #A09080);
   color: #fff;
   font-size: 22px;
   font-weight: 900;
-  box-shadow: 0 10px 22px rgba(31, 42, 38, 0.12);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.08);
   box-sizing: border-box;
 }
 
@@ -684,11 +684,11 @@ onShow(() => {
 }
 
 .pin-badge {
-  background: rgba(47, 111, 94, 0.94);
+  background: rgba(58, 58, 58, 0.9);
 }
 
 .update-badge {
-  background: rgba(221, 122, 76, 0.92);
+  background: rgba(160, 144, 128, 0.92);
 }
 
 .book-info {
@@ -698,7 +698,7 @@ onShow(() => {
 .book-name {
   height: 40px;
   margin-top: 9px;
-  color: #202a26;
+  color: #1F1F1F;
   font-size: 14px;
   font-weight: 800;
   line-height: 20px;
@@ -722,7 +722,7 @@ onShow(() => {
 .book-progress,
 .book-update {
   margin-top: 4px;
-  color: #8b8176;
+  color: #8C8C8C;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -740,8 +740,8 @@ onShow(() => {
   line-height: 28px;
   padding: 0 10px;
   border-radius: 7px;
-  background: #f1e7dc;
-  color: #7a5136;
+  background: #F0F0ED;
+  color: #5A5A5A;
   text-align: center;
   font-size: 12px;
   font-weight: 800;
@@ -770,8 +770,8 @@ onShow(() => {
 }
 
 .select-check.checked {
-  background: #2f6f5e;
-  border-color: #2f6f5e;
+  background: #3A3A3A;
+  border-color: #3A3A3A;
 }
 
 .batch-bar {
@@ -784,13 +784,13 @@ onShow(() => {
   justify-content: space-between;
   padding: 12px 20px calc(12px + env(safe-area-inset-bottom));
   background: #fff;
-  border-top: 1px solid #e5ddd2;
-  box-shadow: 0 -4px 16px rgba(31, 42, 38, 0.08);
+  border-top: 1px solid #EBEBE5;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.06);
   z-index: 100;
 }
 
 .batch-label {
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 14px;
   font-weight: 800;
 }

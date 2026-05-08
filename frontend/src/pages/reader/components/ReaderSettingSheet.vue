@@ -11,7 +11,7 @@
             :min="20"
             :max="100"
             :value="brightness"
-            activeColor="#2f6f5e"
+            activeColor="#3A3A3A"
             backgroundColor="#e0e0e0"
             block-size="18"
             @change="onBrightness"
@@ -88,6 +88,17 @@
       </view>
 
       <view class="sheet-row">
+        <text class="row-label">评论弹幕</text>
+        <view class="auto-page-wrap">
+          <switch
+            :checked="setting.showComments"
+            @change="onCommentToggle"
+            color="#3A3A3A"
+          />
+        </view>
+      </view>
+
+      <view class="sheet-row">
         <text class="row-label">主题</text>
         <view class="theme-chips">
           <view
@@ -109,7 +120,7 @@
           <switch
             :checked="setting.autoPageEnabled"
             @change="onAutoPageToggle"
-            color="#2f6f5e"
+            color="#3A3A3A"
           />
           <picker
             v-if="setting.autoPageEnabled"
@@ -149,8 +160,8 @@ const turnOptions = [
 ]
 
 const themes = [
-  { key: 'DEFAULT', bg: '#F6F0E6', border: '#D4C8B0' },
-  { key: 'GREEN', bg: '#EAF3E8', border: '#B8CFB4' },
+  { key: 'DEFAULT', bg: '#F8F8F6', border: '#CCCCCC' },
+  { key: 'GRAY', bg: '#EBEBE7', border: '#B0B0B0' },
   { key: 'NIGHT', bg: '#161A1D', border: '#3A4045' }
 ]
 
@@ -173,6 +184,10 @@ function onAutoPageToggle(e) {
 function onIntervalChange(e) {
   const index = Number(e.detail.value || 0)
   emit('update:setting', { autoPageInterval: intervalOptions[index] || 15 })
+}
+
+function onCommentToggle(e) {
+  emit('update:setting', { showComments: e.detail.value || e.target?.checked || false })
 }
 </script>
 
@@ -252,13 +267,13 @@ function onIntervalChange(e) {
   width: 36px;
   height: 30px;
   border-radius: 6px;
-  background: #f1e7dc;
+  background: #F0F0ED;
   font-size: 13px;
-  color: #3f4a45;
+  color: #3A3A3A;
 }
 
 .stepper-btn:active {
-  background: #e0d5c8;
+  background: #E0E0DD;
 }
 
 .stepper-value {
@@ -287,7 +302,7 @@ function onIntervalChange(e) {
 }
 
 .seg-item.active {
-  background: #2f6f5e;
+  background: #3A3A3A;
   color: #fff;
 }
 
@@ -309,7 +324,7 @@ function onIntervalChange(e) {
 
 .theme-chip.active {
   transform: scale(1.15);
-  box-shadow: 0 0 0 2px #2f6f5e;
+  box-shadow: 0 0 0 2px #3A3A3A;
 }
 
 .chip-check {

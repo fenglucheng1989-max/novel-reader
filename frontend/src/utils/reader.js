@@ -1,13 +1,13 @@
 export const readerThemes = {
   DEFAULT: {
     label: '米白',
-    background: '#F6F0E6',
-    text: '#2A2520'
+    background: '#F8F8F6',
+    text: '#1F1F1F'
   },
-  GREEN: {
-    label: '清绿',
-    background: '#EAF3E8',
-    text: '#22332B'
+  GRAY: {
+    label: '素灰',
+    background: '#EBEBE7',
+    text: '#2D2D2D'
   },
   NIGHT: {
     label: '夜间',

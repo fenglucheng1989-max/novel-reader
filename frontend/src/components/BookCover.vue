@@ -1,6 +1,6 @@
 <template>
   <view class="book-cover" :class="`cover-${size}`" :style="coverStyle">
-    <text class="cover-text">{{ displayTitle }}</text>
+    <text v-if="!coverUrl" class="cover-text">{{ displayTitle }}</text>
   </view>
 </template>
 
@@ -9,19 +9,22 @@ import { computed } from 'vue'
 
 const props = defineProps({
   title: { type: String, default: '书' },
+  coverUrl: { type: String, default: '' },
   size: { type: String, default: 'md' }
 })
 
+const coverUrl = computed(() => props.coverUrl || '')
 const displayTitle = computed(() => (props.title || '书').slice(0, 2))
 const coverStyle = computed(() => ({
-  background: `linear-gradient(145deg, ${hue()} 0%, ${hue(true)} 100%)`
+  background: coverUrl.value
+    ? `center / cover no-repeat url("${coverUrl.value}")`
+    : `linear-gradient(145deg, ${hue()} 0%, ${hue(true)} 100%)`
 }))
 
-let _hue = 0
+let cachedHue = 0
 function hue(dark) {
-  if (!_hue) _hue = (props.title || '书').charCodeAt(0) % 36 * 10
-  const h = _hue
-  return dark ? `hsl(${h}, 35%, 38%)` : `hsl(${h}, 28%, 52%)`
+  if (!cachedHue) cachedHue = ((props.title || '书').charCodeAt(0) % 24) * 15
+  return dark ? `hsl(${cachedHue}, 20%, 38%)` : `hsl(${cachedHue}, 18%, 62%)`
 }
 </script>
 
@@ -30,23 +33,22 @@ function hue(dark) {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  box-shadow: 0 10px 22px rgba(31, 42, 38, 0.12);
-  box-sizing: border-box;
   overflow: hidden;
+  border-radius: 7px;
+  background: #D0D0CC;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+  box-sizing: border-box;
 }
 
-.cover-sm { width: 48px; height: 64px; }
-.cover-sm .cover-text { font-size: 15px; }
+.cover-sm { width: 42px; height: 58px; }
+.cover-md { width: 54px; height: 74px; }
+.cover-lg { width: 86px; height: 118px; }
+.cover-xl { width: 100%; height: 132px; }
 
-.cover-md { width: 58px; height: 78px; }
-.cover-md .cover-text { font-size: 17px; }
-
-.cover-lg { width: 96px; height: 128px; }
-.cover-lg .cover-text { font-size: 26px; }
-
-.cover-xl { width: 100%; height: 142px; }
-.cover-xl .cover-text { font-size: 26px; }
+.cover-sm .cover-text { font-size: 14px; }
+.cover-md .cover-text { font-size: 16px; }
+.cover-lg .cover-text { font-size: 24px; }
+.cover-xl .cover-text { font-size: 24px; }
 
 .cover-text {
   color: #fff;

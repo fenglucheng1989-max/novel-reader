@@ -76,9 +76,9 @@
             <text class="theme-dot default"></text>
             <text>米白</text>
           </button>
-          <button :class="{ active: readerStore.setting.theme === 'GREEN' }" @tap="setTheme('GREEN')">
+          <button :class="{ active: readerStore.setting.theme === 'GRAY' }" @tap="setTheme('GRAY')">
             <text class="theme-dot green"></text>
-            <text>清绿</text>
+            <text>素灰</text>
           </button>
           <button :class="{ active: readerStore.setting.theme === 'NIGHT' }" @tap="setTheme('NIGHT')">
             <text class="theme-dot night"></text>
@@ -95,6 +95,30 @@
         <text class="quick-arrow">›</text>
       </view>
 
+      <view class="comment-card-panel">
+        <view class="panel-head">
+          <view>
+            <text class="panel-title">我的评论</text>
+            <text class="panel-subtitle">你评论过的书会出现在这里。</text>
+          </view>
+          <text class="theme-pill">{{ myComments.length }} 条</text>
+        </view>
+        <view v-if="commentsLoading" class="comment-empty">正在加载评论...</view>
+        <view v-else-if="!myComments.length" class="comment-empty">还没有评论过书。</view>
+        <view v-else class="my-comment-list">
+          <view
+            v-for="item in myComments"
+            :key="item.id"
+            class="my-comment-item"
+            @tap="goCommentBook(item.bookId)"
+          >
+            <text class="comment-book">{{ item.bookTitle || '未知书籍' }}</text>
+            <text v-if="item.chapterTitle" class="comment-chapter">{{ item.chapterTitle }}</text>
+            <text class="comment-content">{{ item.content }}</text>
+          </view>
+        </view>
+      </view>
+
       <button class="logout" @tap="logout">退出登录</button>
     </view>
   </view>
@@ -105,17 +129,21 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '../../store/user'
 import { useReaderStore } from '../../store/reader'
+import { useBookStore } from '../../store/book'
 
 const userStore = useUserStore()
 const readerStore = useReaderStore()
+const bookStore = useBookStore()
 const mode = ref('login')
 const username = ref('')
 const password = ref('')
 const email = ref('')
+const myComments = ref([])
+const commentsLoading = ref(false)
 
 const avatarText = computed(() => (userStore.isLoggedIn ? userStore.username.slice(0, 1).toUpperCase() : '悦'))
 const themeLabel = computed(() => {
-  if (readerStore.setting.theme === 'GREEN') return '清绿'
+  if (readerStore.setting.theme === 'GRAY') return '素灰'
   if (readerStore.setting.theme === 'NIGHT') return '夜间'
   return '米白'
 })
@@ -143,6 +171,29 @@ function goShelf() {
   uni.switchTab({ url: '/pages/bookshelf/bookshelf' })
 }
 
+function goCommentBook(bookId) {
+  if (!bookId) return
+  uni.navigateTo({ url: `/pages/book/detail?id=${bookId}` })
+}
+
+async function loadMyComments() {
+  if (!userStore.isLoggedIn) {
+    myComments.value = []
+    return
+  }
+  commentsLoading.value = true
+  try {
+    const res = await bookStore.loadMyComments(1, 20)
+    if (res.code === 200) {
+      myComments.value = res.data?.records || []
+    }
+  } catch {
+    myComments.value = []
+  } finally {
+    commentsLoading.value = false
+  }
+}
+
 function changeFont(delta) {
   const next = Math.max(14, Math.min(30, readerStore.setting.fontSize + delta))
   readerStore.saveSetting({ fontSize: next })
@@ -161,6 +212,7 @@ onShow(() => {
   userStore.syncFromStorage()
   if (userStore.isLoggedIn) {
     readerStore.loadSetting()
+    loadMyComments()
   }
 })
 </script>
@@ -169,17 +221,18 @@ onShow(() => {
 .page {
   min-height: 100vh;
   padding: 22px 18px 88px;
-  background: #f6f3ee;
+  background: #F8F8F6;
   box-sizing: border-box;
 }
 
 .account-card,
 .login-card,
 .preference-card,
-.quick-card {
+.quick-card,
+.comment-card-panel {
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 10px 28px rgba(31, 42, 38, 0.06);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
 }
 
 .account-card {
@@ -187,7 +240,7 @@ onShow(() => {
   align-items: center;
   padding: 18px;
   margin-bottom: 14px;
-  background: #20342d;
+  background: #3A3A3A;
   color: #fff;
 }
 
@@ -233,7 +286,7 @@ onShow(() => {
 
 .account-subtitle {
   margin-top: 6px;
-  color: #d6e3dc;
+  color: #CCCCCC;
   font-size: 13px;
 }
 
@@ -241,7 +294,7 @@ onShow(() => {
   padding: 4px 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.12);
-  color: #e7f0eb;
+  color: #CCCCCC;
   font-size: 12px;
 }
 
@@ -259,14 +312,14 @@ onShow(() => {
 }
 
 .panel-title {
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 20px;
   font-weight: 800;
 }
 
 .panel-subtitle {
   margin-top: 5px;
-  color: #81776c;
+  color: #8C8C8C;
   font-size: 13px;
   line-height: 20px;
 }
@@ -278,7 +331,7 @@ onShow(() => {
   margin-bottom: 14px;
   padding: 4px;
   border-radius: 8px;
-  background: #f6f3ee;
+  background: #F5F5F2;
 }
 
 .segment button {
@@ -286,13 +339,13 @@ onShow(() => {
   line-height: 34px;
   border-radius: 7px;
   background: transparent;
-  color: #62584d;
+  color: #5A5A5A;
   font-size: 14px;
 }
 
 .segment button.active {
   background: #fff;
-  color: #2f6f5e;
+  color: #3A3A3A;
   font-weight: 700;
 }
 
@@ -302,7 +355,7 @@ onShow(() => {
 
 .field-label {
   margin-bottom: 6px;
-  color: #62584d;
+  color: #5A5A5A;
   font-size: 12px;
 }
 
@@ -311,9 +364,9 @@ onShow(() => {
   height: 44px;
   padding: 0 12px;
   border-radius: 8px;
-  border: 1px solid #e4ddd3;
+  border: 1px solid #EBEBE5;
   background: #fff;
-  color: #202a26;
+  color: #1F1F1F;
   font-size: 15px;
   box-sizing: border-box;
 }
@@ -329,13 +382,13 @@ onShow(() => {
 
 .primary {
   margin-top: 4px;
-  background: #2f6f5e;
+  background: #3A3A3A;
   color: #fff;
 }
 
 .login-tip {
   margin-top: 12px;
-  color: #8a8178;
+  color: #B0B0B0;
   font-size: 12px;
   line-height: 19px;
   text-align: center;
@@ -345,8 +398,8 @@ onShow(() => {
   flex: 0 0 auto;
   padding: 4px 9px;
   border-radius: 999px;
-  background: #f1e7dc;
-  color: #9a6b45;
+  background: #F0F0ED;
+  color: #A09080;
   font-size: 12px;
 }
 
@@ -355,7 +408,7 @@ onShow(() => {
   align-items: center;
   justify-content: space-between;
   padding: 13px 0;
-  border-bottom: 1px solid #eee7de;
+  border-bottom: 1px solid #EBEBE5;
 }
 
 .setting-copy {
@@ -363,14 +416,14 @@ onShow(() => {
 }
 
 .setting-title {
-  color: #26312d;
+  color: #1F1F1F;
   font-size: 15px;
   font-weight: 700;
 }
 
 .setting-subtitle {
   margin-top: 4px;
-  color: #8a8178;
+  color: #8C8C8C;
   font-size: 12px;
 }
 
@@ -385,14 +438,14 @@ onShow(() => {
   height: 30px;
   line-height: 30px;
   border-radius: 7px;
-  background: #f1e7dc;
-  color: #3f4a45;
+  background: #F0F0ED;
+  color: #3A3A3A;
   font-size: 15px;
 }
 
 .stepper text {
   width: 28px;
-  color: #26312d;
+  color: #1F1F1F;
   font-size: 14px;
   text-align: center;
 }
@@ -411,13 +464,13 @@ onShow(() => {
   justify-content: center;
   gap: 6px;
   border-radius: 8px;
-  background: #f1e7dc;
-  color: #5b5148;
+  background: #F0F0ED;
+  color: #5A5A5A;
   font-size: 13px;
 }
 
 .theme-grid button.active {
-  background: #2f6f5e;
+  background: #3A3A3A;
   color: #fff;
 }
 
@@ -428,12 +481,13 @@ onShow(() => {
 }
 
 .theme-dot.default {
-  background: #f6f0e6;
-  border: 1px solid #d8cfc2;
+  background: #F8F8F6;
+  border: 1px solid #CCCCCC;
 }
 
 .theme-dot.green {
-  background: #b9d7c1;
+  background: #EBEBE7;
+  border: 1px solid #CCCCCC;
 }
 
 .theme-dot.night {
@@ -449,25 +503,77 @@ onShow(() => {
 }
 
 .quick-title {
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 16px;
   font-weight: 800;
 }
 
 .quick-subtitle {
   margin-top: 5px;
-  color: #81776c;
+  color: #8C8C8C;
   font-size: 13px;
 }
 
 .quick-arrow {
-  color: #9a6b45;
+  color: #A09080;
   font-size: 28px;
+}
+
+.comment-card-panel {
+  margin-top: 12px;
+  padding: 16px;
+}
+
+.comment-empty {
+  padding: 18px 0 4px;
+  color: #8C8C8C;
+  font-size: 13px;
+  text-align: center;
+}
+
+.my-comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.my-comment-item {
+  padding: 10px;
+  border-radius: 8px;
+  background: #F5F5F2;
+  border: 1px solid #EBEBE5;
+}
+
+.comment-book,
+.comment-chapter,
+.comment-content {
+  display: block;
+}
+
+.comment-book {
+  color: #3A3A3A;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.comment-chapter {
+  margin-top: 3px;
+  color: #B0B0B0;
+  font-size: 12px;
+}
+
+.comment-content {
+  margin-top: 6px;
+  color: #5A5A5A;
+  font-size: 13px;
+  line-height: 20px;
+  word-break: break-all;
 }
 
 .logout {
   margin-top: 14px;
-  background: #f1e7dc;
+  background: #F0F0ED;
   color: #8f3f36;
 }
 </style>

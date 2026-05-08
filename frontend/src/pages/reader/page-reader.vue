@@ -41,10 +41,11 @@ const props = defineProps({
   paragraphSpacing: { type: Number, default: 0 },
   theme: { type: String, default: 'DEFAULT' },
   brightness: { type: Number, default: 80 },
-  initialPage: { type: Number, default: 0 }
+  initialPage: { type: Number, default: 0 },
+  comments: { type: Array, default: () => [] }
 })
 
-const emit = defineEmits(['prev', 'next', 'pageChange', 'toggleTools'])
+const emit = defineEmits(['prev', 'next', 'chapterEnd', 'pageChange', 'toggleTools', 'paragraphSelect', 'commentBubbleTap'])
 
 const fontFamily = "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', serif"
 const canvasId = 'readerFlipCanvas'
@@ -62,6 +63,7 @@ const currentPage = ref(0)
 const flipProgress = ref(0)
 const flipDirection = ref(0)
 const animating = ref(false)
+const selectedLineKey = ref(null)
 
 let dragStartX = 0
 let dragStartY = 0
@@ -72,6 +74,9 @@ let mouseDragging = false
 let animationFrame = 0
 let resizeHandler = null
 let h5Canvas = null
+let longPressTimer = null
+let longPressPoint = null
+let longPressTriggered = false
 
 function requestFrame(callback) {
   // #ifdef H5
@@ -106,6 +111,15 @@ const hostStyle = computed(() => ({
 const totalPages = computed(() => pages.value.length)
 const prevPages = computed(() => paginateContent(props.prevContent))
 const nextPages = computed(() => paginateContent(props.nextContent))
+const commentsByLineKey = computed(() => {
+  const map = {}
+  ;(props.comments || []).forEach((item) => {
+    if (item?.paragraphIndex == null) return
+    const key = String(item.paragraphIndex)
+    map[key] = (map[key] || 0) + 1
+  })
+  return map
+})
 function getViewportSize() {
   // #ifdef H5
   const root = document.querySelector('.page-reader')
@@ -214,7 +228,18 @@ function drawPageData(ctx, page, x, clipWidth) {
     ctx.font = `${props.fontSize}px ${fontFamily}`
     ctx.textBaseline = 'top'
     page.lines.forEach((line, index) => {
-      ctx.fillText(line || ' ', x + paddingX.value, paddingY.value + index * effectiveLineHeight.value)
+      const lineKey = getLineKey(page.index, index)
+      const y = paddingY.value + index * effectiveLineHeight.value
+      if (selectedLineKey.value === lineKey) {
+        ctx.fillStyle = props.theme === 'NIGHT' ? 'rgba(160,144,128,0.22)' : 'rgba(160,144,128,0.18)'
+        ctx.fillRect(x + paddingX.value - 6, y - 2, width - paddingX.value * 2 + 12, effectiveLineHeight.value + 4)
+        ctx.fillStyle = themeText.value
+      }
+      ctx.fillText(line || ' ', x + paddingX.value, y)
+      const bubbleCount = commentsByLineKey.value[String(lineKey)]
+      if (bubbleCount) {
+        drawCommentBubble(ctx, x + width - paddingX.value + 2, y + 2, bubbleCount)
+      }
     })
   }
 
@@ -228,6 +253,31 @@ function drawPageData(ctx, page, x, clipWidth) {
     ctx.fillStyle = gradient
     ctx.fillRect(edgeX - 36, 0, 48, height)
   }
+  ctx.restore()
+}
+
+function getLineKey(pageIndex, lineIndex) {
+  return Number(pageIndex || 0) * 100 + Number(lineIndex || 0)
+}
+
+function drawCommentBubble(ctx, x, y, count) {
+  const label = String(Math.min(99, count))
+  ctx.save()
+  ctx.strokeStyle = props.theme === 'NIGHT' ? 'rgba(180,180,175,0.55)' : 'rgba(140,140,135,0.5)'
+  ctx.fillStyle = props.theme === 'NIGHT' ? 'rgba(28,28,25,0.82)' : 'rgba(248,248,246,0.88)'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.roundRect?.(x, y, 34, 22, 10)
+  if (!ctx.roundRect) {
+    ctx.rect(x, y, 34, 22)
+  }
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = props.theme === 'NIGHT' ? '#CCCBC5' : '#8C8C8C'
+  ctx.font = `12px ${fontFamily}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(label, x + 17, y + 11)
   ctx.restore()
 }
 
@@ -371,7 +421,7 @@ function commitChapterFlip(direction) {
   animateTo(1, () => {
     flipProgress.value = 0
     flipDirection.value = 0
-    if (direction > 0) emit('next')
+    if (direction > 0) emit('chapterEnd')
     else emit('prev')
   })
 }
@@ -407,7 +457,69 @@ function resolveLocalX(e) {
   return Math.max(0, Math.min(clientX, viewWidth.value))
 }
 
+function resolveLocalPoint(e) {
+  const touch = e.changedTouches?.[0] || e.touches?.[0]
+  const clientX = touch ? touch.clientX : (typeof e.clientX === 'number' ? e.clientX : viewWidth.value / 2)
+  const clientY = touch ? touch.clientY : (typeof e.clientY === 'number' ? e.clientY : viewHeight.value / 2)
+  // #ifdef H5
+  const root = document.querySelector('.page-reader')
+  const rect = root?.getBoundingClientRect()
+  if (rect) return { x: clientX - rect.left, y: clientY - rect.top }
+  // #endif
+  return { x: clientX, y: clientY }
+}
+
+function findLineAt(point) {
+  const page = pages.value[currentPage.value]
+  if (!page) return null
+  const lineIndex = Math.floor((point.y - paddingY.value) / effectiveLineHeight.value)
+  if (lineIndex < 0 || lineIndex >= page.lines.length) return null
+  const text = page.lines[lineIndex]
+  if (!text || !text.trim()) return null
+  const key = getLineKey(page.index, lineIndex)
+  return {
+    text: text.trim(),
+    index: key,
+    lineIndex,
+    pageIndex: page.index,
+    toolbarY: paddingY.value + (lineIndex + 1) * effectiveLineHeight.value + 52
+  }
+}
+
+function clearLongPressTimer() {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+}
+
+function startLongPress(e) {
+  clearLongPressTimer()
+  longPressPoint = resolveLocalPoint(e)
+  longPressTriggered = false
+  longPressTimer = setTimeout(() => {
+    const target = findLineAt(longPressPoint)
+    if (!target) return
+    longPressTriggered = true
+    selectedLineKey.value = target.index
+    draw()
+    emit('paragraphSelect', target)
+  }, 520)
+}
+
 function handleTap(e) {
+  const point = resolveLocalPoint(e)
+  const current = pages.value[currentPage.value]
+  if (current) {
+    const lineIndex = Math.floor((point.y - paddingY.value) / effectiveLineHeight.value)
+    const lineKey = getLineKey(current.index, lineIndex)
+    if (commentsByLineKey.value[String(lineKey)] && point.x > viewWidth.value - paddingX.value - 8) {
+      selectedLineKey.value = lineKey
+      draw()
+      emit('commentBubbleTap', { paragraphIndex: lineKey })
+      return
+    }
+  }
   const localX = resolveLocalX(e)
   const centerLeft = viewWidth.value * 0.3
   const centerRight = viewWidth.value * 0.7
@@ -428,6 +540,7 @@ function onTouchStart(e) {
   touchHandled = false
   flipProgress.value = 0
   flipDirection.value = 0
+  startLongPress(e)
 }
 
 function updateDrag(clientX, clientY) {
@@ -438,6 +551,7 @@ function updateDrag(clientX, clientY) {
   const absDy = Math.abs(dy)
   if (!dragMoved && absDx + absDy < DRAG_START_PX) return
   dragMoved = true
+  clearLongPressTimer()
   if (absDx < absDy * 0.65) return
 
   const direction = dx < 0 ? 1 : -1
@@ -450,6 +564,11 @@ function updateDrag(clientX, clientY) {
 }
 
 function finishDrag(e) {
+  clearLongPressTimer()
+  if (longPressTriggered) {
+    touchHandled = true
+    return
+  }
   if (!dragMoved) {
     touchHandled = true
     handleTap(e)
@@ -495,16 +614,23 @@ function onMouseDown(e) {
   touchHandled = false
   flipProgress.value = 0
   flipDirection.value = 0
+  startLongPress(e)
 }
 
 function onMouseMove(e) {
   if (!mouseDragging) return
+  clearLongPressTimer()
   updateDrag(e.clientX, e.clientY)
 }
 
 function onMouseUp(e) {
+  clearLongPressTimer()
   if (!mouseDragging) return
   mouseDragging = false
+  if (longPressTriggered) {
+    touchHandled = true
+    return
+  }
   if (dragMoved) {
     touchHandled = true
     finishDrag(e)
@@ -512,6 +638,7 @@ function onMouseUp(e) {
 }
 
 function onMouseLeave(e) {
+  clearLongPressTimer()
   if (!mouseDragging) return
   mouseDragging = false
   if (dragMoved) {
@@ -521,6 +648,8 @@ function onMouseLeave(e) {
 }
 
 function onTap(e) {
+  clearLongPressTimer()
+  if (longPressTriggered) return
   if (touchHandled) return
   if (dragMoved || animating.value) return
   handleTap(e)
@@ -550,6 +679,7 @@ watch(() => props.fontSize, repaginate)
 watch(() => props.lineHeight, repaginate)
 watch(() => [props.marginX, props.marginY, props.paragraphSpacing], repaginate)
 watch(() => props.theme, draw)
+watch(() => props.comments, draw, { deep: true })
 
 onMounted(async () => {
   await nextTick()
@@ -566,6 +696,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   cancelFrame(animationFrame)
+  clearLongPressTimer()
   // #ifdef H5
   if (resizeHandler) window.removeEventListener('resize', resizeHandler)
   if (h5Canvas?.parentNode) h5Canvas.parentNode.removeChild(h5Canvas)

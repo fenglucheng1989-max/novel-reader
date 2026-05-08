@@ -26,7 +26,7 @@ const emit = defineEmits(['action'])
 }
 
 .section-title {
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 17px;
   font-weight: 900;
 }
@@ -35,7 +35,7 @@ const emit = defineEmits(['action'])
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #8d8175;
+  color: #8C8C8C;
   font-size: 13px;
   font-weight: 800;
 }

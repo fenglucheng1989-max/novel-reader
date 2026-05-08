@@ -272,7 +272,7 @@ onShow(load)
   width: 100%;
   min-height: 100vh;
   padding: 14px 12px 28px;
-  background: #f6f3ee;
+  background: #F8F8F6;
   box-sizing: border-box;
   overflow-x: hidden;
 }
@@ -300,8 +300,8 @@ onShow(load)
   justify-content: center;
   border-radius: 8px;
   background: #fff;
-  border: 1px solid #e5ddd2;
-  color: #25332e;
+  border: 1px solid #EBEBE5;
+  color: #3A3A3A;
   font-size: 28px;
   font-weight: 500;
 }
@@ -326,13 +326,13 @@ onShow(load)
   align-items: center;
   height: 42px;
   margin-right: 22px;
-  color: #81776c;
+  color: #8C8C8C;
   font-size: 15px;
   font-weight: 800;
 }
 
 .segment-item.active {
-  color: #17221e;
+  color: #1F1F1F;
   font-size: 22px;
   font-weight: 900;
 }
@@ -345,7 +345,7 @@ onShow(load)
   width: 18px;
   height: 3px;
   border-radius: 999px;
-  background: #2f6f5e;
+  background: #3A3A3A;
   transform: translateX(-50%);
 }
 
@@ -355,12 +355,12 @@ onShow(load)
   overflow: hidden;
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 12px 30px rgba(31, 42, 38, 0.06);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
 }
 
 .rail {
   padding: 12px 0;
-  background: #f1eee8;
+  background: #F5F5F2;
 }
 
 .rail-item {
@@ -369,14 +369,14 @@ onShow(load)
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #62584d;
+  color: #5A5A5A;
   font-size: 14px;
   font-weight: 800;
 }
 
 .rail-item.active {
   background: #fff;
-  color: #17221e;
+  color: #1F1F1F;
 }
 
 .rail-item.active::before {
@@ -386,7 +386,7 @@ onShow(load)
   width: 3px;
   height: 20px;
   border-radius: 0 999px 999px 0;
-  background: #2f6f5e;
+  background: #3A3A3A;
 }
 
 .main-scroll {
@@ -407,13 +407,13 @@ onShow(load)
 .section-head.spaced { margin-top: 22px; }
 
 .section-title {
-  color: #1f2a26;
+  color: #1F1F1F;
   font-size: 16px;
   font-weight: 900;
 }
 
 .section-note {
-  color: #9a6b45;
+  color: #A09080;
   font-size: 12px;
 }
 
@@ -431,8 +431,8 @@ onShow(load)
   justify-content: center;
   padding: 0 6px;
   border-radius: 8px;
-  background: #f6f3ee;
-  color: #2a332f;
+  background: #F5F5F2;
+  color: #3A3A3A;
   font-size: 14px;
   font-weight: 800;
   box-sizing: border-box;
@@ -444,14 +444,14 @@ onShow(load)
   white-space: nowrap;
 }
 
-.tag-card.featured { background: #20342d; color: #fff; }
-.tag-card.active { background: #2f6f5e; color: #fff; }
-.tag-card.soft { background: #fbfaf7; border: 1px solid #efe8df; }
+.tag-card.featured { background: #3A3A3A; color: #fff; }
+.tag-card.active { background: #3A3A3A; color: #fff; }
+.tag-card.soft { background: #fbfaf7; border: 1px solid #EBEBE5; }
 
 .divider {
   height: 1px;
   margin: 0 12px;
-  background: #f0ebe2;
+  background: #EBEBE5;
 }
 
 /* Filter */
@@ -468,7 +468,7 @@ onShow(load)
 
 .filter-label {
   flex: 0 0 36px;
-  color: #8d8175;
+  color: #8C8C8C;
   font-size: 13px;
   font-weight: 800;
 }
@@ -483,14 +483,14 @@ onShow(load)
   line-height: 28px;
   padding: 0 10px;
   border-radius: 7px;
-  background: #f6f3ee;
-  color: #62584d;
+  background: #F5F5F2;
+  color: #5A5A5A;
   font-size: 12px;
   font-weight: 800;
 }
 
 .f-chip.active {
-  background: #2f6f5e;
+  background: #3A3A3A;
   color: #fff;
 }
 
@@ -508,20 +508,20 @@ onShow(load)
   gap: 4px;
   padding: 3px 8px;
   border-radius: 6px;
-  background: #e8f0ed;
-  color: #2f6f5e;
+  background: #F0F0ED;
+  color: #3A3A3A;
   font-size: 12px;
   font-weight: 800;
 }
 
 .tag-close {
-  color: #8d8175;
+  color: #8C8C8C;
   font-size: 15px;
 }
 
 .result-total {
   margin-left: auto;
-  color: #8d8175;
+  color: #8C8C8C;
   font-size: 12px;
 }
 
@@ -533,19 +533,19 @@ onShow(load)
 .load-more {
   padding: 16px 0;
   text-align: center;
-  color: #2f6f5e;
+  color: #3A3A3A;
   font-size: 13px;
   font-weight: 800;
 }
 
 .empty {
   padding: 44px 0;
-  color: #8b8176;
+  color: #8C8C8C;
   text-align: center;
 }
 
 .empty-title {
-  color: #333b37;
+  color: #1F1F1F;
   font-size: 17px;
   font-weight: 800;
   display: block;
@@ -553,7 +553,7 @@ onShow(load)
 
 .empty-subtitle {
   margin-top: 8px;
-  color: #94897c;
+  color: #B0B0B0;
   font-size: 13px;
   display: block;
 }

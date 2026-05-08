@@ -27,7 +27,7 @@
             <text>A-</text>
           </view>
           <text class="stepper-value">{{ setting.fontSize }}</text>
-          <view class="stepper-btn" @tap.stop="emit('update:setting', { fontSize: Math.min(30, setting.fontSize + 1) })">
+          <view class="stepper-btn" @tap.stop="emit('update:setting', { fontSize: Math.min(24, setting.fontSize + 1) })">
             <text>A+</text>
           </view>
         </view>

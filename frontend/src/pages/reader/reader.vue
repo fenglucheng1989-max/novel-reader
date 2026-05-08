@@ -3,7 +3,7 @@
     <!-- ==================== SCROLL mode ==================== -->
     <view v-if="readerStore.setting.turnMode === 'SCROLL'" class="reader reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }" @tap="onContentTap">
       <scroll-view class="content-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
-        <view v-if="loading" class="empty">正在加载章节...</view>
+        <view v-if="loading || !bookId" class="empty">正在加载章节...</view>
         <view v-else-if="chapter" class="chapter-content" :style="scrollTextStyle">
           <text class="chapter-title">{{ chapter.title }}</text>
           <view
@@ -17,6 +17,7 @@
             }"
             :style="paragraphHighlight(index) ? { backgroundColor: paragraphHighlight(index).color, borderBottom: '2px solid ' + (paragraphHighlight(index).color || '#FFEB3B') } : {}"
             @longpress.stop="openParagraphTools(line, index, $event)"
+            @contextmenu.prevent.stop="openParagraphTools(line, index, $event)"
           >
             <template v-if="selectedParagraph?.index === index">
               <text>{{ selectedParts(line).before }}</text>
@@ -43,19 +44,19 @@
             </text>
           </view>
         </view>
-        <view v-else class="empty">章节不存在</view>
+        <view v-else class="empty">{{ loadFailed ? '章节不存在' : '正在加载章节...' }}</view>
       </scroll-view>
     </view>
 
     <!-- ==================== PAGE mode ==================== -->
-    <view v-else-if="loading" class="reader-page-loading reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }">
+    <view v-else-if="loading || !bookId" class="reader-page-loading reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }">
       <text>正在加载章节...</text>
     </view>
 
     <ViewPageReader
       v-else-if="rawContent"
       class="reader-brightness-layer"
-      :key="`${bookId}-${chapterNo}-${(currentContent || chapter?.content || '').length}`"
+      :key="`${readerRenderKey}-${bookId}-${chapterNo}-${(currentContent || chapter?.content || '').length}`"
       ref="pageReaderRef"
       :chapter="currentChapter || readerStore.chapter"
       :title="chapter?.title || currentTitle"
@@ -72,6 +73,7 @@
       :brightness="brightness"
       :initial-page="pageModePage"
       :comments="chapterComments"
+      :tools-visible="showTools && !settingVisible"
       @prev="prevChapter"
       @next="nextChapter"
       @pageChange="onPageChange"
@@ -80,11 +82,12 @@
       @commentBubbleTap="showParagraphComments"
     />
     <view v-else class="reader-page-loading reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }">
-      <text>章节不存在</text>
+      <text>{{ loadFailed ? '章节不存在' : '正在加载章节...' }}</text>
     </view>
 
     <!-- ==================== Tool layers ==================== -->
     <ReaderTopBar
+      :key="`top-${readerRenderKey}`"
       :visible="showTools && !settingVisible"
       :title="currentTitle || chapter?.title || '阅读'"
       @back="goBack"
@@ -93,6 +96,7 @@
     />
 
     <ReaderBottomBar
+      :key="`bottom-${readerRenderKey}`"
       :visible="showTools && !settingVisible"
       :page-indicator="pageIndicator"
       :progress-percent="progressPercent"
@@ -118,6 +122,24 @@
       @update:eye-protection="onEyeProtectionChange"
       @more="onMoreSettings"
     />
+
+    <view v-if="paragraphMenuVisible" class="paragraph-tools-hitarea" @tap.stop="clearParagraphTools" />
+    <view
+      v-if="paragraphMenuVisible"
+      class="paragraph-tools-menu"
+      :style="paragraphMenuStyle"
+      @tap.stop
+    >
+      <view class="paragraph-tools-arrow" :style="paragraphMenuArrowStyle" />
+      <button
+        v-for="item in paragraphMenuItems"
+        :key="item.key"
+        class="paragraph-tools-item"
+        @tap.stop="runParagraphTool(item.key)"
+      >
+        {{ item.label }}
+      </button>
+    </view>
 
     <view v-if="paragraphComposerVisible || typoFeedbackVisible" class="paragraph-feedback-sheet" @tap.stop>
       <text class="feedback-title">{{ typoFeedbackVisible ? '错字反馈' : '写段评' }}</text>
@@ -195,7 +217,8 @@ const highlightStore = useHighlightStore()
 const instance = getCurrentInstance()
 const bookId = ref('')
 const chapterNo = ref(1)
-const loading = ref(false)
+const loading = ref(true)
+const loadFailed = ref(false)
 const showTools = ref(true)
 const settingVisible = ref(false)
 const scrollTop = ref(0)
@@ -211,6 +234,9 @@ const selectedParagraph = ref(null)
 const selectedStart = ref(0)
 const selectedEnd = ref(0)
 const activeRangeHandle = ref('')
+const paragraphMenuVisible = ref(false)
+const paragraphMenuStyle = ref({})
+const paragraphMenuArrowStyle = ref({})
 const paragraphComposerVisible = ref(false)
 const typoFeedbackVisible = ref(false)
 const feedbackText = ref('')
@@ -218,10 +244,13 @@ const feedbackSubmitting = ref(false)
 const chapterComments = ref([])
 const catalogVisible = ref(false)
 const paragraphCommentsVisible = ref(false)
+const chapterSwitching = ref(false)
+const readerRenderKey = ref(0)
 let autoPageTimer = null
 let autoSaveTimer = null
 let initializing = false
 let showRetryTimer = null
+const lastReaderRouteKey = 'reader:lastRoute'
 
 // ---- computed ----
 const chapter = computed(() => currentChapter.value || readerStore.chapter)
@@ -249,8 +278,10 @@ const chapterIndicator = computed(() => {
 const pageIndicator = computed(() => {
   if (readerStore.setting.turnMode !== 'SCROLL') {
     const ref = pageReaderRef.value
-    if (ref?.totalPages > 1) {
-      return `${(ref.currentPage || 0) + 1} / ${ref.totalPages} 页`
+    const total = getReaderExposeNumber(ref?.totalPages)
+    const page = getReaderExposeNumber(ref?.currentPage)
+    if (total > 1) {
+      return `${page + 1} / ${total} 页`
     }
     return chapterIndicator.value
   }
@@ -267,8 +298,10 @@ const progressPercent = computed(() => {
     return 0
   }
   const ref = pageReaderRef.value
-  if (ref?.totalPages > 1) {
-    return Math.round(((ref.currentPage || 0) / (ref.totalPages - 1)) * 100)
+  const total = getReaderExposeNumber(ref?.totalPages)
+  const page = getReaderExposeNumber(ref?.currentPage)
+  if (total > 1) {
+    return Math.round((page / (total - 1)) * 100)
   }
   return 0
 })
@@ -286,6 +319,12 @@ const chapterHighlights = computed(() =>
 function paragraphHighlight(index) {
   return chapterHighlights.value.find(h => Number(h.paragraphIndex) === Number(index))
 }
+
+function getReaderExposeNumber(value) {
+  const raw = value && typeof value === 'object' && 'value' in value ? value.value : value
+  const num = Number(raw || 0)
+  return Number.isFinite(num) ? num : 0
+}
 const selectedParagraphComments = computed(() => {
   if (!selectedParagraph.value) return []
   return chapterComments.value.filter((item) => Number(item.paragraphIndex) === Number(selectedParagraph.value.index))
@@ -296,6 +335,16 @@ const selectedText = computed(() => {
   const start = Math.max(0, Math.min(selectedStart.value, selectedEnd.value))
   const end = Math.max(start + 1, Math.max(selectedStart.value, selectedEnd.value))
   return text.slice(start, Math.min(end, text.length))
+})
+const paragraphMenuItems = computed(() => {
+  const count = selectedParagraph.value ? paragraphCommentCount(selectedParagraph.value.index) : 0
+  return [
+    { key: 'comment', label: `段评${count ? ` (${count})` : ''}` },
+    { key: 'feedback', label: '反馈' },
+    { key: 'copy', label: '复制' },
+    { key: 'highlight', label: '划线' },
+    { key: 'share', label: '分享' }
+  ]
 })
 const textStyle = computed(() => themeStyle(readerStore.setting))
 const scrollTextStyle = computed(() => ({
@@ -314,19 +363,35 @@ const brightnessStyle = computed(() => {
 })
 
 // ---- load ----
+function applyChapterData(data) {
+  currentChapter.value = { ...data }
+  currentTitle.value = data.title || ''
+  currentContent.value = data.content || ''
+  readerStore.$patch({ chapter: data })
+  saveLastReaderRoute()
+  readerRenderKey.value += 1
+  loadFailed.value = false
+}
+
 async function loadChapter({ restoreSavedProgress = true } = {}) {
-  loading.value = true
+  const cached = readerStore.getCachedChapter(bookId.value, chapterNo.value)
+  loading.value = !cached
+  loadFailed.value = false
   try {
-    const res = await readerStore.loadChapter(bookId.value, chapterNo.value)
+    const res = cached
+      ? { code: 200, message: 'success', data: cached, cached: true }
+      : await readerStore.loadChapter(bookId.value, chapterNo.value)
     if (res?.code !== 200 || !res?.data?.content) {
-      currentChapter.value = null
-      currentTitle.value = ''
-      currentContent.value = ''
-      readerStore.$patch({ chapter: null })
+      const recovered = await recoverMissingChapter()
+      if (!recovered) {
+        currentChapter.value = null
+        currentTitle.value = ''
+        currentContent.value = ''
+        readerStore.$patch({ chapter: null })
+        loadFailed.value = true
+      }
     } else {
-      currentChapter.value = { ...res.data }
-      currentTitle.value = res.data.title || ''
-      currentContent.value = res.data.content || ''
+      applyChapterData(res.data)
       await nextTick()
       instance?.proxy?.$forceUpdate?.()
     }
@@ -335,6 +400,7 @@ async function loadChapter({ restoreSavedProgress = true } = {}) {
     currentTitle.value = ''
     currentContent.value = ''
     readerStore.$patch({ chapter: null })
+    loadFailed.value = true
   } finally {
     loading.value = false
     preloadAdjacentChapters()
@@ -347,6 +413,40 @@ async function loadChapter({ restoreSavedProgress = true } = {}) {
   }
   highlightStore.loadFromStorage()
   startAutoSave()
+}
+
+function saveLastReaderRoute() {
+  if (!bookId.value || !chapterNo.value) return
+  uni.setStorageSync(lastReaderRouteKey, {
+    bookId: String(bookId.value),
+    chapterNo: Number(chapterNo.value),
+    at: Date.now()
+  })
+}
+
+function getLastReaderRoute() {
+  const last = uni.getStorageSync(lastReaderRouteKey)
+  if (!last?.bookId || !last?.chapterNo) return null
+  return last
+}
+
+async function recoverMissingChapter() {
+  if (!bookId.value) {
+    const last = getLastReaderRoute()
+    if (last?.bookId) {
+      await initReader({ bookId: last.bookId, chapterNo: last.chapterNo || 1 }, { force: true })
+      return true
+    }
+    return false
+  }
+  const maxNo = Number(maxChapterNo.value || 0)
+  if (maxNo && chapterNo.value > maxNo) {
+    chapterNo.value = maxNo
+    syncReaderUrl()
+    await loadChapter({ restoreSavedProgress: false })
+    return true
+  }
+  return false
 }
 
 async function loadChapterComments() {
@@ -364,11 +464,23 @@ async function loadChapterComments() {
 
 function preloadAdjacentChapters() {
   if (!bookId.value) return
-  if (chapterNo.value > 1) {
-    readerStore.preloadChapter(bookId.value, chapterNo.value - 1).catch(() => {})
-  }
-  if (!maxChapterNo.value || chapterNo.value < maxChapterNo.value) {
-    readerStore.preloadChapter(bookId.value, chapterNo.value + 1).catch(() => {})
+  const current = Number(chapterNo.value || 1)
+  const maxNo = Number(maxChapterNo.value || 0)
+  const targets = [current - 1, current + 1, current + 2]
+    .filter((no) => no > 0 && (!maxNo || no <= maxNo))
+  targets.forEach((no) => {
+    readerStore.preloadChapter(bookId.value, no).catch(() => {})
+  })
+}
+
+async function ensureChapterPreloaded(no) {
+  if (!bookId.value || !no) return null
+  const cached = readerStore.getCachedChapter(bookId.value, no)
+  if (cached) return cached
+  try {
+    return await readerStore.preloadChapter(bookId.value, no)
+  } catch {
+    return null
   }
 }
 
@@ -391,6 +503,16 @@ function restoreProgress(progress) {
 function onPageChange(pageIdx) {
   pageModePage.value = pageIdx
   position.value = pageIdx
+  const ref = pageReaderRef.value
+  const total = Number(ref?.totalPages || 0)
+  if (readerStore.setting.turnMode !== 'SCROLL' && total > 0) {
+    if (pageIdx >= total - 2) {
+      ensureChapterPreloaded(Number(chapterNo.value) + 1)
+    }
+    if (pageIdx <= 1 && Number(chapterNo.value) > 1) {
+      ensureChapterPreloaded(Number(chapterNo.value) - 1)
+    }
+  }
 }
 
 function paragraphCommentCount(index) {
@@ -407,6 +529,71 @@ function selectedParts(text) {
   }
 }
 
+function getViewportSize() {
+  // #ifdef H5
+  if (typeof window !== 'undefined') {
+    return {
+      width: window.innerWidth || 375,
+      height: window.innerHeight || 667
+    }
+  }
+  // #endif
+  const sys = uni.getSystemInfoSync()
+  return {
+    width: sys.windowWidth || 375,
+    height: sys.windowHeight || 667
+  }
+}
+
+function getEventPoint(event, fallbackY) {
+  const source = event?.touches?.[0] ||
+    event?.changedTouches?.[0] ||
+    event?.detail ||
+    event ||
+    {}
+  const viewport = getViewportSize()
+  const x = Number(source.clientX ?? source.x ?? source.pageX ?? viewport.width / 2)
+  const y = Number(source.clientY ?? source.y ?? source.pageY ?? fallbackY ?? viewport.height / 2)
+  return {
+    x: Number.isFinite(x) ? x : viewport.width / 2,
+    y: Number.isFinite(y) ? y : (fallbackY ?? viewport.height / 2)
+  }
+}
+
+function positionParagraphMenu(point) {
+  const viewport = getViewportSize()
+  const menuWidth = Math.min(318, Math.max(260, viewport.width - 24))
+  const menuHeight = 44
+  const gap = 12
+  const sidePadding = 10
+  const topPadding = 10
+  const bottomPadding = 12
+  const desiredLeft = point.x - menuWidth / 2
+  const left = Math.max(sidePadding, Math.min(desiredLeft, viewport.width - menuWidth - sidePadding))
+  let top = point.y - menuHeight - gap
+  let arrowTop = menuHeight - 1
+  let arrowDirection = 'down'
+
+  if (top < topPadding) {
+    top = point.y + gap
+    arrowTop = -5
+    arrowDirection = 'up'
+  }
+  top = Math.max(topPadding, Math.min(top, viewport.height - menuHeight - bottomPadding))
+
+  const arrowLeft = Math.max(14, Math.min(point.x - left - 6, menuWidth - 26))
+  paragraphMenuStyle.value = {
+    width: `${menuWidth}px`,
+    left: `${left}px`,
+    top: `${top}px`
+  }
+  paragraphMenuArrowStyle.value = {
+    left: `${arrowLeft}px`,
+    top: `${arrowTop}px`,
+    transform: arrowDirection === 'down' ? 'rotate(45deg)' : 'rotate(225deg)'
+  }
+}
+
 function openParagraphTools(text, index, event, toolbarY) {
   if (!text) return
   selectedParagraph.value = { text, index }
@@ -414,31 +601,26 @@ function openParagraphTools(text, index, event, toolbarY) {
   selectedEnd.value = Math.min(text.length, Math.max(selectedStart.value + 4, Math.floor(text.length * 0.62)))
   paragraphComposerVisible.value = false
   typoFeedbackVisible.value = false
+  paragraphCommentsVisible.value = false
   feedbackText.value = ''
   showTools.value = false
   settingVisible.value = false
-  const commentCount = paragraphCommentCount(index)
-  const itemList = ['段评' + (commentCount ? ` (${commentCount})` : ''), '反馈', '复制', '划线', '分享']
-  uni.showActionSheet({
-    itemList,
-    success: (res) => {
-      if (res.tapIndex === 0) { openParagraphComposer() }
-      else if (res.tapIndex === 1) { openTypoFeedback() }
-      else if (res.tapIndex === 2) { copySelectedParagraph() }
-      else if (res.tapIndex === 3) { highlightParagraph() }
-      else if (res.tapIndex === 4) { shareParagraph() }
-    },
-    complete: () => {
-      if (!paragraphComposerVisible.value && !typoFeedbackVisible.value) {
-        clearParagraphTools()
-      }
-    }
-  })
+  positionParagraphMenu(getEventPoint(event, toolbarY))
+  paragraphMenuVisible.value = true
 }
 
 function openParagraphToolsFromPage(payload) {
   if (!payload?.text) return
-  openParagraphTools(payload.text, payload.index, null, payload.toolbarY)
+  openParagraphTools(payload.text, payload.index, payload, payload.toolbarY)
+}
+
+function runParagraphTool(key) {
+  paragraphMenuVisible.value = false
+  if (key === 'comment') openParagraphComposer()
+  else if (key === 'feedback') openTypoFeedback()
+  else if (key === 'copy') copySelectedParagraph()
+  else if (key === 'highlight') highlightParagraph()
+  else if (key === 'share') shareParagraph()
 }
 
 function startRangeHandle(type) {
@@ -481,11 +663,13 @@ function showParagraphComments(payload) {
 }
 
 function openParagraphComposer() {
+  paragraphMenuVisible.value = false
   paragraphComposerVisible.value = true
   typoFeedbackVisible.value = false
 }
 
 function openTypoFeedback() {
+  paragraphMenuVisible.value = false
   typoFeedbackVisible.value = true
   paragraphComposerVisible.value = false
 }
@@ -495,6 +679,7 @@ function clearParagraphTools() {
   selectedStart.value = 0
   selectedEnd.value = 0
   activeRangeHandle.value = ''
+  paragraphMenuVisible.value = false
   paragraphComposerVisible.value = false
   typoFeedbackVisible.value = false
   paragraphCommentsVisible.value = false
@@ -625,13 +810,7 @@ function onCatalogTap() {
 
 async function jumpChapter(no) {
   catalogVisible.value = false
-  await saveProgress()
-  chapterNo.value = Number(no || 1)
-  position.value = 0
-  scrollTop.value = 0
-  pageModePage.value = 0
-  clearParagraphTools()
-  await loadChapter({ restoreSavedProgress: false })
+  await switchChapter(Number(no || 1), { toLastPage: false })
 }
 
 function onMoreSettings() {
@@ -669,16 +848,7 @@ async function prevChapter() {
     uni.showToast({ title: '已经是第一章', icon: 'none' })
     return
   }
-  await saveProgress()
-  chapterNo.value -= 1
-  pageModePage.value = 0
-  position.value = 0
-  scrollTop.value = 0
-  await loadChapter({ restoreSavedProgress: false })
-  pageModePage.value = Number.MAX_SAFE_INTEGER
-  await nextTick()
-  pageReaderRef.value?.goToLastPage()
-  restartAutoPage()
+  await switchChapter(chapterNo.value - 1, { toLastPage: true })
 }
 
 async function nextChapter() {
@@ -686,18 +856,28 @@ async function nextChapter() {
     uni.showToast({ title: '已经是最后一章', icon: 'none' })
     return
   }
-  await saveProgress()
-  chapterNo.value += 1
-  pageModePage.value = 0
-  position.value = 0
-  scrollTop.value = 0
-  await loadChapter({ restoreSavedProgress: false })
-  if (!chapter.value) {
-    chapterNo.value -= 1
-    uni.showToast({ title: '已经是最后一章', icon: 'none' })
-    await loadChapter()
+  await switchChapter(chapterNo.value + 1, { toLastPage: false })
+}
+
+async function switchChapter(targetChapterNo, { toLastPage = false } = {}) {
+  if (chapterSwitching.value) return
+  if (!bookId.value || !targetChapterNo) return
+  chapterSwitching.value = true
+  saveProgress().catch(() => {})
+  try {
+    const target = await ensureChapterPreloaded(targetChapterNo)
+    if (!target?.content) {
+      loadFailed.value = true
+      uni.showToast({ title: '章节不存在', icon: 'none' })
+      return
+    }
+    const pageQuery = toLastPage ? '&page=last' : ''
+    uni.redirectTo({
+      url: `/pages/reader/reader?bookId=${bookId.value}&chapterNo=${Number(target.chapterNo || targetChapterNo)}${pageQuery}`
+    })
+  } finally {
+    chapterSwitching.value = false
   }
-  restartAutoPage()
 }
 
 const scrollContentHeight = ref(0)
@@ -794,18 +974,36 @@ function resolveReaderQuery(query = {}) {
     const params = new URLSearchParams(queryText)
     if (!resolved.bookId) resolved.bookId = params.get('bookId') || ''
     if (!resolved.chapterNo) resolved.chapterNo = params.get('chapterNo') || ''
+    if (!resolved.page) resolved.page = params.get('page') || ''
   }
   // #endif
+  if (!resolved.bookId) {
+    const last = getLastReaderRoute()
+    if (last?.bookId) {
+      resolved.bookId = last.bookId
+      resolved.chapterNo = resolved.chapterNo || last.chapterNo || 1
+    }
+  }
   return resolved
 }
 
-async function initReader(query) {
-  if (initializing) return
+function syncReaderUrl() {
+  // #ifdef H5
+  if (typeof window === 'undefined' || !bookId.value) return
+  const nextHash = `/pages/reader/reader?bookId=${encodeURIComponent(bookId.value)}&chapterNo=${encodeURIComponent(chapterNo.value)}`
+  if ((window.location.hash || '').replace(/^#/, '') === nextHash) return
+  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${nextHash}`)
+  // #endif
+}
+
+async function initReader(query, options = {}) {
+  if (initializing && !options.force) return
   initializing = true
   const resolved = resolveReaderQuery(query)
   bookId.value = resolved.bookId
   chapterNo.value = Number(resolved.chapterNo || 1)
-  pageModePage.value = 0
+  syncReaderUrl()
+  pageModePage.value = resolved.page === 'last' ? Number.MAX_SAFE_INTEGER : Number(resolved.page || 0)
     if (!bookId.value) {
       currentChapter.value = null
       currentTitle.value = ''
@@ -820,7 +1018,11 @@ async function initReader(query) {
       readerStore.loadSetting().catch(() => {})
     }
     await readerStore.loadChapters(bookId.value)
-    await loadChapter()
+    await loadChapter({ restoreSavedProgress: !resolved.page })
+    if (resolved.page === 'last') {
+      await nextTick()
+      pageReaderRef.value?.goToLastPage()
+    }
     startAutoPage()
   } finally {
     initializing = false
@@ -842,8 +1044,14 @@ async function ensureReaderReady() {
   const resolved = resolveReaderQuery()
   const targetBookId = resolved.bookId || bookId.value
   const targetChapterNo = Number(resolved.chapterNo || chapterNo.value || 1)
-  if (!targetBookId || hasLoadedChapter(targetBookId, targetChapterNo)) return
-  await initReader({ bookId: targetBookId, chapterNo: targetChapterNo })
+  if (!targetBookId) return
+  if (hasLoadedChapter(targetBookId, targetChapterNo)) {
+    bookId.value = targetBookId
+    chapterNo.value = targetChapterNo
+    syncReaderUrl()
+    return
+  }
+  await initReader({ bookId: targetBookId, chapterNo: targetChapterNo }, { force: true })
 }
 
 onLoad((query) => { initReader(query) })
@@ -851,6 +1059,11 @@ onLoad((query) => { initReader(query) })
 onMounted(() => {
   if (showRetryTimer) clearTimeout(showRetryTimer)
   showRetryTimer = setTimeout(ensureReaderReady, 0)
+  // #ifdef H5
+  if (typeof window !== 'undefined') {
+    window.addEventListener('hashchange', ensureReaderReady)
+  }
+  // #endif
 })
 
 onShow(() => {
@@ -867,6 +1080,11 @@ onUnload(() => {
 
 onBeforeUnmount(() => {
   if (showRetryTimer) clearTimeout(showRetryTimer)
+  // #ifdef H5
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('hashchange', ensureReaderReady)
+  }
+  // #endif
   stopAutoPage()
   stopAutoSave()
 })
@@ -996,6 +1214,57 @@ onBeforeUnmount(() => {
 .paragraph-bubble:active {
   background: rgba(58, 58, 58, 0.1);
   color: #3A3A3A;
+}
+
+.paragraph-tools-hitarea {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: transparent;
+}
+
+.paragraph-tools-menu {
+  position: fixed;
+  z-index: 41;
+  display: flex;
+  height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  overflow: visible;
+  border-radius: 7px;
+  background: rgba(19, 19, 19, 0.96);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+}
+
+.paragraph-tools-arrow {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: rgba(19, 19, 19, 0.96);
+}
+
+.paragraph-tools-item {
+  flex: 1;
+  height: 44px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 6px;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
+  color: #FFFFFF;
+  font-size: 13px;
+  line-height: 44px;
+  text-align: center;
+}
+
+.paragraph-tools-item::after {
+  border: 0;
+}
+
+.paragraph-tools-item:active {
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .paragraph-feedback-sheet {

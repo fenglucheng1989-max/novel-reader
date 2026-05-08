@@ -1,5 +1,6 @@
 <template>
   <view
+    ref="readerRootRef"
     class="page-reader"
     :class="{ dragging, 'is-night': theme === 'NIGHT' }"
     :style="rootStyle"
@@ -12,48 +13,9 @@
     @mousemove="onMouseMove"
     @mouseup="onMouseUp"
     @mouseleave="onMouseLeave"
+    @contextmenu.prevent.stop="onCanvasContextMenu"
   >
-    <!-- Base page: always shows what should be visible underneath -->
-    <view class="base-page" :style="pageBoxStyle">
-      <view class="chapter-title">{{ titleText }}</view>
-      <view
-        v-for="line in baseLines"
-        :key="line.key"
-        class="reader-line"
-        :class="{ blank: !line.text }"
-        :style="lineStyle"
-        @longpress.stop="onLineLongPress(line)"
-      >
-        <text>{{ line.text || ' ' }}</text>
-        <text
-          v-if="commentCount(line.paragraphIndex)"
-          class="line-comment"
-          @tap.stop="emit('commentBubbleTap', { paragraphIndex: line.paragraphIndex })"
-        >
-          {{ commentCount(line.paragraphIndex) }}
-        </text>
-      </view>
-    </view>
-
-    <!-- Flip page: the page being animated (only during flip) -->
-    <view
-      v-if="flipActive"
-      class="flip-page"
-      :style="flipPageStyle"
-    >
-      <view class="chapter-title">{{ titleText }}</view>
-      <view
-        v-for="line in flipLines"
-        :key="line.key"
-        class="reader-line"
-        :class="{ blank: !line.text }"
-        :style="lineStyle"
-      >
-        <text>{{ line.text || ' ' }}</text>
-      </view>
-      <view class="spine-shadow" :style="spineShadowStyle" />
-    </view>
-
+    <view ref="canvasHostRef" class="reader-canvas-host" />
     <view class="reader-footer">
       <text>{{ currentPage + 1 }} / {{ totalPages || 1 }}</text>
       <text>{{ progressText }}</text>
@@ -63,7 +25,6 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { paginateText } from '../../../utils/page-engine'
 import { readerThemes } from '../../../utils/reader'
 
 const props = defineProps({
@@ -72,8 +33,8 @@ const props = defineProps({
   title: { type: String, default: '' },
   prevContent: { type: String, default: '' },
   nextContent: { type: String, default: '' },
-  fontSize: { type: Number, default: 18 },
-  lineHeight: { type: Number, default: 32 },
+  fontSize: { type: Number, default: 16 },
+  lineHeight: { type: Number, default: 30 },
   marginX: { type: Number, default: 22 },
   marginY: { type: Number, default: 28 },
   paragraphSpacing: { type: Number, default: 0 },
@@ -81,46 +42,84 @@ const props = defineProps({
   turnMode: { type: String, default: 'PAGE' },
   brightness: { type: Number, default: 80 },
   initialPage: { type: Number, default: 0 },
-  comments: { type: Array, default: () => [] }
+  comments: { type: Array, default: () => [] },
+  toolsVisible: { type: Boolean, default: true }
 })
 
 const emit = defineEmits(['prev', 'next', 'chapterEnd', 'pageChange', 'toggleTools', 'paragraphSelect', 'commentBubbleTap'])
 
 const fontFamily = "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', serif"
-
-// ---- viewport ----
+const readerRootRef = ref(null)
+const canvasHostRef = ref(null)
 const viewWidth = ref(375)
 const viewHeight = ref(667)
+const rootLeft = ref(0)
+const rootTop = ref(0)
+let ctx = null
+let canvasEl = null
+let repaginateTimer = null
+let resizeRaf = null
 
-function updateSize() {
-  // #ifdef H5
-  if (typeof window !== 'undefined') {
-    viewWidth.value = window.innerWidth || 375
-    viewHeight.value = window.innerHeight || 667
-    return
-  }
-  // #endif
-  const sys = uni.getSystemInfoSync()
-  viewWidth.value = sys.windowWidth || 375
-  viewHeight.value = sys.windowHeight || 667
-}
-
-// ---- pagination ----
 const pages = ref([])
 const prevPages = ref([])
 const nextPages = ref([])
 const currentPage = ref(0)
-let repaginateTimer = null
+const flipDirection = ref(1)
+const flipProgress = ref(0)
+const flipActive = ref(false)
+const dragging = ref(false)
+const committing = ref(false)
+const dragStartX = ref(0)
+const dragDeltaX = ref(0)
+let suppressTapUntil = 0
+let suppressMenuUntil = 0
+let velocitySamples = []
+let dragLockedDir = 0
+let longPressTimer = null
+let longPressStart = null
+let animState = null
 
 const totalPages = computed(() => pages.value.length)
 const themeColors = computed(() => readerThemes[props.theme] || readerThemes.DEFAULT)
 const effectiveContent = computed(() => props.chapter?.content || props.content || '')
 const effectiveTitle = computed(() => props.chapter?.title || props.title || '')
 const titleText = computed(() => effectiveTitle.value || pages.value[currentPage.value]?.title || '')
+const effectiveFontSize = computed(() => Math.max(14, Math.min(24, Number(props.fontSize) || 16)))
+const effectiveLineHeight = computed(() => {
+  const minLineHeight = Math.round(effectiveFontSize.value * 1.55)
+  return Math.max(minLineHeight, Math.min(42, Number(props.lineHeight) || minLineHeight))
+})
+const readerTopPadding = 62
+const titleFontSize = 24
+const titleLineHeight = 34
+const titleBottomGap = 24
+const chromeBottomInset = 114
+const titleY = computed(() => readerTopPadding)
+const contentTop = computed(() => titleY.value + titleLineHeight + titleBottomGap)
+const contentBottom = computed(() => props.toolsVisible ? chromeBottomInset + 14 : 44)
 const progressText = computed(() => {
   if (!totalPages.value) return '0%'
   return `${Math.round(((currentPage.value + 1) / totalPages.value) * 100)}%`
 })
+const currentPageData = computed(() => pages.value[currentPage.value] || null)
+const targetPageIndex = computed(() => currentPage.value + flipDirection.value)
+const isBoundaryFlip = computed(() =>
+  (flipDirection.value > 0 && currentPage.value >= totalPages.value - 1) ||
+  (flipDirection.value < 0 && currentPage.value <= 0)
+)
+const boundaryTargetPage = computed(() => {
+  if (!isBoundaryFlip.value) return null
+  if (flipDirection.value > 0) return nextPages.value[0] || null
+  return prevPages.value[prevPages.value.length - 1] || null
+})
+const targetPageData = computed(() => pages.value[targetPageIndex.value] || boundaryTargetPage.value || null)
+const rootStyle = computed(() => ({
+  backgroundColor: themeColors.value.background,
+  color: themeColors.value.text,
+  filter: `brightness(${props.brightness / 100})`,
+  '--reader-bg': themeColors.value.background,
+  '--reader-text': themeColors.value.text
+}))
 
 function normalizeContent(content) {
   return String(content || '')
@@ -135,26 +134,143 @@ function buildPages(sourceContent, sourceTitle) {
   const sourceLines = content.split(/\n+/).map((line) => line.trim()).filter(Boolean)
   const inferredTitle = sourceTitle ? '' : (sourceLines[0] || '')
   const bodyLines = sourceTitle ? sourceLines : sourceLines.slice(1)
-  const body = (bodyLines.length ? bodyLines : sourceLines).join('\n\n')
-  const result = paginateText(body, {
-    width: viewWidth.value,
-    height: viewHeight.value,
-    fontSize: props.fontSize,
-    lineHeight: props.lineHeight,
-    paddingX: props.marginX,
-    paddingY: props.marginY + 18,
-    paragraphSpacing: props.paragraphSpacing,
-    fontFamily
+  const paragraphs = (bodyLines.length ? bodyLines : sourceLines).filter(Boolean)
+  const pageList = []
+  let pageLines = []
+  let usedHeight = 0
+  const maxLineWidth = Math.max(40, viewWidth.value - props.marginX * 2)
+  const maxPageHeight = Math.max(effectiveLineHeight.value, viewHeight.value - contentTop.value - contentBottom.value)
+  const paragraphGap = Math.max(0, Number(props.paragraphSpacing || 0))
+
+  function pushPage() {
+    if (!pageLines.length) return
+    pageList.push({
+      index: pageList.length,
+      title: pageList.length === 0 ? inferredTitle : '',
+      lines: pageLines
+    })
+    pageLines = []
+    usedHeight = 0
+  }
+
+  function pushLine(text, paragraphIndex) {
+    const nextHeight = effectiveLineHeight.value + (pageLines.length ? paragraphGap : 0)
+    if (pageLines.length && usedHeight + nextHeight > maxPageHeight) pushPage()
+    pageLines.push({
+      key: `${pageList.length}-${pageLines.length}-${text}`,
+      text,
+      paragraphIndex
+    })
+    usedHeight += nextHeight
+  }
+
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    const lines = wrapCanvasText(paragraph, maxLineWidth)
+    lines.forEach((line) => pushLine(line, paragraphIndex))
   })
-  return (result.length ? result : [{ index: 0, lines: ['（本章无内容）'] }]).map((page, pageIndex) => ({
-    index: pageIndex,
-    title: pageIndex === 0 ? inferredTitle : '',
-    lines: page.lines.map((line, lineIndex) => ({
-      key: `${pageIndex}-${lineIndex}-${line}`,
-      text: line,
-      paragraphIndex: page.paragraphIndexes?.[lineIndex] ?? lineIndex
-    }))
-  }))
+
+  pushPage()
+  if (!pageList.length) {
+    return [{ index: 0, title: inferredTitle, lines: [{ key: '0-0-empty', text: '（本章无内容）', paragraphIndex: 0 }] }]
+  }
+  return pageList
+}
+
+function wrapCanvasText(text, maxWidth) {
+  const chars = [...String(text || '')]
+  const lines = []
+  let line = ''
+  ensureMeasureFont()
+  for (const ch of chars) {
+    const next = line + ch
+    if (line && measureCanvasText(next) > maxWidth) {
+      lines.push(line)
+      line = ch
+    } else {
+      line = next
+    }
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
+function ensureMeasureFont() {
+  if (!ctx) setupCanvas()
+  if (ctx) ctx.font = canvasTextFont()
+}
+
+function canvasTextFont(weight = 400, scale = 1) {
+  return `${weight} ${Math.round(effectiveFontSize.value * scale)}px ${fontFamily}`
+}
+
+function canvasTitleFont() {
+  return `700 ${titleFontSize}px ${fontFamily}`
+}
+
+function measureCanvasText(text) {
+  if (ctx) return ctx.measureText(text).width
+  let width = 0
+  for (const ch of String(text || '')) {
+    width += /[一-鿿　-〿＀-￯]/.test(ch) ? effectiveFontSize.value : effectiveFontSize.value * 0.58
+  }
+  return width
+}
+
+function getCanvasElement() {
+  // #ifdef H5
+  if (typeof document !== 'undefined') {
+    const host = canvasHostRef.value?.$el || canvasHostRef.value
+    if (!host) return null
+    if (!canvasEl) {
+      canvasEl = document.createElement('canvas')
+      canvasEl.className = 'reader-canvas'
+      canvasEl.setAttribute('aria-hidden', 'true')
+      host.innerHTML = ''
+      host.appendChild(canvasEl)
+    }
+    return canvasEl
+  }
+  // #endif
+  return null
+}
+
+function updateSize() {
+  // #ifdef H5
+  if (typeof window !== 'undefined') {
+    const root = readerRootRef.value?.$el || readerRootRef.value
+    const rect = root?.getBoundingClientRect?.()
+    if (rect?.width && rect?.height) {
+      viewWidth.value = Math.floor(rect.width)
+      viewHeight.value = Math.floor(rect.height)
+      rootLeft.value = rect.left || 0
+      rootTop.value = rect.top || 0
+      setupCanvas()
+      return
+    }
+  }
+  // #endif
+  const sys = uni.getSystemInfoSync()
+  viewWidth.value = sys.windowWidth || 375
+  viewHeight.value = sys.windowHeight || 667
+}
+
+function setupCanvas() {
+  // #ifdef H5
+  const canvas = getCanvasElement()
+  if (!canvas?.getContext) return
+  const dpr = Math.min(2, window.devicePixelRatio || 1)
+  const width = Math.max(1, Math.floor(viewWidth.value))
+  const height = Math.max(1, Math.floor(viewHeight.value))
+  const pw = Math.floor(width * dpr)
+  const ph = Math.floor(height * dpr)
+  if (canvas.width !== pw) canvas.width = pw
+  if (canvas.height !== ph) canvas.height = ph
+  canvas.style.setProperty('width', `${width}px`, 'important')
+  canvas.style.setProperty('height', `${height}px`, 'important')
+  canvas.style.setProperty('display', 'block', 'important')
+  ctx = canvas.getContext('2d')
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  // #endif
 }
 
 function paginate() {
@@ -165,6 +281,7 @@ function paginate() {
   const nextPage = Math.max(0, Math.min(Number(props.initialPage || 0), pages.value.length - 1))
   currentPage.value = nextPage
   emit('pageChange', nextPage)
+  drawReader()
 }
 
 function schedulePaginate() {
@@ -176,50 +293,112 @@ function schedulePaginate() {
   })
 }
 
-// ---- page content ----
-const currentLines = computed(() => pages.value[currentPage.value]?.lines || [])
+function clearCanvas() {
+  if (!ctx) return
+  ctx.save()
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+  ctx.clearRect(0, 0, viewWidth.value, viewHeight.value)
+  ctx.fillStyle = themeColors.value.background
+  ctx.fillRect(0, 0, viewWidth.value, viewHeight.value)
+  ctx.restore()
+}
 
-const targetPageIndex = computed(() => currentPage.value + flipDirection.value)
+function drawPage(page, offsetX = 0, shadow = false) {
+  if (!ctx || !page) return
+  const width = viewWidth.value
+  const height = viewHeight.value
+  const x = Math.round(offsetX)
+  ctx.save()
+  ctx.translate(x, 0)
+  ctx.fillStyle = themeColors.value.background
+  ctx.fillRect(0, 0, width, height)
+  if (shadow) {
+    ctx.shadowColor = 'rgba(0,0,0,0.22)'
+    ctx.shadowBlur = 18
+    ctx.shadowOffsetX = flipDirection.value > 0 ? -8 : 8
+    ctx.fillRect(0, 0, width, height)
+    ctx.shadowColor = 'transparent'
+  }
 
-const isBoundaryFlip = computed(() =>
-  (flipDirection.value > 0 && currentPage.value >= totalPages.value - 1) ||
-  (flipDirection.value < 0 && currentPage.value <= 0)
-)
+  ctx.fillStyle = themeColors.value.text
+  ctx.textBaseline = 'top'
+  ctx.textAlign = 'left'
+  ctx.font = canvasTitleFont()
+  const title = titleText.value || page.title || ''
+  if (title) {
+    ctx.fillText(title, props.marginX, titleY.value)
+  }
 
-const boundaryTargetPage = computed(() => {
-  if (!isBoundaryFlip.value) return null
-  if (flipDirection.value > 0) return nextPages.value[0] || null
-  return prevPages.value[prevPages.value.length - 1] || null
-})
+  ctx.font = canvasTextFont()
+  const lineHeight = effectiveLineHeight.value
+  const maxY = height - contentBottom.value
+  let y = contentTop.value
+  for (const line of page.lines || []) {
+    if (y + lineHeight > maxY) break
+    ctx.fillText(line.text || ' ', props.marginX, y)
+    const count = commentCount(line.paragraphIndex)
+    if (count) drawCommentBadge(count, props.marginX + Math.min(width - props.marginX * 2 - 28, ctx.measureText(line.text || '').width + 8), y + 2)
+    y += lineHeight + Number(props.paragraphSpacing || 0)
+  }
+  ctx.restore()
+}
 
-const targetPage = computed(() => pages.value[targetPageIndex.value] || boundaryTargetPage.value || null)
-const targetLines = computed(() => targetPage.value?.lines || [])
+function drawCommentBadge(count, x, y) {
+  const text = String(count)
+  const badgeW = Math.max(20, 12 + text.length * 6)
+  ctx.save()
+  ctx.fillStyle = 'rgba(255,255,255,0.72)'
+  ctx.strokeStyle = 'rgba(0,0,0,0.08)'
+  roundedRect(ctx, x, y, badgeW, 18, 9)
+  ctx.fill()
+  ctx.stroke()
+  ctx.fillStyle = '#8C7B62'
+  ctx.font = '11px sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(text, x + badgeW / 2, y + 9)
+  ctx.restore()
+}
 
-// baseLines: content underneath the flip page.
-// PAGE animation → target content revealed as page slides away.
-// COVER animation → current content stays in place as cover slides over.
-// Idle → current content.
-const baseLines = computed(() => {
-  if (flipActive.value && props.turnMode === 'PAGE') return targetLines.value
-  return currentLines.value
-})
+function roundedRect(context, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2)
+  context.beginPath()
+  context.moveTo(x + r, y)
+  context.lineTo(x + width - r, y)
+  context.quadraticCurveTo(x + width, y, x + width, y + r)
+  context.lineTo(x + width, y + height - r)
+  context.quadraticCurveTo(x + width, y + height, x + width - r, y + height)
+  context.lineTo(x + r, y + height)
+  context.quadraticCurveTo(x, y + height, x, y + height - r)
+  context.lineTo(x, y + r)
+  context.quadraticCurveTo(x, y, x + r, y)
+  context.closePath()
+}
 
-// flipLines: the animated layer content.
-// COVER → target content (new page sliding in).
-// PAGE → current content (sliding/tilting away).
-const flipLines = computed(() => {
-  if (props.turnMode === 'COVER') return targetLines.value
-  return currentLines.value
-})
+function drawReader() {
+  if (!ctx) {
+    setupCanvas()
+    if (!ctx) return
+  }
+  clearCanvas()
+  if (!flipActive.value) {
+    drawPage(currentPageData.value, 0, false)
+    return
+  }
 
-// ---- rAF animation engine ----
-let animState = null
+  const width = viewWidth.value
+  const progress = Math.max(0, Math.min(1, flipProgress.value))
+  const dir = flipDirection.value
+  const current = currentPageData.value
+  const target = targetPageData.value || current
+  drawPage(current, 0, false)
+  const offset = dir > 0 ? (1 - progress) * width : -(1 - progress) * width
+  drawPage(target, offset, true)
+}
 
 function cancelAnim() {
-  if (animState?.rafId) {
-    cancelAnimationFrame(animState.rafId)
-    animState.rafId = null
-  }
+  if (animState?.timeoutId) clearTimeout(animState.timeoutId)
+  if (animState?.rafId) cancelAnimationFrame(animState.rafId)
   animState = null
 }
 
@@ -233,37 +412,32 @@ function easeInOutCubic(t) {
 
 function animateTo(from, to, duration, easing, onDone) {
   cancelAnim()
-  const state = { from, to, duration, easing, startTime: performance.now(), rafId: null, onDone }
+  const state = { from, to, duration, easing, startTime: performance.now(), rafId: null, timeoutId: null, onDone }
   animState = state
+
+  function complete() {
+    if (animState !== state) return
+    if (state.timeoutId) clearTimeout(state.timeoutId)
+    if (state.rafId) cancelAnimationFrame(state.rafId)
+    flipProgress.value = state.to
+    drawReader()
+    animState = null
+    state.onDone?.()
+  }
 
   function tick(now) {
     if (animState !== state) return
     const elapsed = now - state.startTime
     const t = Math.min(1, elapsed / state.duration)
     flipProgress.value = state.from + (state.to - state.from) * state.easing(t)
-
-    if (t < 1) {
-      state.rafId = requestAnimationFrame(tick)
-    } else {
-      animState = null
-      state.rafId = null
-      if (state.onDone) state.onDone()
-    }
+    drawReader()
+    if (t < 1) state.rafId = requestAnimationFrame(tick)
+    else complete()
   }
+
+  state.timeoutId = setTimeout(complete, duration + 160)
   state.rafId = requestAnimationFrame(tick)
 }
-
-// ---- flip state ----
-const flipDirection = ref(1)
-const flipProgress = ref(0)
-const flipActive = ref(false)
-const dragging = ref(false)
-const committing = ref(false)
-const dragStartX = ref(0)
-const dragDeltaX = ref(0)
-let suppressTapUntil = 0
-let velocitySamples = []
-let dragLockedDir = 0 // direction locked on first move
 
 function beginFlip(direction, progress) {
   if (committing.value) return false
@@ -273,6 +447,7 @@ function beginFlip(direction, progress) {
   flipDirection.value = direction
   flipProgress.value = progress
   flipActive.value = props.turnMode !== 'NONE'
+  drawReader()
   return true
 }
 
@@ -280,26 +455,29 @@ function finishFlip() {
   flipProgress.value = 0
   flipActive.value = false
   committing.value = false
+  drawReader()
+}
+
+function applyPageChange() {
+  const next = currentPage.value + flipDirection.value
+  currentPage.value = Math.max(0, Math.min(next, totalPages.value - 1))
+  emit('pageChange', currentPage.value)
+  if (currentPage.value >= totalPages.value - 1) emit('chapterEnd')
 }
 
 function settleFlip(shouldCommit) {
   if (props.turnMode === 'NONE') {
     if (shouldCommit) applyPageChange()
-    else finishFlip()
+    finishFlip()
     return
   }
-
   if (!shouldCommit) {
     committing.value = true
-    const duration = Math.max(160, 280 * (1 - flipProgress.value))
-    animateTo(flipProgress.value, 0, duration, easeInOutCubic, finishFlip)
+    animateTo(flipProgress.value, 0, 170, easeInOutCubic, finishFlip)
     return
   }
-
   committing.value = true
-  const remaining = 1 - flipProgress.value
-  const duration = Math.max(200, Math.min(420, remaining * 500))
-  animateTo(flipProgress.value, 1, duration, easeOutCubic, () => {
+  animateTo(flipProgress.value, 1, 220, easeOutCubic, () => {
     if (isBoundaryFlip.value) {
       const dir = flipDirection.value
       finishFlip()
@@ -312,13 +490,6 @@ function settleFlip(shouldCommit) {
   })
 }
 
-function applyPageChange() {
-  const next = currentPage.value + flipDirection.value
-  currentPage.value = Math.max(0, Math.min(next, totalPages.value - 1))
-  emit('pageChange', currentPage.value)
-  if (currentPage.value >= totalPages.value - 1) emit('chapterEnd')
-}
-
 function flipBy(direction) {
   if (direction > 0 && currentPage.value >= totalPages.value - 1 && !nextPages.value.length) {
     emit('next')
@@ -328,17 +499,16 @@ function flipBy(direction) {
     emit('prev')
     return
   }
-
   if (props.turnMode === 'NONE') {
     if (direction > 0 && currentPage.value >= totalPages.value - 1) { emit('next'); return }
     if (direction < 0 && currentPage.value <= 0) { emit('prev'); return }
     currentPage.value += direction
     emit('pageChange', currentPage.value)
+    drawReader()
     return
   }
-
   if (beginFlip(direction, 0.02)) {
-    animateTo(0.02, 1, 360, easeOutCubic, () => {
+    animateTo(0.02, 1, 220, easeOutCubic, () => {
       if (isBoundaryFlip.value) {
         const dir = flipDirection.value
         finishFlip()
@@ -352,7 +522,6 @@ function flipBy(direction) {
   }
 }
 
-// ---- drag (with direction locking) ----
 function startDrag(clientX) {
   if (committing.value) return
   cancelAnim()
@@ -367,36 +536,33 @@ function moveDrag(clientX) {
   if (!dragging.value || committing.value) return
   const now = performance.now()
   dragDeltaX.value = clientX - dragStartX.value
-
-  // Lock direction on first significant move
+  if (Math.abs(dragDeltaX.value) > 8) {
+    clearLongPressTimer()
+    suppressMenuUntil = Date.now() + 700
+  }
   if (!flipActive.value) {
     const absDx = Math.abs(dragDeltaX.value)
-    if (absDx < 2) return // dead zone
+    if (absDx < 3) return
     dragLockedDir = dragDeltaX.value < 0 ? 1 : -1
     if (!beginFlip(dragLockedDir, 0.01)) {
       dragLockedDir = 0
       return
     }
   }
-
-  // Progress only in locked direction; reversing snaps back to 0 smoothly
   const dx = dragDeltaX.value
   const inLockedDir = dragLockedDir > 0 ? -dx : dx
-  const rawProgress = Math.max(0, inLockedDir) / Math.max(1, viewWidth.value * 0.78)
-  flipProgress.value = Math.min(0.98, rawProgress)
-
+  flipProgress.value = Math.min(0.98, Math.max(0, inLockedDir) / Math.max(1, viewWidth.value * 0.72))
+  drawReader()
   velocitySamples.push({ x: clientX, t: now })
-  while (velocitySamples.length > 1 && now - velocitySamples[0].t > 100) {
-    velocitySamples.shift()
-  }
+  while (velocitySamples.length > 1 && now - velocitySamples[0].t > 100) velocitySamples.shift()
 }
 
 function endDrag() {
   if (!dragging.value) return
+  clearLongPressTimer()
   const distance = Math.abs(dragDeltaX.value)
   if (distance > 8) suppressTapUntil = Date.now() + 320
   dragging.value = false
-
   let velocity = 0
   if (velocitySamples.length > 1) {
     const first = velocitySamples[0]
@@ -405,52 +571,115 @@ function endDrag() {
     if (dt > 0) velocity = (last.x - first.x) / dt
   }
   velocitySamples = []
-
-  // Velocity relative to flip direction
   const velocityInFlipDir = velocity * (dragLockedDir > 0 ? -1 : 1)
-  const fastFlick = velocityInFlipDir > 0.35
-  const threshold = Math.max(36, viewWidth.value * 0.1)
-  const shouldCommit = distance > threshold || fastFlick
-
+  const shouldCommit = distance > Math.max(34, viewWidth.value * 0.1) || velocityInFlipDir > 0.32
   dragLockedDir = 0
   dragDeltaX.value = 0
   if (flipActive.value) settleFlip(shouldCommit)
 }
 
-// ---- input handlers ----
-function onTap(event) {
-  if (Date.now() < suppressTapUntil) return
-  if (dragging.value || committing.value) return
-  const x = event?.detail?.x ?? event?.changedTouches?.[0]?.clientX ?? viewWidth.value / 2
-  const ratio = x / viewWidth.value
+function handlePointTap(clientX) {
+  const localX = Math.max(0, Math.min(viewWidth.value, clientX - rootLeft.value))
+  const ratio = localX / viewWidth.value
   if (ratio < 0.28) flipBy(-1)
   else if (ratio > 0.72) flipBy(1)
   else emit('toggleTools')
 }
 
+function onTap(event) {
+  if (Date.now() < suppressTapUntil) return
+  if (dragging.value || committing.value) return
+  const x = event?.detail?.x ?? event?.changedTouches?.[0]?.clientX ?? viewWidth.value / 2
+  handlePointTap(x)
+}
+
 function onTouchStart(event) {
   const touch = event.touches?.[0]
-  if (touch) startDrag(touch.clientX)
+  if (touch) {
+    startDrag(touch.clientX)
+    scheduleLongPress(touch.clientX, touch.clientY)
+  }
 }
 
 function onTouchMove(event) {
   const touch = event.touches?.[0]
-  if (touch) moveDrag(touch.clientX)
+  if (!touch) return
+  if (longPressStart && Math.abs(touch.clientY - longPressStart.y) > 8) {
+    clearLongPressTimer()
+    suppressMenuUntil = Date.now() + 700
+  }
+  moveDrag(touch.clientX)
 }
 
-function onTouchEnd() { endDrag() }
+function onTouchEnd() {
+  clearLongPressTimer()
+  endDrag()
+}
 
 function onMouseDown(event) { startDrag(event.clientX) }
 function onMouseMove(event) { moveDrag(event.clientX) }
-function onMouseUp() { endDrag() }
+function onMouseUp(event) {
+  const distance = Math.abs(dragDeltaX.value)
+  const wasDragging = dragging.value
+  endDrag()
+  if (wasDragging && distance <= 8 && Date.now() >= suppressTapUntil && !committing.value) {
+    handlePointTap(event.clientX)
+    suppressTapUntil = Date.now() + 140
+  }
+}
 function onMouseLeave() { endDrag() }
 
-function onLineLongPress(line) {
-  if (!line?.text) return
+function clearLongPressTimer() {
+  if (longPressTimer) clearTimeout(longPressTimer)
+  longPressTimer = null
+  longPressStart = null
+}
+
+function lineAtPoint(x, y) {
+  const localY = y - rootTop.value
+  const index = Math.floor((localY - contentTop.value) / Math.max(1, effectiveLineHeight.value + Number(props.paragraphSpacing || 0)))
+  return currentPageData.value?.lines?.[index] || null
+}
+
+function scheduleLongPress(clientX, clientY) {
+  clearLongPressTimer()
+  longPressStart = { x: clientX, y: clientY }
+  longPressTimer = setTimeout(() => {
+    const start = longPressStart
+    clearLongPressTimer()
+    if (!start || committing.value || flipActive.value || Math.abs(dragDeltaX.value) > 8) return
+    const line = lineAtPoint(start.x, start.y)
+    if (line?.text) emitParagraphSelect(line, start.x, start.y)
+  }, 540)
+}
+
+function onCanvasContextMenu(event) {
+  const point = getEventPoint(event)
+  const line = lineAtPoint(point.x, point.y)
+  if (line?.text) emitParagraphSelect(line, point.x, point.y)
+}
+
+function getEventPoint(event) {
+  const source = event?.touches?.[0] || event?.changedTouches?.[0] || event?.detail || event || {}
+  const x = Number(source.clientX ?? source.x ?? source.pageX ?? viewWidth.value / 2)
+  const y = Number(source.clientY ?? source.y ?? source.pageY ?? contentTop.value)
+  return {
+    x: Number.isFinite(x) ? x : viewWidth.value / 2,
+    y: Number.isFinite(y) ? y : contentTop.value
+  }
+}
+
+function emitParagraphSelect(line, x, y) {
+  if (Date.now() < suppressMenuUntil || flipActive.value || committing.value) return
+  suppressTapUntil = Date.now() + 420
+  dragging.value = false
+  dragDeltaX.value = 0
   emit('paragraphSelect', {
     text: line.text,
     index: line.paragraphIndex,
-    toolbarY: props.marginY + 80
+    x,
+    y,
+    toolbarY: y
   })
 }
 
@@ -459,104 +688,50 @@ function commentCount(paragraphIndex) {
   return props.comments.filter((item) => Number(item.paragraphIndex) === Number(paragraphIndex)).length
 }
 
-// ---- exposed ----
 function goToPage(idx) {
   const next = Math.max(0, Math.min(Number(idx || 0), totalPages.value - 1))
   currentPage.value = next
   emit('pageChange', next)
+  drawReader()
 }
 
-// ---- styles ----
-const rootStyle = computed(() => ({
-  backgroundColor: themeColors.value.background,
-  color: themeColors.value.text,
-  filter: `brightness(${props.brightness / 100})`,
-  '--reader-bg': themeColors.value.background,
-  '--reader-text': themeColors.value.text
-}))
-
-const pageBoxStyle = computed(() => ({
-  padding: `${props.marginY}px ${props.marginX}px ${Math.max(props.marginY, 46)}px`,
-  fontSize: `${props.fontSize}px`,
-  lineHeight: `${props.lineHeight}px`,
-  fontFamily
-}))
-
-const lineStyle = computed(() => ({
-  marginBottom: `${props.paragraphSpacing}px`
-}))
-
-const flipPageStyle = computed(() => {
-  if (props.turnMode === 'COVER') {
-    // COVER: smooth horizontal slide, no rotation
-    const offset = flipDirection.value > 0
-      ? (1 - flipProgress.value) * viewWidth.value
-      : -(1 - flipProgress.value) * viewWidth.value
-    return {
-      ...pageBoxStyle.value,
-      willChange: 'transform',
-      transform: `translate3d(${offset}px, 0, 0)`,
-      boxShadow: `0 0 28px rgba(0,0,0,${0.06 + flipProgress.value * 0.12})`
-    }
-  }
-
-  // PAGE mode: slide + subtle perspective tilt
-  const isForward = flipDirection.value > 0
-  const slideX = isForward
-    ? -flipProgress.value * viewWidth.value
-    : flipProgress.value * viewWidth.value
-  const tilt = Math.sin(flipProgress.value * Math.PI) * 28
-  const tiltAngle = isForward ? -tilt : tilt
-  const originX = isForward ? 'left' : 'right'
-
-  return {
-    ...pageBoxStyle.value,
-    willChange: 'transform',
-    transformOrigin: `${originX} center`,
-    transform: `perspective(1000px) translate3d(${slideX}px, 0, 0) rotateY(${tiltAngle}deg)`,
-    boxShadow: flipProgress.value > 0.02
-      ? `0 0 28px rgba(0,0,0,${0.06 + tilt * 0.012})`
-      : 'none'
-  }
-})
-
-const spineShadowStyle = computed(() => {
-  if (props.turnMode !== 'PAGE') return { opacity: 0 }
-  const tilt = Math.sin(flipProgress.value * Math.PI)
-  const gradientDir = flipDirection.value > 0 ? '90deg' : '270deg'
-  return {
-    opacity: tilt * 0.45,
-    background: `linear-gradient(${gradientDir}, rgba(0,0,0,0.22) 0%, transparent 45%)`
-  }
-})
-
-// ---- watchers ----
 watch(
-  () => [props.chapter?.id, props.chapter?.content, props.chapter?.title, props.content, props.title, props.fontSize, props.lineHeight, props.marginX, props.marginY, props.paragraphSpacing, props.prevContent, props.nextContent],
+  () => [props.chapter?.id, props.chapter?.content, props.chapter?.title, props.content, props.title, props.fontSize, props.lineHeight, props.marginX, props.marginY, props.paragraphSpacing, props.prevContent, props.nextContent, props.theme, props.toolsVisible],
   schedulePaginate,
   { immediate: true }
 )
-watch(() => props.theme, () => nextTick(updateSize))
+
 watch(() => props.initialPage, (val) => {
   if (!totalPages.value) return
   goToPage(Number(val || 0))
+})
+
+watch(() => [currentPage.value, flipActive.value, flipProgress.value, props.brightness], () => {
+  nextTick(drawReader)
 })
 
 onMounted(() => {
   schedulePaginate()
   // #ifdef H5
   if (typeof window !== 'undefined') {
-    window.addEventListener('resize', schedulePaginate)
+    window.addEventListener('resize', onResize)
   }
   // #endif
 })
 
+function onResize() {
+  if (resizeRaf) cancelAnimationFrame(resizeRaf)
+  resizeRaf = requestAnimationFrame(schedulePaginate)
+}
+
 onBeforeUnmount(() => {
   cancelAnim()
+  clearLongPressTimer()
   if (repaginateTimer) clearTimeout(repaginateTimer)
+  if (resizeRaf) cancelAnimationFrame(resizeRaf)
   // #ifdef H5
   if (typeof window !== 'undefined') {
-    window.removeEventListener('resize', schedulePaginate)
+    window.removeEventListener('resize', onResize)
   }
   // #endif
 })
@@ -581,78 +756,25 @@ defineExpose({
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
-  perspective: 1000px;
   user-select: none;
   touch-action: none;
   -webkit-user-select: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background: var(--reader-bg);
 }
 
-.base-page {
+.reader-canvas-host {
   position: absolute;
   inset: 0;
-  z-index: 1;
-  box-sizing: border-box;
-  overflow: hidden;
-  background: var(--reader-bg);
-  color: var(--reader-text);
+  width: 100%;
+  height: 100%;
 }
 
-.flip-page {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  box-sizing: border-box;
-  overflow: hidden;
-  background: var(--reader-bg);
-  color: var(--reader-text);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  transform-style: preserve-3d;
-}
-
-.chapter-title {
-  min-height: 28px;
-  margin-bottom: 18px;
-  font-size: 1.16em;
-  line-height: 1.45;
-  font-weight: 800;
-}
-
-.reader-line {
-  position: relative;
-  min-height: 1em;
-  text-align: justify;
-  word-break: break-all;
-  overflow-wrap: anywhere;
-}
-
-.reader-line.blank {
-  opacity: 0;
-}
-
-.line-comment {
-  display: inline-flex;
-  min-width: 20px;
-  height: 18px;
-  align-items: center;
-  justify-content: center;
-  margin-left: 6px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #8C7B62;
-  font-size: 11px;
-  line-height: 18px;
-}
-
-.spine-shadow {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  pointer-events: none;
-  mix-blend-mode: multiply;
+:deep(.reader-canvas) {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
 }
 
 .reader-footer {

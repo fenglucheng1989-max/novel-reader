@@ -31,7 +31,7 @@ export function themeStyle(setting) {
   return {
     backgroundColor: theme.background,
     color: theme.text,
-    fontSize: `${setting.fontSize || 18}px`,
-    lineHeight: `${setting.lineHeight || 32}px`
+    fontSize: `${Math.max(14, Math.min(24, Number(setting.fontSize) || 16))}px`,
+    lineHeight: `${setting.lineHeight || 30}px`
   }
 }

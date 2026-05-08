@@ -35,6 +35,8 @@ body {
   margin: 0;
   background: #E8E8E4;
   overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 #app {
@@ -45,6 +47,8 @@ body {
     linear-gradient(180deg, #FAFAF8 0%, #F5F5F2 40%, #F8F8F6 100%);
   box-shadow: 0 0 42px rgba(0, 0, 0, 0.08);
   overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 .product-page {

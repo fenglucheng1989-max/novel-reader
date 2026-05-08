@@ -10,13 +10,13 @@ import { request } from '../utils/request'
 
 /** @type {ReadingSetting} */
 const defaultSetting = {
-  fontSize: 18,
-  lineHeight: 32,
+  fontSize: 16,
+  lineHeight: 30,
   marginX: 22,
   marginY: 28,
   paragraphSpacing: 0,
   theme: 'DEFAULT',
-  turnMode: 'PAGE',
+  turnMode: 'COVER',
   autoPageEnabled: false,
   autoPageInterval: 15,
   showComments: false
@@ -41,6 +41,9 @@ function unwrapStorageValue(value) {
   return value
 }
 
+const chapterRequests = new Map()
+const CHAPTER_CACHE_VERSION = 'v3'
+
 export const useReaderStore = defineStore('reader', {
   state: () => ({
     /** @type {Chapter|null} */
@@ -56,14 +59,19 @@ export const useReaderStore = defineStore('reader', {
   }),
   actions: {
     getChapterCacheKey(bookId, chapterNo) {
-      return `chapter:v2:${bookId}:${chapterNo}`
+      return `chapter:${CHAPTER_CACHE_VERSION}:${bookId}:${chapterNo}`
+    },
+    isChapterForRequest(chapter, bookId, chapterNo) {
+      return isFullChapter(chapter) &&
+        String(chapter.bookId) === String(bookId) &&
+        Number(chapter.chapterNo) === Number(chapterNo)
     },
     getCachedChapter(bookId, chapterNo) {
       const cacheKey = this.getChapterCacheKey(bookId, chapterNo)
       const memoryCached = unwrapStorageValue(this.chapterCache[cacheKey])
-      if (isFullChapter(memoryCached)) return memoryCached
+      if (this.isChapterForRequest(memoryCached, bookId, chapterNo)) return memoryCached
       const cached = unwrapStorageValue(uni.getStorageSync(cacheKey))
-      if (isFullChapter(cached)) {
+      if (this.isChapterForRequest(cached, bookId, chapterNo)) {
         this.chapterCache = { ...this.chapterCache, [cacheKey]: cached }
         return cached
       }
@@ -73,7 +81,7 @@ export const useReaderStore = defineStore('reader', {
       return null
     },
     setCachedChapter(bookId, chapterNo, chapter) {
-      if (!isFullChapter(chapter)) return
+      if (!this.isChapterForRequest(chapter, bookId, chapterNo)) return
       const cacheKey = this.getChapterCacheKey(bookId, chapterNo)
       this.chapterCache = { ...this.chapterCache, [cacheKey]: chapter }
       uni.setStorageSync(cacheKey, chapter)
@@ -91,7 +99,16 @@ export const useReaderStore = defineStore('reader', {
         this.$patch({ chapter: cached })
         return { code: 200, message: 'success', data: cached, cached: true }
       }
-      const res = await request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}`, noAuth: true })
+      const requestKey = this.getChapterCacheKey(bookId, chapterNo)
+      const pending = chapterRequests.get(requestKey)
+      const res = pending
+        ? await pending
+        : await (() => {
+          const req = request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}`, noAuth: true })
+            .finally(() => chapterRequests.delete(requestKey))
+          chapterRequests.set(requestKey, req)
+          return req
+        })()
       if (res.code === 200) {
         this.$patch({ chapter: res.data })
         this.setCachedChapter(bookId, chapterNo, res.data)
@@ -102,7 +119,16 @@ export const useReaderStore = defineStore('reader', {
       if (!bookId || !chapterNo) return null
       const cached = this.getCachedChapter(bookId, chapterNo)
       if (cached) return cached
-      const res = await request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}`, noAuth: true })
+      const requestKey = this.getChapterCacheKey(bookId, chapterNo)
+      const pending = chapterRequests.get(requestKey)
+      const res = pending
+        ? await pending
+        : await (() => {
+          const req = request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}`, noAuth: true })
+            .finally(() => chapterRequests.delete(requestKey))
+          chapterRequests.set(requestKey, req)
+          return req
+        })()
       if (res.code === 200) {
         this.setCachedChapter(bookId, chapterNo, res.data)
         return res.data

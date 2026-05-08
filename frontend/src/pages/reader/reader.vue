@@ -56,7 +56,7 @@
     <ViewPageReader
       v-else-if="rawContent"
       class="reader-brightness-layer"
-      :key="`${readerRenderKey}-${bookId}-${chapterNo}-${(currentContent || chapter?.content || '').length}`"
+      :key="`${readerRenderKey}-${bookId}`"
       ref="pageReaderRef"
       :chapter="currentChapter || readerStore.chapter"
       :title="chapter?.title || currentTitle"
@@ -867,14 +867,30 @@ async function switchChapter(targetChapterNo, { toLastPage = false } = {}) {
   try {
     const target = await ensureChapterPreloaded(targetChapterNo)
     if (!target?.content) {
-      loadFailed.value = true
       uni.showToast({ title: '章节不存在', icon: 'none' })
       return
     }
-    const pageQuery = toLastPage ? '&page=last' : ''
-    uni.redirectTo({
-      url: `/pages/reader/reader?bookId=${bookId.value}&chapterNo=${Number(target.chapterNo || targetChapterNo)}${pageQuery}`
-    })
+    stopAutoPage()
+    chapterNo.value = Number(targetChapterNo)
+    // Update data in-place so ViewPageReader stays mounted and repaginates
+    currentChapter.value = { ...target }
+    currentTitle.value = target.title || ''
+    currentContent.value = target.content || ''
+    readerStore.$patch({ chapter: target })
+    saveLastReaderRoute()
+    loadFailed.value = false
+    pageModePage.value = toLastPage ? Number.MAX_SAFE_INTEGER : 0
+    position.value = 0
+    syncReaderUrl()
+    await nextTick()
+    if (toLastPage) {
+      pageReaderRef.value?.goToLastPage()
+    } else {
+      pageReaderRef.value?.goToPage?.(0)
+    }
+    preloadAdjacentChapters()
+    loadChapterComments()
+    startAutoPage()
   } finally {
     chapterSwitching.value = false
   }

@@ -1,7 +1,7 @@
 <template>
-  <view class="reader-root" :style="brightnessStyle">
+  <view class="reader-root">
     <!-- ==================== SCROLL mode ==================== -->
-    <view v-if="readerStore.setting.turnMode === 'SCROLL'" class="reader" :style="pageStyle" @tap="onContentTap">
+    <view v-if="readerStore.setting.turnMode === 'SCROLL'" class="reader reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }" @tap="onContentTap">
       <scroll-view class="content-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
         <view v-if="loading" class="empty">正在加载章节...</view>
         <view v-else-if="chapter" class="chapter-content" :style="scrollTextStyle">
@@ -11,7 +11,11 @@
             :key="index"
             :id="`paragraph-${index}`"
             class="paragraph"
-            :class="{ 'paragraph-selected': selectedParagraph?.index === index }"
+            :class="{
+              'paragraph-selected': selectedParagraph?.index === index,
+              'paragraph-highlighted': !!paragraphHighlight(index)
+            }"
+            :style="paragraphHighlight(index) ? { backgroundColor: paragraphHighlight(index).color, borderBottom: '2px solid ' + (paragraphHighlight(index).color || '#FFEB3B') } : {}"
             @longpress.stop="openParagraphTools(line, index, $event)"
           >
             <template v-if="selectedParagraph?.index === index">
@@ -38,48 +42,46 @@
               {{ paragraphCommentCount(index) }}
             </text>
           </view>
-          <ChapterEndPanel
-            v-if="chapter"
-            mode="inline"
-            :book-id="bookId"
-            :chapter-no="chapterNo"
-            :chapter-id="chapter.id"
-            :max-chapter-no="maxChapterNo"
-            :show-comments="readerStore.setting.showComments"
-            @next="nextChapter"
-            @back-to-detail="goBack"
-            @go-to-book="goDetail"
-          />
         </view>
         <view v-else class="empty">章节不存在</view>
       </scroll-view>
     </view>
 
     <!-- ==================== PAGE mode ==================== -->
-    <PageReader
-      v-else
-      :key="bookId"
+    <view v-else-if="loading" class="reader-page-loading reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }">
+      <text>正在加载章节...</text>
+    </view>
+
+    <ViewPageReader
+      v-else-if="rawContent"
+      class="reader-brightness-layer"
+      :key="`${bookId}-${chapterNo}-${(currentContent || chapter?.content || '').length}`"
       ref="pageReaderRef"
-      :content="rawContent"
-      :prevContent="prevChapterContent"
-      :nextContent="nextChapterContent"
-      :fontSize="readerStore.setting.fontSize"
-      :lineHeight="readerStore.setting.lineHeight"
-      :marginX="readerStore.setting.marginX"
-      :marginY="readerStore.setting.marginY"
-      :paragraphSpacing="readerStore.setting.paragraphSpacing"
+      :chapter="currentChapter || readerStore.chapter"
+      :title="chapter?.title || currentTitle"
+      :content="currentContent || chapter?.content || ''"
+      :prev-content="prevChapterContent"
+      :next-content="nextChapterContent"
+      :font-size="readerStore.setting.fontSize"
+      :line-height="readerStore.setting.lineHeight"
+      :margin-x="readerStore.setting.marginX"
+      :margin-y="readerStore.setting.marginY"
+      :paragraph-spacing="readerStore.setting.paragraphSpacing"
       :theme="readerStore.setting.theme"
+      :turn-mode="readerStore.setting.turnMode"
       :brightness="brightness"
-      :initialPage="pageModePage"
+      :initial-page="pageModePage"
       :comments="chapterComments"
       @prev="prevChapter"
       @next="nextChapter"
-      @chapterEnd="onChapterEnd"
       @pageChange="onPageChange"
       @toggleTools="toggleTools"
-      @paragraphSelect="openCanvasParagraphTools"
+      @paragraphSelect="openParagraphToolsFromPage"
       @commentBubbleTap="showParagraphComments"
     />
+    <view v-else class="reader-page-loading reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }">
+      <text>章节不存在</text>
+    </view>
 
     <!-- ==================== Tool layers ==================== -->
     <ReaderTopBar
@@ -100,7 +102,6 @@
       @prev="prevChapter"
       @next="nextChapter"
       @catalog="onCatalogTap"
-      @discuss="onDiscussTap"
       @night="toggleNight"
       @setting="toggleSetting"
     />
@@ -110,50 +111,13 @@
       :visible="settingVisible"
       :setting="readerStore.setting"
       :brightness="brightness"
+      :eye-protection="eyeProtection"
       @close="settingVisible = false"
       @update:setting="saveSetting"
       @update:brightness="onBrightnessChange"
+      @update:eye-protection="onEyeProtectionChange"
       @more="onMoreSettings"
     />
-
-    <ChapterEndPanel
-      v-if="showChapterEndOverlay"
-      mode="overlay"
-      :book-id="bookId"
-      :chapter-no="chapterNo"
-      :chapter-id="chapter?.id"
-      :max-chapter-no="maxChapterNo"
-      :show-comments="readerStore.setting.showComments"
-      @next="onPanelNextChapter"
-      @back-to-detail="goBack"
-      @close="showChapterEndOverlay = false"
-      @go-to-book="goDetail"
-    />
-
-    <view v-if="selectedParagraph" class="selection-backdrop" @tap.stop="clearParagraphTools" />
-    <view
-      v-if="selectedParagraph && !paragraphComposerVisible && !typoFeedbackVisible"
-      class="selection-bubble"
-      :style="selectionToolbarStyle"
-      @tap.stop
-    >
-      <view class="bubble-action" @tap.stop="openParagraphComposer">
-        <text class="bubble-icon">✎</text>
-        <text class="bubble-label">段评</text>
-      </view>
-      <view class="bubble-action" @tap.stop="openTypoFeedback">
-        <text class="bubble-icon">!</text>
-        <text class="bubble-label">反馈</text>
-      </view>
-      <view class="bubble-action" @tap.stop="copySelectedParagraph">
-        <text class="bubble-icon">⎘</text>
-        <text class="bubble-label">复制</text>
-      </view>
-      <view
-        v-if="selectedParagraph && paragraphCommentCount(selectedParagraph.index)"
-        class="bubble-badge"
-      >{{ paragraphCommentCount(selectedParagraph.index) }}</view>
-    </view>
 
     <view v-if="paragraphComposerVisible || typoFeedbackVisible" class="paragraph-feedback-sheet" @tap.stop>
       <text class="feedback-title">{{ typoFeedbackVisible ? '错字反馈' : '写段评' }}</text>
@@ -218,15 +182,16 @@ import { useReaderStore } from '../../store/reader'
 import { useUserStore } from '../../store/user'
 import { useBookStore } from '../../store/book'
 import { readerThemes, themeStyle } from '../../utils/reader'
-import PageReader from './page-reader.vue'
+import { useHighlightStore } from '../../store/highlight'
+import ViewPageReader from './components/ViewPageReader.vue'
 import ReaderTopBar from './components/ReaderTopBar.vue'
 import ReaderBottomBar from './components/ReaderBottomBar.vue'
 import ReaderSettingSheet from './components/ReaderSettingSheet.vue'
-import ChapterEndPanel from '../../components/ChapterEndPanel.vue'
 
 const readerStore = useReaderStore()
 const userStore = useUserStore()
 const bookStore = useBookStore()
+const highlightStore = useHighlightStore()
 const instance = getCurrentInstance()
 const bookId = ref('')
 const chapterNo = ref(1)
@@ -238,14 +203,13 @@ const position = ref(0)
 const pageModePage = ref(0)
 const pageReaderRef = ref(null)
 const brightness = ref(Number(uni.getStorageSync('readerBrightness') || 80))
+const eyeProtection = ref(Boolean(uni.getStorageSync('readerEyeProtection') || false))
 const currentChapter = ref(null)
 const currentTitle = ref('')
 const currentContent = ref('')
-const showChapterEndOverlay = ref(false)
 const selectedParagraph = ref(null)
 const selectedStart = ref(0)
 const selectedEnd = ref(0)
-const selectionToolbarTop = ref(0)
 const activeRangeHandle = ref('')
 const paragraphComposerVisible = ref(false)
 const typoFeedbackVisible = ref(false)
@@ -255,6 +219,7 @@ const chapterComments = ref([])
 const catalogVisible = ref(false)
 const paragraphCommentsVisible = ref(false)
 let autoPageTimer = null
+let autoSaveTimer = null
 let initializing = false
 let showRetryTimer = null
 
@@ -282,15 +247,30 @@ const chapterIndicator = computed(() => {
   return `第 ${chapterNo.value} / ${maxChapterNo.value} 章`
 })
 const pageIndicator = computed(() => {
-  if (readerStore.setting.turnMode === 'PAGE') {
-    return pageReaderRef.value?.totalPages ? `${pageReaderRef.value.currentPage + 1} / ${pageReaderRef.value.totalPages} 页` : ''
+  if (readerStore.setting.turnMode !== 'SCROLL') {
+    const ref = pageReaderRef.value
+    if (ref?.totalPages > 1) {
+      return `${(ref.currentPage || 0) + 1} / ${ref.totalPages} 页`
+    }
+    return chapterIndicator.value
   }
   return chapterIndicator.value
 })
 const progressPercent = computed(() => {
-  const list = readerStore.chapters || []
-  if (!list.length) return 0
-  return Math.round((chapterNo.value / list.length) * 100)
+  if (readerStore.setting.turnMode === 'SCROLL') {
+    if (scrollContentHeight.value > 0) {
+      const viewH = window?.innerHeight || 667
+      const maxScroll = Math.max(0, scrollContentHeight.value - viewH)
+      if (maxScroll <= 0) return 0
+      return Math.min(100, Math.round((position.value / maxScroll) * 100))
+    }
+    return 0
+  }
+  const ref = pageReaderRef.value
+  if (ref?.totalPages > 1) {
+    return Math.round(((ref.currentPage || 0) / (ref.totalPages - 1)) * 100)
+  }
+  return 0
 })
 const paragraphs = computed(() => {
   if (!chapter.value?.content) return []
@@ -300,6 +280,12 @@ const paragraphs = computed(() => {
     .map((line) => line.trim())
     .filter(Boolean)
 })
+const chapterHighlights = computed(() =>
+  highlightStore.getHighlightsByChapter(Number(bookId.value), Number(chapterNo.value))
+)
+function paragraphHighlight(index) {
+  return chapterHighlights.value.find(h => Number(h.paragraphIndex) === Number(index))
+}
 const selectedParagraphComments = computed(() => {
   if (!selectedParagraph.value) return []
   return chapterComments.value.filter((item) => Number(item.paragraphIndex) === Number(selectedParagraph.value.index))
@@ -311,9 +297,6 @@ const selectedText = computed(() => {
   const end = Math.max(start + 1, Math.max(selectedStart.value, selectedEnd.value))
   return text.slice(start, Math.min(end, text.length))
 })
-const selectionToolbarStyle = computed(() => ({
-  top: `${selectionToolbarTop.value || 120}px`
-}))
 const textStyle = computed(() => themeStyle(readerStore.setting))
 const scrollTextStyle = computed(() => ({
   ...textStyle.value,
@@ -325,8 +308,9 @@ const pageStyle = computed(() => {
   return { backgroundColor: theme.background }
 })
 const brightnessStyle = computed(() => {
-  const pct = brightness.value / 100
-  return { filter: `brightness(${pct})` }
+  const filters = [`brightness(${brightness.value / 100})`]
+  if (eyeProtection.value) filters.push('sepia(0.25)', 'saturate(0.85)')
+  return { filter: filters.join(' ') }
 })
 
 // ---- load ----
@@ -361,6 +345,8 @@ async function loadChapter({ restoreSavedProgress = true } = {}) {
       if (res?.code === 200) restoreProgress(res.data)
     }).catch(() => {})
   }
+  highlightStore.loadFromStorage()
+  startAutoSave()
 }
 
 async function loadChapterComments() {
@@ -431,30 +417,28 @@ function openParagraphTools(text, index, event, toolbarY) {
   feedbackText.value = ''
   showTools.value = false
   settingVisible.value = false
-  nextTick(() => updateSelectionToolbar(index, event, toolbarY))
+  const commentCount = paragraphCommentCount(index)
+  const itemList = ['段评' + (commentCount ? ` (${commentCount})` : ''), '反馈', '复制', '划线', '分享']
+  uni.showActionSheet({
+    itemList,
+    success: (res) => {
+      if (res.tapIndex === 0) { openParagraphComposer() }
+      else if (res.tapIndex === 1) { openTypoFeedback() }
+      else if (res.tapIndex === 2) { copySelectedParagraph() }
+      else if (res.tapIndex === 3) { highlightParagraph() }
+      else if (res.tapIndex === 4) { shareParagraph() }
+    },
+    complete: () => {
+      if (!paragraphComposerVisible.value && !typoFeedbackVisible.value) {
+        clearParagraphTools()
+      }
+    }
+  })
 }
 
-function openCanvasParagraphTools(payload) {
+function openParagraphToolsFromPage(payload) {
   if (!payload?.text) return
   openParagraphTools(payload.text, payload.index, null, payload.toolbarY)
-}
-
-function updateSelectionToolbar(index, event, toolbarY) {
-  let top = Number(toolbarY || 0)
-  // #ifdef H5
-  const el = typeof document !== 'undefined' ? document.getElementById(`paragraph-${index}`) : null
-  const rect = el?.getBoundingClientRect?.()
-  if (rect) {
-    top = rect.bottom + 10
-  } else if (event?.changedTouches?.[0]) {
-    top = event.changedTouches[0].clientY + 28
-  }
-  const maxTop = Math.max(70, (window.innerHeight || 720) - 176)
-  selectionToolbarTop.value = Math.max(56, Math.min(top || 116, maxTop))
-  // #endif
-  // #ifndef H5
-  selectionToolbarTop.value = Math.max(56, top || 116)
-  // #endif
 }
 
 function startRangeHandle(type) {
@@ -529,6 +513,34 @@ function copySelectedParagraph() {
   })
 }
 
+function highlightParagraph() {
+  if (!selectedParagraph.value) return
+  const quote = selectedText.value || selectedParagraph.value.text
+  highlightStore.addHighlight({
+    bookId: Number(bookId.value),
+    bookTitle: chapter.value?.bookTitle || currentTitle.value || '',
+    chapterNo: Number(chapterNo.value),
+    paragraphIndex: selectedParagraph.value.index,
+    quoteText: quote,
+    color: 'rgba(255, 235, 59, 0.5)'
+  })
+  uni.showToast({ title: '已划线', icon: 'success' })
+  clearParagraphTools()
+}
+
+function shareParagraph() {
+  if (!selectedParagraph.value) return
+  const quote = selectedText.value || selectedParagraph.value.text
+  const title = chapter.value?.bookTitle || currentTitle.value || '阅读'
+  uni.setClipboardData({
+    data: `《${title}》\n\n${quote}`,
+    success: () => {
+      uni.showToast({ title: '已复制到剪贴板', icon: 'success' })
+      clearParagraphTools()
+    }
+  })
+}
+
 async function submitParagraphFeedback() {
   const content = feedbackText.value.trim()
   if (!content) {
@@ -565,7 +577,7 @@ async function submitParagraphFeedback() {
 }
 
 // ---- tools & setting ----
-function onContentTap() {
+function onContentTap(e) {
   if (selectedParagraph.value) {
     clearParagraphTools()
     return
@@ -573,6 +585,13 @@ function onContentTap() {
   if (settingVisible.value) {
     settingVisible.value = false
     return
+  }
+  if (readerStore.setting.turnMode === 'SCROLL') {
+    const x = (e?.detail?.x ?? e?.changedTouches?.[0]?.clientX) || 0
+    const width = window?.innerWidth || (uni.getSystemInfoSync().windowWidth || 375)
+    const ratio = x / (width || 375)
+    if (ratio < 0.3) { prevChapter(); return }
+    if (ratio > 0.7) { nextChapter(); return }
   }
   showTools.value = !showTools.value
 }
@@ -615,35 +634,18 @@ async function jumpChapter(no) {
   await loadChapter({ restoreSavedProgress: false })
 }
 
-function onDiscussTap() {
-  if (!readerStore.setting.showComments) {
-    saveSetting({ showComments: true })
-  }
-  showChapterEndOverlay.value = true
-  showTools.value = false
-}
-
 function onMoreSettings() {
   uni.showToast({ title: '更多设置即将上线', icon: 'none' })
-}
-
-function onChapterEnd() {
-  showChapterEndOverlay.value = true
-  stopAutoPage()
-}
-
-function onPanelNextChapter() {
-  showChapterEndOverlay.value = false
-  nextChapter()
-}
-
-function goDetail(id) {
-  uni.navigateTo({ url: `/pages/book/detail?id=${id}` })
 }
 
 function onBrightnessChange(val) {
   brightness.value = Math.max(20, Math.min(100, Number(val) || 80))
   uni.setStorageSync('readerBrightness', brightness.value)
+}
+
+function onEyeProtectionChange(val) {
+  eyeProtection.value = !!val
+  uni.setStorageSync('readerEyeProtection', eyeProtection.value)
 }
 
 // ---- chapter nav ----
@@ -669,6 +671,7 @@ async function prevChapter() {
   }
   await saveProgress()
   chapterNo.value -= 1
+  pageModePage.value = 0
   position.value = 0
   scrollTop.value = 0
   await loadChapter({ restoreSavedProgress: false })
@@ -685,10 +688,10 @@ async function nextChapter() {
   }
   await saveProgress()
   chapterNo.value += 1
+  pageModePage.value = 0
   position.value = 0
   scrollTop.value = 0
   await loadChapter({ restoreSavedProgress: false })
-  pageModePage.value = 0
   if (!chapter.value) {
     chapterNo.value -= 1
     uni.showToast({ title: '已经是最后一章', icon: 'none' })
@@ -697,8 +700,12 @@ async function nextChapter() {
   restartAutoPage()
 }
 
+const scrollContentHeight = ref(0)
+
 function onScroll(event) {
   position.value = Math.floor(event.detail.scrollTop || 0)
+  const sh = Number(event.detail.scrollHeight || 0)
+  if (sh) scrollContentHeight.value = sh
 }
 
 // ---- auto page ----
@@ -730,6 +737,22 @@ function stopAutoPage() {
 function restartAutoPage() {
   stopAutoPage()
   startAutoPage()
+}
+
+function startAutoSave() {
+  stopAutoSave()
+  autoSaveTimer = setInterval(() => {
+    if (userStore.isLoggedIn && chapter.value) {
+      saveProgress()
+    }
+  }, 5000)
+}
+
+function stopAutoSave() {
+  if (autoSaveTimer) {
+    clearInterval(autoSaveTimer)
+    autoSaveTimer = null
+  }
 }
 
 watch(() => readerStore.setting.autoPageEnabled, (enabled) => {
@@ -838,19 +861,36 @@ onShow(() => {
 onUnload(() => {
   if (showRetryTimer) clearTimeout(showRetryTimer)
   stopAutoPage()
+  stopAutoSave()
   saveProgress()
 })
 
 onBeforeUnmount(() => {
   if (showRetryTimer) clearTimeout(showRetryTimer)
   stopAutoPage()
+  stopAutoSave()
 })
 </script>
 
 <style scoped>
 .reader-root {
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.reader-brightness-layer {
+  width: 100%;
+  height: 100%;
+}
+
+.reader-page-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8C7B62;
+  font-size: 15px;
 }
 
 .reader {
@@ -895,6 +935,11 @@ onBeforeUnmount(() => {
 
 .paragraph-selected {
   background: transparent;
+}
+
+.paragraph-highlighted {
+  padding: 2px 4px;
+  border-radius: 3px;
 }
 
 .selected-text {
@@ -951,76 +996,6 @@ onBeforeUnmount(() => {
 .paragraph-bubble:active {
   background: rgba(58, 58, 58, 0.1);
   color: #3A3A3A;
-}
-
-.selection-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 34;
-  background: transparent;
-}
-
-.selection-bubble {
-  position: fixed;
-  left: 50%;
-  z-index: 35;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  overflow: visible;
-  border-radius: 22px;
-  background: rgba(40, 40, 40, 0.92);
-  backdrop-filter: blur(14px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
-  transform: translateX(-50%);
-  white-space: nowrap;
-}
-
-.bubble-action {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  height: 36px;
-  padding: 0 10px;
-  border-radius: 18px;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.bubble-action:active {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.bubble-action + .bubble-action {
-  margin-left: 2px;
-}
-
-.bubble-icon {
-  font-size: 15px;
-  line-height: 1;
-}
-
-.bubble-label {
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.bubble-badge {
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: #C4A882;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 900;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .paragraph-feedback-sheet {

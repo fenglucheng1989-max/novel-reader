@@ -198,6 +198,40 @@
 - 结果列表 + 加载更多分页。
 - 活跃筛选标签展示。
 
+### Phase 5：章节末承接与轻社区 (2026-05-08)
+
+**后端评论基础设施**
+
+- Flyway V8 migration：新增 `novel_comment` 表 + 索引 + 种子评论数据。
+- 新增 `NovelComment` 实体、`CommentMapper`、`CommentDTO`、`CommentVO`。
+- 新增 `CommentService` / `CommentServiceImpl`：分页查询评论，批量查用户名避免 N+1。
+- 新增 `CommentController`：GET 书籍/章节评论（公开），POST 创建评论（需登录）。
+- SecurityConfig 开放 `/api/v1/chapters/**` 公开访问。
+
+**章节末承接面板**
+
+- 新增 `ChapterEndPanel.vue`，支持 inline（滚动）和 overlay（Canvas）两种模式。
+- 普通章节末：进度小卡 + 下一章按钮 + 相似推荐 + 评论。
+- 最后一章末：全本已完结 + 返回详情 + 推荐下一本 + 评论。
+- 组件内部自加载详情、推荐、评论数据。
+
+**阅读器集成**
+
+- page-reader.vue：新增 `chapterEnd` emit，Canvas 末页向前翻页触发 chapterEnd 替代直接 next。
+- reader.vue：滚动模式章节末尾 inline 面板，Canvas 模式 overlay 面板。
+- ReaderBottomBar：首章"上一章"禁用态，末章"下一章"禁用态。
+- ReaderSettingSheet：增加"评论弹幕"开关（showComments）。
+
+**详情页评论**
+
+- 替换"评论功能即将上线"占位为真实评论列表。
+- 评论卡片：头像圆 + 用户名 + 相对时间 + 内容 + 点赞数。
+
+**Store 扩展**
+
+- book.js 新增 `loadBookComments`、`loadChapterComments`。
+- reader.js `defaultSetting` 新增 `showComments: false`。
+
 ## 当前文档状态
 
 - `docs/design.md`：总体设计与前后端开发方案。
@@ -206,14 +240,13 @@
 
 ## 当前问题
 
-- 章节末承接页尚未实现。
 - 管理端不支持标签和统计编辑。
 
 ## 下一阶段建议
 
-优先进入 Phase 5：章节末承接与轻社区。
+优先进入 Phase 6：搜索优化与阅读统计。
 
 ## 验证记录
 
-- `frontend`: `npm run build:h5` 通过 (2026-05-08, Phase 4)。
-- `backend`: `.\mvnw.cmd test` 通过 (2026-05-08, Phase 4)。
+- `frontend`: `npm run build:h5` 通过 (2026-05-08, Phase 5)。
+- `backend`: `.\mvnw.cmd test` 通过 (2026-05-08, Phase 5)。

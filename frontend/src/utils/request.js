@@ -1,10 +1,28 @@
 import { getApiBaseUrl } from '../config/api'
 
+function getDevApiFallbackUrl(path) {
+  // #ifdef H5
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return `http://${window.location.hostname}:8080${path}`
+  }
+  // #endif
+  return `http://localhost:8080${path}`
+}
+
 function getResponseMessage(res, fallback) {
   if (!res) return fallback
   if (res.data && typeof res.data === 'object' && res.data.message) return res.data.message
   if (res.data && typeof res.data === 'string') return res.data
   return fallback
+}
+
+function normalizeResponseData(data) {
+  if (typeof data !== 'string') return data
+  try {
+    return JSON.parse(data)
+  } catch {
+    return data
+  }
 }
 
 function rejectWithMessage(reject, message, payload) {
@@ -21,14 +39,23 @@ export function request(options) {
       ...(token && !options.noAuth ? { Authorization: `Bearer ${token}` } : {})
     }
 
-    uni.request({
-      url: getApiBaseUrl() + options.url,
+    const primaryUrl = getApiBaseUrl() + options.url
+    const fallbackUrl = getDevApiFallbackUrl(options.url)
+
+    const send = (url, allowFallback = true) => uni.request({
+      url,
       method: options.method || 'GET',
       data: options.data || {},
       header,
       success: (res) => {
+        res.data = normalizeResponseData(res.data)
         if (res.statusCode === 200) {
           resolve(res.data)
+          return
+        }
+
+        if (allowFallback && url !== fallbackUrl && res.statusCode >= 500) {
+          send(fallbackUrl, false)
           return
         }
 
@@ -60,11 +87,17 @@ export function request(options) {
         rejectWithMessage(reject, message, res.data)
       },
       fail: (err) => {
+        if (allowFallback && url !== fallbackUrl) {
+          send(fallbackUrl, false)
+          return
+        }
         const message = err && err.errMsg ? err.errMsg : '网络错误'
         uni.showToast({ title: message, icon: 'none' })
         rejectWithMessage(reject, message, err)
       }
     })
+
+    send(primaryUrl)
   })
 }
 
@@ -83,6 +116,7 @@ export function requestRaw(options) {
       header,
       responseType: options.responseType || 'text',
       success: (res) => {
+        res.data = normalizeResponseData(res.data)
         if (res.statusCode === 200) {
           resolve(res.data)
           return

@@ -2,7 +2,7 @@
 export type TurnMode = 'SCROLL' | 'PAGE'
 
 /** 阅读器主题 */
-export type ReaderTheme = 'DEFAULT' | 'GRAY' | 'NIGHT'
+export type ReaderTheme = 'DEFAULT' | 'GRAY' | 'NIGHT' | 'PARCHMENT' | 'LIGHT_GREEN'
 
 /** 阅读设置 */
 export interface ReadingSetting {

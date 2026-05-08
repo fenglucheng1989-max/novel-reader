@@ -16,7 +16,7 @@ const defaultSetting = {
   marginY: 28,
   paragraphSpacing: 0,
   theme: 'DEFAULT',
-  turnMode: 'SCROLL',
+  turnMode: 'PAGE',
   autoPageEnabled: false,
   autoPageInterval: 15,
   showComments: false
@@ -32,6 +32,13 @@ function isFullChapter(chapter) {
     chapter.title.length > 0 &&
     typeof chapter.content === 'string' &&
     chapter.content.length > 0
+}
+
+function unwrapStorageValue(value) {
+  if (value && typeof value === 'object' && value.type === 'object' && value.data) {
+    return value.data
+  }
+  return value
 }
 
 export const useReaderStore = defineStore('reader', {
@@ -53,8 +60,9 @@ export const useReaderStore = defineStore('reader', {
     },
     getCachedChapter(bookId, chapterNo) {
       const cacheKey = this.getChapterCacheKey(bookId, chapterNo)
-      if (isFullChapter(this.chapterCache[cacheKey])) return this.chapterCache[cacheKey]
-      const cached = uni.getStorageSync(cacheKey)
+      const memoryCached = unwrapStorageValue(this.chapterCache[cacheKey])
+      if (isFullChapter(memoryCached)) return memoryCached
+      const cached = unwrapStorageValue(uni.getStorageSync(cacheKey))
       if (isFullChapter(cached)) {
         this.chapterCache = { ...this.chapterCache, [cacheKey]: cached }
         return cached

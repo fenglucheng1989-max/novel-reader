@@ -1,26 +1,45 @@
-// #ifdef H5
-const MEASURE_CANVAS = document.createElement('canvas')
-const MEASURE_CTX = MEASURE_CANVAS.getContext('2d')
-// #endif
+/**
+ * Text pagination utility — pure JS, zero canvas.
+ *
+ * Splits chapter content into viewport-sized "pages" that can be
+ * rendered as plain `<view>` / `<text>` DOM nodes.
+ *
+ * Measurement strategy:
+ *   H5  – hidden DOM element + getBoundingClientRect (real CSS rendering)
+ *   App – character-count estimation (CJK ≈ fontSize, ASCII ≈ fontSize * 0.55)
+ */
 
-function buildMeasureCtx(fontSize, fontFamily) {
+let measureEl = null
+let measureFontSize = 18
+let measureFontFamily = ''
+
+function ensureMeasureEl(fontSize, fontFamily) {
   measureFontSize = fontSize
+  measureFontFamily = fontFamily
   // #ifdef H5
-  MEASURE_CTX.font = `${fontSize}px ${fontFamily}`
-  return MEASURE_CTX
+  if (typeof document === 'undefined') return null
+  if (!measureEl) {
+    measureEl = document.createElement('span')
+    measureEl.style.cssText = 'position:fixed;top:-9999px;left:-9999px;visibility:hidden;white-space:nowrap;pointer-events:none;'
+    document.body.appendChild(measureEl)
+  }
+  measureEl.style.fontSize = `${fontSize}px`
+  measureEl.style.fontFamily = fontFamily || ''
+  return measureEl
   // #endif
   // #ifndef H5
   return null
   // #endif
 }
 
-let measureFontSize = 18
-
-function measureText(ctx, text) {
-  if (ctx) {
-    return ctx.measureText(text).width
+function measureText(el, text) {
+  // #ifdef H5
+  if (el) {
+    el.textContent = text
+    return el.getBoundingClientRect().width
   }
-  // Non-H5: rough estimation – Chinese ≈ fontSize * 1.0, ASCII ≈ fontSize * 0.55
+  // #endif
+  // Non-H5: rough estimation
   let width = 0
   for (const ch of text) {
     width += /[一-鿿　-〿＀-￯]/.test(ch) ? measureFontSize : measureFontSize * 0.55
@@ -29,72 +48,79 @@ function measureText(ctx, text) {
 }
 
 /**
- * Paginate chapter content into page-sized chunks.
- *
- * @param {string} content  – raw chapter text
- * @param {number} width    – canvas CSS width (logical px)
- * @param {number} height   – canvas CSS height (logical px)
- * @param {number} fontSize
- * @param {number} lineHeight
- * @param {number} paddingX
- * @param {number} paddingY
- * @param {string} fontFamily
- * @returns {{ lines: string[], index: number }[]}
+ * @param {string} content
+ * @param {{ width:number, height:number, fontSize:number, lineHeight:number, paddingX:number, paddingY:number, paragraphSpacing?:number, fontFamily:string }} opts
+ * @returns {{ lines: string[], paragraphIndexes: number[], index: number }[]}
  */
-export function paginateText(content, { width, height, fontSize, lineHeight, paddingX, paddingY, fontFamily }) {
-  const ctx = buildMeasureCtx(fontSize, fontFamily)
+export function paginateText(content, { width, height, fontSize, lineHeight, paddingX, paddingY, paragraphSpacing = 0, fontFamily }) {
+  const measureCtx = ensureMeasureEl(fontSize, fontFamily)
   const maxLineWidth = Math.max(fontSize, width - paddingX * 2)
-  const maxLinesPerPage = Math.max(1, Math.floor((height - paddingY * 2) / lineHeight))
+  const maxPageHeight = Math.max(lineHeight, height - paddingY * 2)
 
-  const raw = content
+  const paragraphs = content
     .replace(/\r\n/g, '\n')
     .replace(/\t/g, '    ')
     .replace(/\n{3,}/g, '\n\n')
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
 
-  const chars = [...raw]
   const pages = []
-  let charIdx = 0
+  let pageLines = []
+  let paragraphIndexes = []
+  let usedHeight = 0
 
-  while (charIdx < chars.length) {
-    const pageLines = []
-
-    for (let lineIdx = 0; lineIdx < maxLinesPerPage && charIdx < chars.length; lineIdx++) {
-      // Handle newline
-      if (chars[charIdx] === '\n') {
-        pageLines.push('')
-        charIdx++
-        continue
-      }
-
-      let line = ''
-      while (charIdx < chars.length && chars[charIdx] !== '\n') {
-        const next = line + chars[charIdx]
-        if (measureText(ctx, next) > maxLineWidth) break
-        line = next
-        charIdx++
-      }
-      if (line.length === 0 && charIdx < chars.length) {
-        // Single character wider than line — force it in
-        line = chars[charIdx]
-        charIdx++
-      }
-      pageLines.push(line)
-      // Consume newline after a filled line
-      if (charIdx < chars.length && chars[charIdx] === '\n') {
-        charIdx++
-      }
-    }
-
-    // Skip trailing empty page (happens when content ends with newlines)
-    if (pageLines.length === 0 || pageLines.every(l => l === '')) {
-      break
-    }
-
-    pages.push({
-      index: pages.length,
-      lines: pageLines
-    })
+  function pushPage() {
+    if (!pageLines.length) return
+    pages.push({ index: pages.length, lines: pageLines, paragraphIndexes })
+    pageLines = []
+    paragraphIndexes = []
+    usedHeight = 0
   }
 
+  function pushLine(line, paragraphIndex, extraHeight = 0) {
+    const nextHeight = lineHeight + extraHeight
+    if (pageLines.length && usedHeight + nextHeight > maxPageHeight) {
+      pushPage()
+    }
+    pageLines.push(line)
+    paragraphIndexes.push(paragraphIndex)
+    usedHeight += nextHeight
+  }
+
+  paragraphs.forEach((paragraph, paragraphIndex) => {
+    const chars = [...paragraph]
+    let charIdx = 0
+    let firstLine = true
+
+    while (charIdx < chars.length) {
+      let line = ''
+      while (charIdx < chars.length) {
+        const next = line + chars[charIdx]
+        if (line && measureText(measureCtx, next) > maxLineWidth) break
+        line = next
+        charIdx++
+        if (measureText(measureCtx, line) >= maxLineWidth) break
+      }
+      pushLine(line, paragraphIndex, firstLine ? 0 : 0)
+      firstLine = false
+    }
+
+    if (paragraphSpacing > 0 && paragraphIndex < paragraphs.length - 1) {
+      usedHeight += paragraphSpacing
+    }
+  })
+
+  pushPage()
   return pages
+}
+
+/** Clean up DOM measurement element (call on app teardown if needed). */
+export function destroyMeasureEl() {
+  // #ifdef H5
+  if (measureEl && measureEl.parentNode) {
+    measureEl.parentNode.removeChild(measureEl)
+    measureEl = null
+  }
+  // #endif
 }

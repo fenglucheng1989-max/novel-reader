@@ -73,14 +73,25 @@
       </view>
 
       <view class="sheet-row">
+        <text class="row-label">护眼</text>
+        <view class="auto-page-wrap">
+          <switch
+            :checked="eyeProtection"
+            @change="$emit('update:eye-protection', $event.detail.value)"
+            color="#C4A882"
+          />
+        </view>
+      </view>
+
+      <view class="sheet-row">
         <text class="row-label">翻页</text>
         <view class="segmented">
           <view
             v-for="opt in turnOptions"
             :key="opt.value"
             class="seg-item"
-            :class="{ active: setting.turnMode === opt.value }"
-            @tap.stop="emit('update:setting', { turnMode: opt.value })"
+            :class="{ active: setting.turnMode === opt.value, disabled: opt.disabled }"
+            @tap.stop="!opt.disabled && emit('update:setting', { turnMode: opt.value })"
           >
             <text>{{ opt.label }}</text>
           </view>
@@ -149,18 +160,23 @@ import { computed } from 'vue'
 const props = defineProps({
   visible: { type: Boolean, default: false },
   setting: { type: Object, required: true },
-  brightness: { type: Number, default: 80 }
+  brightness: { type: Number, default: 80 },
+  eyeProtection: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['close', 'update:setting', 'update:brightness', 'more'])
+const emit = defineEmits(['close', 'update:setting', 'update:brightness', 'update:eye-protection', 'more'])
 
 const turnOptions = [
-  { label: '滚动', value: 'SCROLL' },
-  { label: '仿真', value: 'PAGE' }
+  { label: '覆盖', value: 'COVER' },
+  { label: '上下', value: 'SCROLL' },
+  { label: '仿真', value: 'PAGE' },
+  { label: '无', value: 'NONE' }
 ]
 
 const themes = [
   { key: 'DEFAULT', bg: '#F8F8F6', border: '#CCCCCC' },
+  { key: 'PARCHMENT', bg: '#F5E6C8', border: '#C4A882' },
+  { key: 'LIGHT_GREEN', bg: '#E8F0E3', border: '#A8C4A0' },
   { key: 'GRAY', bg: '#EBEBE7', border: '#B0B0B0' },
   { key: 'NIGHT', bg: '#161A1D', border: '#3A4045' }
 ]
@@ -194,8 +210,15 @@ function onCommentToggle(e) {
 <style scoped>
 .setting-sheet-root {
   position: fixed;
-  inset: 0;
-  z-index: 20;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 1000;
+  overflow: hidden;
 }
 
 .setting-backdrop {
@@ -209,12 +232,16 @@ function onCommentToggle(e) {
   bottom: 0;
   left: 0;
   right: 0;
-  max-height: 82vh;
+  z-index: 1001;
+  max-height: min(78vh, 560px);
+  max-height: min(78dvh, 560px);
   overflow-y: auto;
-  padding: 18px 20px calc(18px + env(safe-area-inset-bottom));
+  padding: 16px 18px calc(18px + env(safe-area-inset-bottom));
   border-radius: 16px 16px 0 0;
   background: #fff;
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
+  box-sizing: border-box;
+  -webkit-overflow-scrolling: touch;
 }
 
 .sheet-row {
@@ -304,6 +331,10 @@ function onCommentToggle(e) {
 .seg-item.active {
   background: #3A3A3A;
   color: #fff;
+}
+
+.seg-item.disabled {
+  opacity: 0.35;
 }
 
 .theme-chips {

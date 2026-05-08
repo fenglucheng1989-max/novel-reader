@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import uni from '@dcloudio/vite-plugin-uni'
 
-const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:8080'
+const apiTarget = process.env.VITE_API_TARGET || 'http://localhost:8080'
 
 const apiProxy = {
   '/api': {
@@ -24,7 +24,7 @@ const apiProxy = {
 export default defineConfig({
   plugins: [uni()],
   server: {
-    host: '127.0.0.1',
+    host: '0.0.0.0',
     proxy: apiProxy
   },
   preview: {

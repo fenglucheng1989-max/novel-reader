@@ -26,42 +26,28 @@
 
       <view v-if="loading" class="empty">正在加载书城...</view>
       <template v-else>
-        <!-- Banner -->
-        <swiper v-if="bannerBooks.length" class="banner-swiper" :indicator-dots="true" :autoplay="true" :interval="4000" :duration="500" circular>
-          <swiper-item v-for="book in bannerBooks" :key="book.id">
-            <view class="banner-card" @tap="goDetail(book.id)">
-              <view class="banner-cover" :style="bannerCoverStyle(book)">
-                <text class="banner-cover-text">{{ (book.title || '书').slice(0, 3) }}</text>
-              </view>
-              <view class="banner-info">
-                <text class="banner-title">{{ book.title }}</text>
-                <text class="banner-meta">{{ book.author || '佚名' }} · {{ statusLabel(book.status) }}</text>
-                <text class="banner-desc">{{ (book.description || '').slice(0, 60) }}</text>
-              </view>
-            </view>
-          </swiper-item>
-        </swiper>
-
-        <view v-if="!bannerBooks.length && !editorialBooks.length && !hotBooks.length && !newBooks.length && !completedBooks.length" class="empty">
+        <view v-if="!editorialBooks.length && !hotBooks.length && !newBooks.length && !completedBooks.length" class="empty">
           <text class="empty-title">暂无书籍</text>
           <text class="empty-subtitle">可以先去后台新增小说和章节。</text>
         </view>
 
         <!-- Editor Picks -->
         <template v-if="editorialBooks.length">
-          <SectionHead title="编辑精选" />
-          <view class="feature-grid">
-            <view
-              v-for="book in editorialBooks.slice(0, 2)"
-              :key="book.id"
-              class="feature-card"
-              @tap="goDetail(book.id)"
-            >
-              <BookCover :title="book.title" :cover-url="book.coverUrl" size="xl" />
-              <view class="feature-info">
-                <text class="feature-title">{{ book.title }}</text>
-                <text class="feature-meta">{{ book.author || '佚名' }} · {{ book.chapterCount || 0 }}章</text>
-                <text class="feature-desc">{{ (book.description || '').slice(0, 80) }}</text>
+          <view class="panel feature-panel">
+            <SectionHead title="编辑精选" />
+            <view class="feature-list">
+              <view
+                v-for="book in editorialBooks.slice(0, 3)"
+                :key="book.id"
+                class="feature-card"
+                @tap="goDetail(book.id)"
+              >
+                <BookCover :title="book.title" :cover-url="book.coverUrl" size="lg" />
+                <view class="feature-info">
+                  <text class="feature-title">{{ book.title }}</text>
+                  <text class="feature-meta">{{ book.author || '佚名' }} · {{ book.chapterCount || 0 }}章</text>
+                  <text class="feature-desc">{{ (book.description || '').slice(0, 86) }}</text>
+                </view>
               </view>
             </view>
           </view>
@@ -129,7 +115,6 @@ const bookStore = useBookStore()
 const activeCategory = ref(0)
 const loading = ref(false)
 
-const bannerBooks = ref([])
 const editorialBooks = ref([])
 const hotBooks = ref([])
 const newBooks = ref([])
@@ -149,7 +134,6 @@ async function load() {
     ])
 
     const featuredData = featuredRes.code === 200 ? (featuredRes.data || []) : []
-    bannerBooks.value = featuredData.slice(0, 3)
     editorialBooks.value = featuredData
     hotBooks.value = hotRes.code === 200 ? (hotRes.data?.records || []) : []
     newBooks.value = newRes.code === 200 ? (newRes.data?.records || []) : []
@@ -182,10 +166,6 @@ function goRank(type) {
   uni.navigateTo({ url: `/pages/rank/rank?${cid}type=${type}` })
 }
 
-function bannerCoverStyle(book) {
-  return book?.coverUrl ? { background: `center / cover no-repeat url("${book.coverUrl}")` } : {}
-}
-
 function statusLabel(status) {
   if (status === 'COMPLETED') return '完结'
   return '连载'
@@ -204,8 +184,8 @@ onShow(() => {
 .page {
   width: 100%;
   min-height: 100vh;
-  padding: 10px 10px 76px;
-  background: #F8F8F6;
+  padding: 12px 10px 76px;
+  background: #F4F4F1;
   box-sizing: border-box;
   overflow-x: hidden;
 }
@@ -220,20 +200,20 @@ onShow(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .search-entry {
   min-width: 0;
   flex: 1;
-  height: 32px;
+  height: 34px;
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
   border-radius: 7px;
-  background: #FFFFFF;
-  border: 1px solid #EBEBE5;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(31, 31, 31, 0.06);
   box-sizing: border-box;
 }
 
@@ -250,17 +230,25 @@ onShow(() => {
 
 .category-button {
   flex: 0 0 56px;
-  height: 32px;
-  line-height: 32px;
+  height: 34px;
+  line-height: 34px;
   border-radius: 7px;
-  background: rgba(255,255,255,0.82);
-  border: 1px solid #EBEBE5;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(31, 31, 31, 0.06);
   color: #3A3A3A;
   font-size: 12px;
   font-weight: 700;
 }
 
-.channel-row { width: 100%; margin-bottom: 10px; white-space: nowrap; }
+.channel-row {
+  width: 100%;
+  margin-bottom: 10px;
+  white-space: nowrap;
+}
+
+.channel-row ::-webkit-scrollbar {
+  display: none;
+}
 
 .channel-item {
   position: relative;
@@ -288,84 +276,30 @@ onShow(() => {
   transform: translateX(-50%);
 }
 
-/* Banner */
-.banner-swiper {
-  width: 100%;
-  height: 118px;
-  margin-bottom: 10px;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.banner-card {
-  display: flex;
-  height: 100%;
-  background: linear-gradient(135deg, #2D2D2D 0%, #5A5A5A 58%, #8A8A8A 100%);
-}
-
-.banner-cover {
-  flex: 0 0 78px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.banner-cover-text {
-  color: rgba(255,255,255,0.7);
-  font-size: 24px;
-  font-weight: 900;
-  opacity: 0;
-}
-
-.banner-info {
-  flex: 1;
-  min-width: 0;
-  padding: 16px 14px 16px 4px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.banner-title {
-  color: #fff;
-  font-size: 16px;
-  font-weight: 900;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.banner-meta {
-  margin-top: 6px;
-  color: rgba(255,255,255,0.65);
-  font-size: 11px;
-}
-
-.banner-desc {
-  margin-top: 8px;
-  color: rgba(255,255,255,0.45);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-/* Feature grid */
-.feature-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 10px;
+/* Feature picks */
+.feature-panel {
+  padding-bottom: 4px;
 }
 
 .feature-card {
+  display: flex;
+  gap: 12px;
+  min-height: 118px;
+  padding: 10px 0;
   min-width: 0;
   overflow: hidden;
-  border-radius: 7px;
-  background: #FFFFFF;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+  border-top: 1px solid rgba(31, 31, 31, 0.06);
+}
+
+.feature-card:first-child {
+  padding-top: 0;
+  border-top: 0;
 }
 
 .feature-info {
-  padding: 8px 9px 10px;
+  min-width: 0;
+  flex: 1;
+  padding-top: 1px;
 }
 
 .feature-title {
@@ -373,7 +307,7 @@ onShow(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #1F1F1F;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 800;
   display: block;
 }
@@ -384,15 +318,15 @@ onShow(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #A09080;
-  font-size: 10px;
+  font-size: 11px;
   display: block;
 }
 
 .feature-desc {
-  margin-top: 7px;
+  margin-top: 9px;
   color: #6E6E6E;
-  font-size: 11px;
-  line-height: 16px;
+  font-size: 12px;
+  line-height: 18px;
   word-break: break-all;
   overflow-wrap: anywhere;
   display: -webkit-box;
@@ -406,7 +340,7 @@ onShow(() => {
   padding: 10px;
   border-radius: 7px;
   background: #FFFFFF;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+  box-shadow: 0 6px 18px rgba(31, 31, 31, 0.045);
   margin-bottom: 10px;
 }
 
@@ -484,6 +418,5 @@ onShow(() => {
 
 @media (min-width: 720px) {
   .page { padding-left: 22px; padding-right: 22px; }
-  .banner-swiper { height: 210px; }
 }
 </style>

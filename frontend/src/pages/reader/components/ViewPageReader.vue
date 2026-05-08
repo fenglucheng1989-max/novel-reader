@@ -58,6 +58,7 @@ const rootTop = ref(0)
 let ctx = null
 let canvasEl = null
 let repaginateTimer = null
+let adjacentPaginateTimer = null
 let resizeRaf = null
 
 const pages = ref([])
@@ -78,6 +79,11 @@ let dragLockedDir = 0
 let longPressTimer = null
 let longPressStart = null
 let animState = null
+let boundaryTransitionPending = false
+let boundaryTransitionTimer = null
+let cachedMeasureFont = ''
+const charWidthCache = new Map()
+const pageCache = new Map()
 
 const totalPages = computed(() => pages.value.length)
 const themeColors = computed(() => readerThemes[props.theme] || readerThemes.DEFAULT)
@@ -127,9 +133,41 @@ function normalizeContent(content) {
     .trim()
 }
 
+function hashContent(content) {
+  let hash = 5381
+  for (let i = 0; i < content.length; i++) {
+    hash = ((hash << 5) + hash) ^ content.charCodeAt(i)
+  }
+  return `${content.length}:${hash >>> 0}`
+}
+
+function layoutSignature() {
+  return [
+    viewWidth.value,
+    viewHeight.value,
+    effectiveFontSize.value,
+    effectiveLineHeight.value,
+    props.marginX,
+    props.marginY,
+    props.paragraphSpacing,
+    props.toolsVisible ? 1 : 0
+  ].join('|')
+}
+
+function rememberPages(cacheKey, pageList) {
+  pageCache.set(cacheKey, pageList)
+  if (pageCache.size > 12) {
+    pageCache.delete(pageCache.keys().next().value)
+  }
+  return rememberPages(cacheKey, pageList)
+}
+
 function buildPages(sourceContent, sourceTitle) {
   const content = normalizeContent(sourceContent)
   if (!content) return []
+  const cacheKey = `${layoutSignature()}::${sourceTitle || ''}::${hashContent(content)}`
+  const cached = pageCache.get(cacheKey)
+  if (cached) return cached
   const sourceLines = content.split(/\n+/).map((line) => line.trim()).filter(Boolean)
   const inferredTitle = sourceTitle ? '' : (sourceLines[0] || '')
   const bodyLines = sourceTitle ? sourceLines : sourceLines.slice(1)
@@ -179,14 +217,17 @@ function wrapCanvasText(text, maxWidth) {
   const chars = [...String(text || '')]
   const lines = []
   let line = ''
+  let lineWidth = 0
   ensureMeasureFont()
   for (const ch of chars) {
-    const next = line + ch
-    if (line && measureCanvasText(next) > maxWidth) {
+    const chWidth = measureCanvasChar(ch)
+    if (line && lineWidth + chWidth > maxWidth) {
       lines.push(line)
       line = ch
+      lineWidth = chWidth
     } else {
-      line = next
+      line += ch
+      lineWidth += chWidth
     }
   }
   if (line) lines.push(line)
@@ -195,7 +236,12 @@ function wrapCanvasText(text, maxWidth) {
 
 function ensureMeasureFont() {
   if (!ctx) setupCanvas()
-  if (ctx) ctx.font = canvasTextFont()
+  const font = canvasTextFont()
+  if (cachedMeasureFont !== font) {
+    cachedMeasureFont = font
+    charWidthCache.clear()
+  }
+  if (ctx) ctx.font = font
 }
 
 function canvasTextFont(weight = 400, scale = 1) {
@@ -206,12 +252,27 @@ function canvasTitleFont() {
   return `700 ${titleFontSize}px ${fontFamily}`
 }
 
+function isWideChar(ch) {
+  const code = String(ch || ' ').charCodeAt(0)
+  return code >= 0x2e80
+}
+
 function measureCanvasText(text) {
-  if (ctx) return ctx.measureText(text).width
   let width = 0
   for (const ch of String(text || '')) {
     width += /[一-鿿　-〿＀-￯]/.test(ch) ? effectiveFontSize.value : effectiveFontSize.value * 0.58
   }
+  return width
+}
+
+function measureCanvasChar(ch) {
+  const key = ch || ' '
+  const cached = charWidthCache.get(key)
+  if (cached != null) return cached
+  const width = ctx
+    ? ctx.measureText(key).width
+    : (isWideChar(key) ? effectiveFontSize.value : effectiveFontSize.value * 0.58)
+  charWidthCache.set(key, width)
   return width
 }
 
@@ -275,12 +336,25 @@ function setupCanvas() {
 function paginate() {
   updateSize()
   pages.value = buildPages(effectiveContent.value, effectiveTitle.value)
-  prevPages.value = buildPages(props.prevContent, '')
-  nextPages.value = buildPages(props.nextContent, '')
   const nextPage = Math.max(0, Math.min(Number(props.initialPage || 0), pages.value.length - 1))
   currentPage.value = nextPage
   emit('pageChange', nextPage)
   drawReader()
+  scheduleAdjacentPaginate()
+}
+
+function buildAdjacentPages() {
+  prevPages.value = buildPages(props.prevContent, '')
+  nextPages.value = buildPages(props.nextContent, '')
+  if (flipActive.value) drawReader()
+}
+
+function scheduleAdjacentPaginate(delay = 24) {
+  if (adjacentPaginateTimer) clearTimeout(adjacentPaginateTimer)
+  adjacentPaginateTimer = setTimeout(() => {
+    adjacentPaginateTimer = null
+    buildAdjacentPages()
+  }, delay)
 }
 
 function schedulePaginate() {
@@ -296,7 +370,9 @@ function clearCanvas() {
   if (!ctx) return
   ctx.save()
   ctx.setTransform(1, 0, 0, 1, 0, 0)
-  ctx.clearRect(0, 0, viewWidth.value, viewHeight.value)
+  ctx.clearRect(0, 0, ctx.canvas?.width || viewWidth.value, ctx.canvas?.height || viewHeight.value)
+  ctx.restore()
+  ctx.save()
   ctx.fillStyle = themeColors.value.background
   ctx.fillRect(0, 0, viewWidth.value, viewHeight.value)
   ctx.restore()
@@ -401,6 +477,11 @@ function cancelAnim() {
   animState = null
 }
 
+function clearBoundaryTransitionTimer() {
+  if (boundaryTransitionTimer) clearTimeout(boundaryTransitionTimer)
+  boundaryTransitionTimer = null
+}
+
 function easeOutCubic(t) {
   return 1 - Math.pow(1 - t, 3)
 }
@@ -451,10 +532,36 @@ function beginFlip(direction, progress) {
 }
 
 function finishFlip() {
+  boundaryTransitionPending = false
+  clearBoundaryTransitionTimer()
   flipProgress.value = 0
   flipActive.value = false
   committing.value = false
   drawReader()
+}
+
+function completeBoundaryFlip(direction) {
+  boundaryTransitionPending = true
+  committing.value = false
+  dragging.value = false
+  dragDeltaX.value = 0
+  flipProgress.value = 1
+  drawReader()
+  if (direction > 0) emit('next')
+  else emit('prev')
+  clearBoundaryTransitionTimer()
+  boundaryTransitionTimer = setTimeout(() => {
+    if (boundaryTransitionPending) finishFlip()
+  }, 900)
+}
+
+function resetBoundaryTransitionState() {
+  if (!boundaryTransitionPending) return
+  boundaryTransitionPending = false
+  clearBoundaryTransitionTimer()
+  flipProgress.value = 0
+  flipActive.value = false
+  committing.value = false
 }
 
 function applyPageChange() {
@@ -479,9 +586,7 @@ function settleFlip(shouldCommit) {
   animateTo(flipProgress.value, 1, 220, easeOutCubic, () => {
     if (isBoundaryFlip.value) {
       const dir = flipDirection.value
-      finishFlip()
-      if (dir > 0) emit('next')
-      else emit('prev')
+      completeBoundaryFlip(dir)
       return
     }
     applyPageChange()
@@ -510,9 +615,7 @@ function flipBy(direction) {
     animateTo(0.02, 1, 220, easeOutCubic, () => {
       if (isBoundaryFlip.value) {
         const dir = flipDirection.value
-        finishFlip()
-        if (dir > 0) emit('next')
-        else emit('prev')
+        completeBoundaryFlip(dir)
         return
       }
       applyPageChange()
@@ -695,9 +798,17 @@ function goToPage(idx) {
 }
 
 watch(
-  () => [props.chapter?.id, props.chapter?.content, props.chapter?.title, props.content, props.title, props.fontSize, props.lineHeight, props.marginX, props.marginY, props.paragraphSpacing, props.prevContent, props.nextContent, props.theme, props.toolsVisible],
-  schedulePaginate,
+  () => [props.chapter?.id, props.chapter?.content, props.chapter?.title, props.content, props.title, props.fontSize, props.lineHeight, props.marginX, props.marginY, props.paragraphSpacing, props.theme, props.toolsVisible],
+  () => {
+    resetBoundaryTransitionState()
+    schedulePaginate()
+  },
   { immediate: true }
+)
+
+watch(
+  () => [props.prevContent, props.nextContent],
+  () => scheduleAdjacentPaginate(0)
 )
 
 watch(() => props.initialPage, (val) => {
@@ -726,7 +837,9 @@ function onResize() {
 onBeforeUnmount(() => {
   cancelAnim()
   clearLongPressTimer()
+  clearBoundaryTransitionTimer()
   if (repaginateTimer) clearTimeout(repaginateTimer)
+  if (adjacentPaginateTimer) clearTimeout(adjacentPaginateTimer)
   if (resizeRaf) cancelAnimationFrame(resizeRaf)
   // #ifdef H5
   if (typeof window !== 'undefined') {

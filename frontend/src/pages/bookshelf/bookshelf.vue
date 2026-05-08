@@ -60,7 +60,7 @@
         </view>
 
         <view v-if="latestItem" class="continue-card">
-          <view class="continue-cover">{{ coverText(latestItem.book.title) }}</view>
+          <BookCover :title="latestItem.book.title" :cover-url="latestItem.book.coverUrl" size="sm" class="continue-cover-slot" />
           <view class="continue-main">
             <text class="continue-eyebrow">继续阅读</text>
             <text class="continue-title">{{ latestItem.book.title }}</text>
@@ -100,7 +100,7 @@
             @longpress.stop="showContextMenu(item)"
           >
             <view class="cover-wrap">
-              <view class="cover">{{ coverText(item.book.title) }}</view>
+              <BookCover :title="item.book.title" :cover-url="item.book.coverUrl" :size="viewMode === 'grid' ? 'xl' : 'lg'" class="shelf-cover" />
               <view
                 v-if="viewMode === 'grid' && progressPercent(item) > 0 && progressPercent(item) < 100"
                 class="progress-ring"
@@ -145,6 +145,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import { useUserStore } from '../../store/user'
 import { useReaderStore } from '../../store/reader'
+import BookCover from '../../components/BookCover.vue'
 
 const bookStore = useBookStore()
 const userStore = useUserStore()
@@ -376,10 +377,6 @@ function latestChapterText(item) {
   return item.book.latestChapterTitle ? `最新：${item.book.latestChapterTitle}` : unreadText(item)
 }
 
-function coverText(title) {
-  return (title || '书').slice(0, 2)
-}
-
 onShow(() => {
   userStore.syncFromStorage()
   refresh()
@@ -556,17 +553,8 @@ onShow(() => {
   box-sizing: border-box;
 }
 
-.continue-cover {
+.continue-cover-slot {
   flex: 0 0 48px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: linear-gradient(145deg, #3A3A3A, #A09080);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 900;
 }
 
 .continue-main {
@@ -693,24 +681,14 @@ onShow(() => {
   width: 64px;
 }
 
-.cover {
+.shelf-cover {
   width: 100%;
-  height: 142px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: linear-gradient(145deg, #3A3A3A, #A09080);
-  color: #fff;
-  font-size: 22px;
-  font-weight: 900;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.08);
-  box-sizing: border-box;
+  height: 132px;
 }
 
-.book-row .cover {
+.book-row .shelf-cover {
+  width: 64px;
   height: 86px;
-  font-size: 16px;
 }
 
 .progress-ring {
@@ -873,10 +851,6 @@ onShow(() => {
   .page {
     padding-left: 22px;
     padding-right: 22px;
-  }
-
-  .cover {
-    height: 168px;
   }
 }
 </style>

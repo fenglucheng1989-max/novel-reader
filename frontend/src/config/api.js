@@ -1,8 +1,8 @@
 function getDevH5ApiBaseUrl() {
   if (typeof window === 'undefined' || !window.location?.hostname) {
-    return 'http://localhost:8080'
+    return 'http://localhost:8081'
   }
-  return `http://${window.location.hostname}:8080`
+  return `http://${window.location.hostname}:8081`
 }
 
 const DEFAULT_H5_API_BASE_URL = import.meta.env.DEV ? getDevH5ApiBaseUrl() : ''

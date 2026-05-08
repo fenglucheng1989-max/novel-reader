@@ -93,10 +93,9 @@ const readerTopPadding = 62
 const titleFontSize = 24
 const titleLineHeight = 34
 const titleBottomGap = 24
-const chromeBottomInset = 114
 const titleY = computed(() => readerTopPadding)
 const contentTop = computed(() => titleY.value + titleLineHeight + titleBottomGap)
-const contentBottom = computed(() => props.toolsVisible ? chromeBottomInset + 14 : 44)
+const contentBottom = computed(() => 44)
 const progressText = computed(() => {
   if (!totalPages.value) return '0%'
   return `${Math.round(((currentPage.value + 1) / totalPages.value) * 100)}%`

@@ -53,11 +53,11 @@ defineEmits(['prev', 'next', 'catalog', 'discuss', 'night', 'setting'])
   bottom: 0;
   z-index: 20;
   width: min(100vw, 480px);
-  padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
+  padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  background: rgba(28, 28, 28, 0.94);
+  background: rgba(248, 248, 246, 0.96);
   border-radius: 18px 18px 0 0;
-  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
   backdrop-filter: blur(12px);
 }
 
@@ -74,8 +74,8 @@ defineEmits(['prev', 'next', 'catalog', 'discuss', 'night', 'setting'])
   align-items: center;
   justify-content: center;
   border-radius: 15px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #CCCCCC;
+  background: rgba(0, 0, 0, 0.05);
+  color: #5A5A5A;
   font-size: 13px;
 }
 
@@ -94,17 +94,17 @@ defineEmits(['prev', 'next', 'catalog', 'discuss', 'night', 'setting'])
   height: 3px;
   overflow: hidden;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.08);
 }
 
 .progress-fill {
   height: 100%;
   border-radius: 2px;
-  background: #A09080;
+  background: #8C7B62;
 }
 
 .progress-label {
-  color: rgba(255, 255, 255, 0.55);
+  color: #999;
   text-align: center;
   font-size: 11px;
 }
@@ -124,13 +124,13 @@ defineEmits(['prev', 'next', 'catalog', 'discuss', 'night', 'setting'])
   justify-content: center;
   gap: 3px;
   border-radius: 10px;
-  color: #CCCCCC;
+  color: #5A5A5A;
 }
 
 .quick-item:active,
 .quick-item.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: #FFFFFF;
+  background: rgba(0, 0, 0, 0.06);
+  color: #1F1F1F;
 }
 
 .quick-icon {

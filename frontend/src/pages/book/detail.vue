@@ -45,7 +45,7 @@
           </scroll-view>
         </view>
         <view v-if="shouldFold" class="intro-body intro-collapsed" @tap="showIntroModal = true">
-          <text class="intro-text">{{ truncatedIntro }}<text class="more-dots">...</text><text class="more-btn">更多</text></text>
+          <text class="intro-text">{{ truncatedIntro }}...<text class="more-btn">更多</text></text>
         </view>
         <text v-else class="intro-text">{{ descText }}</text>
       </view>
@@ -70,8 +70,7 @@
       <view class="reviews">
         <view class="section-head review-head">
           <view>
-            <text class="section-title">热门评价</text>
-            <text class="review-sub">{{ commentTotal ? `${commentTotal} 人评价过这本书` : '读完的人都在这里留下想法' }}</text>
+            <text class="section-title">热门评书</text>
           </view>
           <text v-if="comments.length" class="section-more" @tap="goReviews">{{ commentTotal || comments.length }} 条评价 ›</text>
         </view>
@@ -435,6 +434,9 @@ onShow(() => {
 }
 
 .intro-collapsed {
+  max-height: 52px;
+  overflow: hidden;
+  line-height: 26px;
   cursor: pointer;
 }
 
@@ -445,19 +447,10 @@ onShow(() => {
   word-break: break-word;
 }
 
-.more-dots {
-  color: #5A5A5A;
-  font-size: 15px;
-  line-height: 26px;
-}
-
 .more-btn {
   color: #A09080;
   font-size: 13px;
   font-weight: 800;
-  float: right;
-  line-height: 26px;
-  margin-left: 4px;
 }
 
 /* ── Intro Modal ── */
@@ -606,13 +599,6 @@ onShow(() => {
   color: #A09080;
   font-size: 12px;
   line-height: 26px;
-}
-
-.review-sub {
-  display: block;
-  margin-top: 6px;
-  color: #8C8C8C;
-  font-size: 11px;
 }
 
 /* ── Reviews (compact, no card) ── */

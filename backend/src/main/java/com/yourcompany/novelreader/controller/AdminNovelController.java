@@ -14,6 +14,7 @@ import com.yourcompany.novelreader.mapper.AppUserMapper;
 import com.yourcompany.novelreader.mapper.NovelBookMapper;
 import com.yourcompany.novelreader.mapper.NovelCategoryMapper;
 import com.yourcompany.novelreader.mapper.NovelChapterMapper;
+import com.yourcompany.novelreader.mapper.NovelCommentMapper;
 import com.yourcompany.novelreader.service.BookService;
 import com.yourcompany.novelreader.vo.AdminDashboardVO;
 import com.yourcompany.novelreader.vo.ApiResponse;
@@ -59,18 +60,21 @@ public class AdminNovelController extends BaseUserController {
     private final NovelChapterMapper chapterMapper;
     private final NovelCategoryMapper categoryMapper;
     private final AppUserMapper appUserMapper;
+    private final NovelCommentMapper commentMapper;
 
     public AdminNovelController(AppUserMapper appUserMapper,
                                 BookService bookService,
                                 NovelBookMapper bookMapper,
                                 NovelChapterMapper chapterMapper,
-                                NovelCategoryMapper categoryMapper) {
+                                NovelCategoryMapper categoryMapper,
+                                NovelCommentMapper commentMapper) {
         super(appUserMapper);
         this.appUserMapper = appUserMapper;
         this.bookService = bookService;
         this.bookMapper = bookMapper;
         this.chapterMapper = chapterMapper;
         this.categoryMapper = categoryMapper;
+        this.commentMapper = commentMapper;
     }
 
     @GetMapping("/dashboard")
@@ -81,6 +85,7 @@ public class AdminNovelController extends BaseUserController {
                 .chapterCount(chapterMapper.selectCount(null))
                 .categoryCount(categoryMapper.selectCount(null))
                 .userCount(appUserMapper.selectCount(null))
+                .commentCount(commentMapper.selectCount(null))
                 .build());
     }
 
@@ -167,6 +172,7 @@ public class AdminNovelController extends BaseUserController {
         NovelCategory category = NovelCategory.builder()
                 .name(dto.getName())
                 .parentId(dto.getParentId() == null ? 0L : dto.getParentId())
+                .groupKey(dto.getGroupKey())
                 .sortOrder(dto.getSortOrder() == null ? 0 : dto.getSortOrder())
                 .build();
         categoryMapper.insert(category);
@@ -184,6 +190,7 @@ public class AdminNovelController extends BaseUserController {
         }
         category.setName(dto.getName());
         category.setParentId(dto.getParentId() == null ? 0L : dto.getParentId());
+        category.setGroupKey(dto.getGroupKey());
         category.setSortOrder(dto.getSortOrder() == null ? 0 : dto.getSortOrder());
         categoryMapper.updateById(category);
         return ApiResponse.success(category);

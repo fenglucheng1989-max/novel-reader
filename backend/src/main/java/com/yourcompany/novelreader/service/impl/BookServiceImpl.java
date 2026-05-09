@@ -31,6 +31,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -54,7 +55,7 @@ public class BookServiceImpl implements BookService {
     }
 
     @Override
-    public List<NovelBook> rank(Long categoryId, Integer limit) {
+    public List<NovelBook> rank(Long categoryId, Integer limit, String groupKey) {
         int size = limit == null ? 50 : Math.max(1, Math.min(limit, 100));
         LambdaQueryWrapper<NovelBook> query = new LambdaQueryWrapper<NovelBook>()
                 .orderByDesc(NovelBook::getChapterCount)
@@ -63,6 +64,11 @@ public class BookServiceImpl implements BookService {
                 .orderByDesc(NovelBook::getUpdatedAt);
         if (categoryId != null) {
             query.eq(NovelBook::getCategoryId, categoryId);
+        }
+        List<Long> groupIds = resolveGroupCategoryIds(groupKey);
+        if (groupIds != null) {
+            if (groupIds.isEmpty()) return List.of();
+            query.in(NovelBook::getCategoryId, groupIds);
         }
         return bookMapper.selectList(query).stream().limit(size).toList();
     }
@@ -125,7 +131,16 @@ public class BookServiceImpl implements BookService {
         int pageSize = Math.min(100, Math.max(1, filter.getPageSize() != null ? filter.getPageSize() : 20));
 
         LambdaQueryWrapper<NovelBook> query = new LambdaQueryWrapper<>();
-        query.eq(filter.getCategoryId() != null, NovelBook::getCategoryId, filter.getCategoryId());
+        List<Long> groupIds = resolveGroupCategoryIds(filter.getGroupKey());
+        if (groupIds != null) {
+            if (groupIds.isEmpty()) {
+                return PageResult.<NovelBook>builder()
+                        .records(List.of()).total(0L).page(1L).pageSize(20L).build();
+            }
+            query.in(NovelBook::getCategoryId, groupIds);
+        } else {
+            query.eq(filter.getCategoryId() != null, NovelBook::getCategoryId, filter.getCategoryId());
+        }
         query.eq(filter.getStatus() != null && !filter.getStatus().isBlank(),
                 NovelBook::getStatus, filter.getStatus());
         query.ge(filter.getMinWordCount() != null, NovelBook::getWordCount, filter.getMinWordCount());
@@ -157,12 +172,17 @@ public class BookServiceImpl implements BookService {
     }
 
     @Override
-    public List<NovelBook> featured(Integer limit) {
+    public List<NovelBook> featured(Integer limit, String groupKey) {
         int size = limit != null ? Math.min(20, Math.max(1, limit)) : 6;
-        return bookMapper.selectList(new LambdaQueryWrapper<NovelBook>()
+        LambdaQueryWrapper<NovelBook> query = new LambdaQueryWrapper<NovelBook>()
                 .orderByDesc(NovelBook::getUpdatedAt)
-                .orderByAsc(NovelBook::getSortOrder))
-                .stream().limit(size).toList();
+                .orderByAsc(NovelBook::getSortOrder);
+        List<Long> groupIds = resolveGroupCategoryIds(groupKey);
+        if (groupIds != null) {
+            if (groupIds.isEmpty()) return List.of();
+            query.in(NovelBook::getCategoryId, groupIds);
+        }
+        return bookMapper.selectList(query).stream().limit(size).toList();
     }
 
     private int estimateReadingMinutes(Integer wordCount) {
@@ -325,6 +345,14 @@ public class BookServiceImpl implements BookService {
             book.setLatestChapterTitle(null);
         }
         bookMapper.updateById(book);
+    }
+
+    private List<Long> resolveGroupCategoryIds(String groupKey) {
+        if (groupKey == null || groupKey.isBlank()) return null;
+        List<NovelCategory> categories = categoryMapper.selectList(
+                new LambdaQueryWrapper<NovelCategory>().eq(NovelCategory::getGroupKey, groupKey));
+        if (categories.isEmpty()) return List.of();
+        return categories.stream().map(NovelCategory::getId).toList();
     }
 
     private void clearBookCache(Long bookId) {

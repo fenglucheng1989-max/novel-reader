@@ -12,6 +12,9 @@
         <el-menu-item index="/dashboard">概览</el-menu-item>
         <el-menu-item index="/books">书籍管理</el-menu-item>
         <el-menu-item index="/categories">分类管理</el-menu-item>
+        <el-menu-item index="/comments">评论管理</el-menu-item>
+        <el-menu-item index="/users">用户管理</el-menu-item>
+        <el-menu-item index="/legal-documents">法律文档</el-menu-item>
         <el-menu-item index="/import">导入中心</el-menu-item>
       </el-menu>
     </el-aside>

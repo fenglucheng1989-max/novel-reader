@@ -7,7 +7,7 @@
         <text class="back" @tap="goBack">‹ 返回</text>
         <view class="top-actions">
           <text class="mini-action" @tap="toggleShelf">{{ detail.inBookshelf ? '已在书架' : '+ 加书架' }}</text>
-          <text class="mini-action" @tap="onListen">🎧 听书</text>
+          <text class="mini-action" @tap="toggleFavorite">{{ isFavorited ? '♥ 已收藏' : '♡ 收藏' }}</text>
         </view>
       </view>
       <view class="hero">
@@ -118,6 +118,7 @@ const commentTotal = ref(0)
 const commentsLoading = ref(false)
 const showHint = ref(true)
 const touchStartX = ref(0)
+const isFavorited = ref(false)
 
 const TWO_LINE_CHARS = 48
 const descText = computed(() => detail.value?.book?.description || '')
@@ -133,6 +134,7 @@ async function load() {
   try {
     const res = await bookStore.loadDetail(id.value)
     detail.value = res.code === 200 ? res.data : null
+    checkFavorite()
   } catch {
     detail.value = null
   } finally {
@@ -168,6 +170,31 @@ async function toggleShelf() {
     await bookStore.addShelf(id.value)
     detail.value.inBookshelf = true
   }
+}
+
+async function toggleFavorite() {
+  if (!userStore.isLoggedIn) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    setTimeout(() => uni.switchTab({ url: '/pages/mine/mine' }), 700)
+    return
+  }
+  if (isFavorited.value) {
+    await bookStore.removeFavorite(id.value)
+    isFavorited.value = false
+    uni.showToast({ title: '已取消收藏', icon: 'none' })
+  } else {
+    await bookStore.addFavorite(id.value)
+    isFavorited.value = true
+    uni.showToast({ title: '已收藏', icon: 'none' })
+  }
+}
+
+async function checkFavorite() {
+  if (!userStore.isLoggedIn) return
+  try {
+    const res = await bookStore.checkFavoriteStatus(id.value)
+    if (res.code === 200) isFavorited.value = res.data
+  } catch { isFavorited.value = false }
 }
 
 function onTouchStart(e) {

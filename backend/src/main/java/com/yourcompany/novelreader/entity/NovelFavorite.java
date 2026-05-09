@@ -3,8 +3,6 @@ package com.yourcompany.novelreader.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.annotation.FieldFill;
-import com.baomidou.mybatisplus.annotation.TableField;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -16,27 +14,11 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("app_user")
-public class AppUser {
-
+@TableName("novel_favorite")
+public class NovelFavorite {
     @TableId(type = IdType.AUTO)
     private Long id;
-
-    private String username;
-
-    private String passwordHash;
-
-    private String email;
-
-    private String avatarUrl;
-
-    private String role;
-
-    private String status;
-
-    @TableField(fill = FieldFill.INSERT)
+    private Long userId;
+    private Long bookId;
     private LocalDateTime createdAt;
-
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedAt;
 }

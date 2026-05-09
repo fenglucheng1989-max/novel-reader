@@ -10,7 +10,7 @@ import org.springframework.security.core.Authentication;
 @RequiredArgsConstructor
 public abstract class BaseUserController {
 
-    private final AppUserMapper appUserMapper;
+    protected final AppUserMapper appUserMapper;
 
     protected Long currentUserId(Authentication authentication) {
         return currentUser(authentication).getId();

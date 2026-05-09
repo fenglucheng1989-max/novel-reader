@@ -1,0 +1,13 @@
+package com.yourcompany.novelreader.dto;
+
+import lombok.Data;
+
+@Data
+public class UpdateProfileDTO {
+
+    private String avatarUrl;
+
+    private String email;
+
+    private String username;
+}

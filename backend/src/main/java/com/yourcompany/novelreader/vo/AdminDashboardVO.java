@@ -10,4 +10,5 @@ public class AdminDashboardVO {
     private Long chapterCount;
     private Long categoryCount;
     private Long userCount;
+    private Long commentCount;
 }

@@ -7,7 +7,12 @@
     <el-table :data="categories" border v-loading="loading" empty-text="暂无分类">
       <el-table-column prop="id" label="ID" width="90" />
       <el-table-column prop="name" label="名称" min-width="180" />
-      <el-table-column prop="parentId" label="父级 ID" width="120" />
+      <el-table-column label="父级分类" width="140">
+        <template #default="{ row }">
+          <span v-if="row.parentId && row.parentId !== 0">{{ parentName(row.parentId) }}</span>
+          <span v-else style="color:#ccc">—</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="sortOrder" label="排序" width="100" />
       <el-table-column label="操作" width="180">
         <template #default="{ row }">
@@ -95,6 +100,11 @@ async function remove(id) {
   await deleteCategory(id)
   ElMessage.success('已删除')
   load()
+}
+
+function parentName(parentId) {
+  const parent = categories.value.find(c => c.id === parentId)
+  return parent ? parent.name : `ID:${parentId}`
 }
 
 onMounted(load)

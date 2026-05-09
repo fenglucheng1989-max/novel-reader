@@ -44,12 +44,12 @@
             </text>
           </view>
         </view>
-        <view v-else class="empty">{{ loadFailed ? '章节不存在' : '正在加载章节...' }}</view>
+        <view v-else class="empty">{{ readerEmptyMessage }}</view>
       </scroll-view>
     </view>
 
     <!-- ==================== PAGE mode ==================== -->
-    <view v-else-if="loading || !bookId" class="reader-page-loading reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }">
+    <view v-else-if="(loading && !rawContent) || !bookId" class="reader-page-loading reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }">
       <text>正在加载章节...</text>
     </view>
 
@@ -58,9 +58,9 @@
       class="reader-brightness-layer"
       :key="`${readerRenderKey}-${bookId}`"
       ref="pageReaderRef"
-      :chapter="currentChapter || readerStore.chapter"
+      :chapter="chapter"
       :title="chapter?.title || currentTitle"
-      :content="currentContent || chapter?.content || ''"
+      :content="rawContent"
       :prev-content="prevChapterContent"
       :next-content="nextChapterContent"
       :font-size="readerStore.setting.fontSize"
@@ -81,13 +81,21 @@
       @paragraphSelect="openParagraphToolsFromPage"
       @commentBubbleTap="showParagraphComments"
     />
+    <view
+      v-if="rawContent && readerStore.setting.turnMode !== 'SCROLL' && (showTools || settingVisible || catalogVisible || paragraphMenuVisible || paragraphComposerVisible || typoFeedbackVisible || paragraphCommentsVisible)"
+      ref="centerToggleRef"
+      class="reader-center-toggle"
+      @tap.stop="hideToolsLayer"
+      @click.stop="hideToolsLayer"
+      @touchend.stop.prevent="hideToolsLayer"
+      @pointerup.stop="hideToolsLayer"
+    />
     <view v-else class="reader-page-loading reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }">
-      <text>{{ loadFailed ? '章节不存在' : '正在加载章节...' }}</text>
+      <text>{{ readerEmptyMessage }}</text>
     </view>
 
     <!-- ==================== Tool layers ==================== -->
     <ReaderTopBar
-      :key="`top-${readerRenderKey}`"
       :visible="showTools && !settingVisible"
       :title="currentTitle || chapter?.title || '阅读'"
       @back="goBack"
@@ -96,7 +104,6 @@
     />
 
     <ReaderBottomBar
-      :key="`bottom-${readerRenderKey}`"
       :visible="showTools && !settingVisible"
       :page-indicator="pageIndicator"
       :progress-percent="progressPercent"
@@ -106,6 +113,7 @@
       @prev="prevChapter"
       @next="nextChapter"
       @catalog="onCatalogTap"
+      @discuss="discussVisible = true"
       @night="toggleNight"
       @setting="toggleSetting"
     />
@@ -194,6 +202,20 @@
       <text v-else class="paragraph-comment-empty">暂无段评</text>
       <button class="feedback-submit full" @tap.stop="openParagraphComposer">写段评</button>
     </view>
+
+    <!-- ==================== Discuss sheet ==================== -->
+    <view v-if="discussVisible" class="reader-sheet-mask" @tap.stop="discussVisible = false" />
+    <view v-if="discussVisible" class="paragraph-comments-sheet" @tap.stop style="max-height: 60vh;">
+      <view class="sheet-handle" />
+      <text class="feedback-title">本章讨论</text>
+      <view v-if="chapterComments.length" class="paragraph-comment-list">
+        <view v-for="item in chapterComments" :key="item.id" class="paragraph-comment-item">
+          <text class="paragraph-comment-user">{{ item.username || '读者' }}</text>
+          <text class="paragraph-comment-text">{{ item.content }}</text>
+        </view>
+      </view>
+      <text v-else class="paragraph-comment-empty">暂无讨论，长按段落可以写段评</text>
+    </view>
   </view>
 </template>
 
@@ -225,6 +247,7 @@ const scrollTop = ref(0)
 const position = ref(0)
 const pageModePage = ref(0)
 const pageReaderRef = ref(null)
+const centerToggleRef = ref(null)
 const brightness = ref(Number(uni.getStorageSync('readerBrightness') || 80))
 const eyeProtection = ref(Boolean(uni.getStorageSync('readerEyeProtection') || false))
 const currentChapter = ref(null)
@@ -244,20 +267,44 @@ const feedbackSubmitting = ref(false)
 const chapterComments = ref([])
 const catalogVisible = ref(false)
 const paragraphCommentsVisible = ref(false)
+const discussVisible = ref(false)
 const chapterSwitching = ref(false)
 const readerRenderKey = ref(0)
 let autoPageTimer = null
 let autoSaveTimer = null
 let initializing = false
 let showRetryTimer = null
+let chapterLoadRetryTimer = null
+let chapterLoadRetryCount = 0
+let lastToolsToggleAt = 0
+let centerToggleEl = null
+let centerTogglePointerStart = null
 const lastReaderRouteKey = 'reader:lastRoute'
 
 // ---- computed ----
-const chapter = computed(() => currentChapter.value || readerStore.chapter)
+const storeChapterForRoute = computed(() => {
+  const stored = readerStore.chapter
+  if (!stored?.content) return null
+  if (String(stored.bookId) !== String(bookId.value)) return null
+  if (Number(stored.chapterNo) !== Number(chapterNo.value)) return null
+  return stored
+})
+const currentChapterForRoute = computed(() => {
+  const current = currentChapter.value
+  if (!current?.content) return null
+  if (String(current.bookId) !== String(bookId.value)) return null
+  if (Number(current.chapterNo) !== Number(chapterNo.value)) return null
+  return current
+})
+const chapter = computed(() => currentChapterForRoute.value || storeChapterForRoute.value)
 const rawContent = computed(() => currentContent.value || chapter.value?.content || '')
 const maxChapterNo = computed(() => {
   const list = readerStore.chapters || []
   return list.length ? Math.max(...list.map((item) => Number(item.chapterNo || 0))) : 0
+})
+const readerEmptyMessage = computed(() => {
+  if (!loadFailed.value) return '正在加载章节...'
+  return isChapterOutOfRange() ? '章节不存在' : '章节加载失败，轻点重试'
 })
 const isFirstChapter = computed(() => chapterNo.value <= 1)
 const isLastChapter = computed(() => maxChapterNo.value > 0 && chapterNo.value >= maxChapterNo.value)
@@ -369,11 +416,46 @@ function applyChapterData(data) {
   currentContent.value = data.content || ''
   readerStore.$patch({ chapter: data })
   saveLastReaderRoute()
-  readerRenderKey.value += 1
   loadFailed.value = false
+  chapterLoadRetryCount = 0
 }
 
-async function loadChapter({ restoreSavedProgress = true } = {}) {
+function isChapterOutOfRange(no = chapterNo.value) {
+  const currentNo = Number(no || 0)
+  const maxNo = Number(maxChapterNo.value || 0)
+  return Boolean(maxNo && currentNo > maxNo)
+}
+
+function scheduleChapterLoadRetry() {
+  if (chapterLoadRetryCount >= 2 || isChapterOutOfRange()) return false
+  if (chapterLoadRetryTimer) clearTimeout(chapterLoadRetryTimer)
+  chapterLoadRetryCount += 1
+  chapterLoadRetryTimer = setTimeout(() => {
+    chapterLoadRetryTimer = null
+    loadChapter({ restoreSavedProgress: false, fromRetry: true })
+  }, 420)
+  return true
+}
+
+function markChapterLoadFailed() {
+  if (rawContent.value) return
+  currentChapter.value = null
+  currentTitle.value = ''
+  currentContent.value = ''
+  readerStore.$patch({ chapter: null })
+  if (!scheduleChapterLoadRetry()) {
+    loadFailed.value = true
+  }
+}
+
+async function loadChapter({ restoreSavedProgress = true, fromRetry = false } = {}) {
+  if (!fromRetry) {
+    chapterLoadRetryCount = 0
+    if (chapterLoadRetryTimer) {
+      clearTimeout(chapterLoadRetryTimer)
+      chapterLoadRetryTimer = null
+    }
+  }
   const cached = readerStore.getCachedChapter(bookId.value, chapterNo.value)
   loading.value = !cached
   loadFailed.value = false
@@ -384,11 +466,7 @@ async function loadChapter({ restoreSavedProgress = true } = {}) {
     if (res?.code !== 200 || !res?.data?.content) {
       const recovered = await recoverMissingChapter()
       if (!recovered) {
-        currentChapter.value = null
-        currentTitle.value = ''
-        currentContent.value = ''
-        readerStore.$patch({ chapter: null })
-        loadFailed.value = true
+        markChapterLoadFailed()
       }
     } else {
       applyChapterData(res.data)
@@ -396,11 +474,7 @@ async function loadChapter({ restoreSavedProgress = true } = {}) {
       instance?.proxy?.$forceUpdate?.()
     }
   } catch (error) {
-    currentChapter.value = null
-    currentTitle.value = ''
-    currentContent.value = ''
-    readerStore.$patch({ chapter: null })
-    loadFailed.value = true
+    markChapterLoadFailed()
   } finally {
     loading.value = false
     preloadAdjacentChapters()
@@ -687,6 +761,19 @@ function clearParagraphTools() {
   feedbackSubmitting.value = false
 }
 
+function closeReaderOverlays() {
+  const hadOverlay = paragraphMenuVisible.value ||
+    paragraphComposerVisible.value ||
+    typoFeedbackVisible.value ||
+    paragraphCommentsVisible.value ||
+    catalogVisible.value ||
+    settingVisible.value
+  clearParagraphTools()
+  catalogVisible.value = false
+  settingVisible.value = false
+  return hadOverlay
+}
+
 function copySelectedParagraph() {
   if (!selectedParagraph.value?.text) return
   uni.setClipboardData({
@@ -763,12 +850,7 @@ async function submitParagraphFeedback() {
 
 // ---- tools & setting ----
 function onContentTap(e) {
-  if (selectedParagraph.value) {
-    clearParagraphTools()
-    return
-  }
-  if (settingVisible.value) {
-    settingVisible.value = false
+  if (closeReaderOverlays()) {
     return
   }
   if (readerStore.setting.turnMode === 'SCROLL') {
@@ -782,14 +864,100 @@ function onContentTap(e) {
 }
 
 function toggleTools() {
-  if (settingVisible.value) {
-    settingVisible.value = false
+  const now = Date.now()
+  if (now - lastToolsToggleAt < 160) return
+  lastToolsToggleAt = now
+  if (chapterSwitching.value) return
+  if (closeReaderOverlays()) {
     return
   }
   showTools.value = !showTools.value
 }
 
+function hideToolsLayer() {
+  const now = Date.now()
+  if (now - lastToolsToggleAt < 160) return
+  lastToolsToggleAt = now + 650
+  closeReaderOverlays()
+  showTools.value = false
+}
+
+function onCenterToggleNative(event) {
+  event?.preventDefault?.()
+  event?.stopPropagation?.()
+  hideToolsLayer()
+}
+
+function resolveElement(viewRef) {
+  const raw = viewRef?.value
+  return raw?.$el || raw
+}
+
+function bindCenterToggle() {
+  // #ifdef H5
+  if (typeof document === 'undefined') return
+  const nextEl = resolveElement(centerToggleRef) || document.querySelector('.reader-center-toggle')
+  if (!nextEl || nextEl === centerToggleEl) return
+  unbindCenterToggle()
+  centerToggleEl = nextEl
+  centerToggleEl.addEventListener('click', onCenterToggleNative)
+  centerToggleEl.addEventListener('pointerup', onCenterToggleNative)
+  centerToggleEl.addEventListener('touchend', onCenterToggleNative, { passive: false })
+  // #endif
+}
+
+function isCenterToggleActive() {
+  return Boolean(
+    rawContent.value &&
+    readerStore.setting.turnMode !== 'SCROLL' &&
+    (showTools.value || settingVisible.value || catalogVisible.value || paragraphMenuVisible.value || paragraphComposerVisible.value || typoFeedbackVisible.value || paragraphCommentsVisible.value)
+  )
+}
+
+function isCenterTogglePoint(x, y) {
+  if (!isCenterToggleActive()) return false
+  const width = window?.innerWidth || uni.getSystemInfoSync().windowWidth || 375
+  const height = window?.innerHeight || uni.getSystemInfoSync().windowHeight || 667
+  return x >= width * 0.28 && x <= width * 0.72 && y >= 54 && y <= height - 128
+}
+
+function onDocumentCenterPointerDown(event) {
+  if (!isCenterTogglePoint(event.clientX, event.clientY)) return
+  centerTogglePointerStart = { x: event.clientX, y: event.clientY }
+}
+
+function onDocumentCenterPointerUp(event) {
+  const start = centerTogglePointerStart
+  centerTogglePointerStart = null
+  if (!start || !isCenterTogglePoint(event.clientX, event.clientY)) return
+  const dx = Math.abs(event.clientX - start.x)
+  const dy = Math.abs(event.clientY - start.y)
+  if (dx > 10 || dy > 10) return
+  event.preventDefault?.()
+  event.stopPropagation?.()
+  hideToolsLayer()
+}
+
+function onDocumentCenterClick(event) {
+  if (!isCenterTogglePoint(event.clientX, event.clientY)) return
+  event.preventDefault?.()
+  event.stopPropagation?.()
+  hideToolsLayer()
+}
+
+function unbindCenterToggle() {
+  // #ifdef H5
+  if (!centerToggleEl) return
+  centerToggleEl.removeEventListener('click', onCenterToggleNative)
+  centerToggleEl.removeEventListener('pointerup', onCenterToggleNative)
+  centerToggleEl.removeEventListener('touchend', onCenterToggleNative)
+  centerToggleEl = null
+  // #endif
+}
+
 function toggleSetting() {
+  clearParagraphTools()
+  catalogVisible.value = false
   settingVisible.value = !settingVisible.value
 }
 
@@ -862,16 +1030,28 @@ async function nextChapter() {
 async function switchChapter(targetChapterNo, { toLastPage = false } = {}) {
   if (chapterSwitching.value) return
   if (!bookId.value || !targetChapterNo) return
+  const normalizedNo = Number(targetChapterNo)
+  const maxNo = Number(maxChapterNo.value || 0)
+  if (!normalizedNo || normalizedNo < 1 || (maxNo && normalizedNo > maxNo)) {
+    uni.showToast({ title: '章节不存在', icon: 'none' })
+    return
+  }
   chapterSwitching.value = true
+  if (chapterLoadRetryTimer) {
+    clearTimeout(chapterLoadRetryTimer)
+    chapterLoadRetryTimer = null
+  }
+  chapterLoadRetryCount = 0
+  closeReaderOverlays()
   saveProgress().catch(() => {})
   try {
-    const target = await ensureChapterPreloaded(targetChapterNo)
+    const target = await ensureChapterPreloaded(normalizedNo)
     if (!target?.content) {
       uni.showToast({ title: '章节不存在', icon: 'none' })
       return
     }
     stopAutoPage()
-    chapterNo.value = Number(targetChapterNo)
+    chapterNo.value = Number(target.chapterNo || normalizedNo)
     // Update data in-place so ViewPageReader stays mounted and repaginates
     currentChapter.value = { ...target }
     currentTitle.value = target.title || ''
@@ -959,6 +1139,21 @@ watch(() => readerStore.setting.autoPageEnabled, (enabled) => {
 watch(() => readerStore.setting.autoPageInterval, () => {
   if (readerStore.setting.autoPageEnabled) restartAutoPage()
 })
+
+watch(
+  () => [
+    rawContent.value,
+    readerStore.setting.turnMode,
+    showTools.value,
+    settingVisible.value,
+    catalogVisible.value,
+    paragraphMenuVisible.value,
+    paragraphComposerVisible.value,
+    typoFeedbackVisible.value,
+    paragraphCommentsVisible.value
+  ],
+  () => nextTick(bindCenterToggle)
+)
 
 // ---- setting ----
 function saveSetting(patch) {
@@ -1075,9 +1270,13 @@ onLoad((query) => { initReader(query) })
 onMounted(() => {
   if (showRetryTimer) clearTimeout(showRetryTimer)
   showRetryTimer = setTimeout(ensureReaderReady, 0)
+  nextTick(bindCenterToggle)
   // #ifdef H5
   if (typeof window !== 'undefined') {
     window.addEventListener('hashchange', ensureReaderReady)
+    document.addEventListener('pointerdown', onDocumentCenterPointerDown, true)
+    document.addEventListener('pointerup', onDocumentCenterPointerUp, true)
+    document.addEventListener('click', onDocumentCenterClick, true)
   }
   // #endif
 })
@@ -1089,6 +1288,8 @@ onShow(() => {
 
 onUnload(() => {
   if (showRetryTimer) clearTimeout(showRetryTimer)
+  if (chapterLoadRetryTimer) clearTimeout(chapterLoadRetryTimer)
+  unbindCenterToggle()
   stopAutoPage()
   stopAutoSave()
   saveProgress()
@@ -1096,9 +1297,14 @@ onUnload(() => {
 
 onBeforeUnmount(() => {
   if (showRetryTimer) clearTimeout(showRetryTimer)
+  if (chapterLoadRetryTimer) clearTimeout(chapterLoadRetryTimer)
+  unbindCenterToggle()
   // #ifdef H5
   if (typeof window !== 'undefined') {
     window.removeEventListener('hashchange', ensureReaderReady)
+    document.removeEventListener('pointerdown', onDocumentCenterPointerDown, true)
+    document.removeEventListener('pointerup', onDocumentCenterPointerUp, true)
+    document.removeEventListener('click', onDocumentCenterClick, true)
   }
   // #endif
   stopAutoPage()
@@ -1125,6 +1331,17 @@ onBeforeUnmount(() => {
   justify-content: center;
   color: #8C7B62;
   font-size: 15px;
+}
+
+.reader-center-toggle {
+  position: fixed;
+  z-index: 18;
+  left: 28vw;
+  right: 28vw;
+  top: 54px;
+  bottom: 128px;
+  background: rgba(0, 0, 0, 0.001);
+  pointer-events: auto;
 }
 
 .reader {

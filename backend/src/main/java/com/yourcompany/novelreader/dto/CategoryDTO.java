@@ -8,5 +8,6 @@ public class CategoryDTO {
     @NotBlank(message = "Name is required")
     private String name;
     private Long parentId;
+    private String groupKey;
     private Integer sortOrder;
 }

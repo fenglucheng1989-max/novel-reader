@@ -21,7 +21,7 @@
     {
       "path": "pages/book/detail",
       "style": {
-        "navigationBarTitleText": "书籍详情"
+        "navigationStyle": "custom"
       }
     },
     {
@@ -33,7 +33,7 @@
     {
       "path": "pages/search/search",
       "style": {
-        "navigationBarTitleText": "搜索"
+        "navigationStyle": "custom"
       }
     },
     {
@@ -49,7 +49,25 @@
       }
     },
     {
+      "path": "pages/review/review",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/bookshelf/filter",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/mine/settings",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mine/about",
       "style": {
         "navigationStyle": "custom"
       }

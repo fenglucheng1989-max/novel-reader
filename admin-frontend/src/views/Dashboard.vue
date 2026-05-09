@@ -5,7 +5,7 @@
       <el-button type="primary" @click="$router.push('/books/new')">新增书籍</el-button>
     </div>
     <el-row :gutter="16" v-loading="loading">
-      <el-col v-for="item in cards" :key="item.label" :span="6">
+      <el-col v-for="item in cards" :key="item.label" :span="4">
         <el-card shadow="never">
           <div class="metric-value">{{ item.value }}</div>
           <div class="metric-label">{{ item.label }}</div>
@@ -25,7 +25,8 @@ const cards = computed(() => [
   { label: '书籍', value: data.value.bookCount || 0 },
   { label: '章节', value: data.value.chapterCount || 0 },
   { label: '分类', value: data.value.categoryCount || 0 },
-  { label: '用户', value: data.value.userCount || 0 }
+  { label: '用户', value: data.value.userCount || 0 },
+  { label: '评论', value: data.value.commentCount || 0 }
 ])
 
 onMounted(async () => {

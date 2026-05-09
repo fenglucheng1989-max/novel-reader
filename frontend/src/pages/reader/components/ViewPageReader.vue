@@ -5,6 +5,7 @@
     :class="{ dragging, 'is-night': theme === 'NIGHT' }"
     :style="rootStyle"
     @tap="onTap"
+    @click="onClick"
     @touchstart="onTouchStart"
     @touchmove.stop.prevent="onTouchMove"
     @touchend="onTouchEnd"
@@ -16,6 +17,14 @@
     @contextmenu.prevent.stop="onCanvasContextMenu"
   >
     <view ref="canvasHostRef" class="reader-canvas-host" />
+    <view
+      ref="centerTapRef"
+      class="center-tap-zone"
+      @tap.stop="onCenterZoneTap"
+      @click.stop="onCenterZoneTap"
+      @touchend.stop.prevent="onCenterZoneTap"
+      @pointerup.stop="onCenterZoneTap"
+    />
     <view class="reader-footer">
       <text>{{ currentPage + 1 }} / {{ totalPages || 1 }}</text>
       <text>{{ progressText }}</text>
@@ -51,12 +60,14 @@ const emit = defineEmits(['prev', 'next', 'chapterEnd', 'pageChange', 'toggleToo
 const fontFamily = "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', serif"
 const readerRootRef = ref(null)
 const canvasHostRef = ref(null)
+const centerTapRef = ref(null)
 const viewWidth = ref(375)
 const viewHeight = ref(667)
 const rootLeft = ref(0)
 const rootTop = ref(0)
 let ctx = null
 let canvasEl = null
+let centerTapEl = null
 let repaginateTimer = null
 let adjacentPaginateTimer = null
 let resizeRaf = null
@@ -74,13 +85,18 @@ const dragStartX = ref(0)
 const dragDeltaX = ref(0)
 let suppressTapUntil = 0
 let suppressMenuUntil = 0
+let lastPointerTapAt = 0
 let velocitySamples = []
 let dragLockedDir = 0
 let longPressTimer = null
 let longPressStart = null
 let animState = null
 let boundaryTransitionPending = false
+let boundaryTransitionDirection = 0
 let boundaryTransitionTimer = null
+let nativePointerStart = null
+let documentPointerStart = null
+let lastCenterZoneTapAt = 0
 let cachedMeasureFont = ''
 const charWidthCache = new Map()
 const pageCache = new Map()
@@ -89,7 +105,6 @@ const totalPages = computed(() => pages.value.length)
 const themeColors = computed(() => readerThemes[props.theme] || readerThemes.DEFAULT)
 const effectiveContent = computed(() => props.chapter?.content || props.content || '')
 const effectiveTitle = computed(() => props.chapter?.title || props.title || '')
-const titleText = computed(() => effectiveTitle.value || pages.value[currentPage.value]?.title || '')
 const effectiveFontSize = computed(() => Math.max(14, Math.min(24, Number(props.fontSize) || 16)))
 const effectiveLineHeight = computed(() => {
   const minLineHeight = Math.round(effectiveFontSize.value * 1.55)
@@ -170,6 +185,7 @@ function buildPages(sourceContent, sourceTitle) {
   if (cached) return cached
   const sourceLines = content.split(/\n+/).map((line) => line.trim()).filter(Boolean)
   const inferredTitle = sourceTitle ? '' : (sourceLines[0] || '')
+  const pageTitle = sourceTitle || inferredTitle
   const bodyLines = sourceTitle ? sourceLines : sourceLines.slice(1)
   const paragraphs = (bodyLines.length ? bodyLines : sourceLines).filter(Boolean)
   const pageList = []
@@ -183,7 +199,7 @@ function buildPages(sourceContent, sourceTitle) {
     if (!pageLines.length) return
     pageList.push({
       index: pageList.length,
-      title: pageList.length === 0 ? inferredTitle : '',
+      title: pageList.length === 0 ? pageTitle : '',
       lines: pageLines
     })
     pageLines = []
@@ -285,6 +301,10 @@ function getCanvasElement() {
       canvasEl = document.createElement('canvas')
       canvasEl.className = 'reader-canvas'
       canvasEl.setAttribute('aria-hidden', 'true')
+      canvasEl.addEventListener('click', onNativeCanvasClick)
+      canvasEl.addEventListener('pointerdown', onNativePointerDown)
+      canvasEl.addEventListener('pointerup', onNativePointerUp)
+      canvasEl.addEventListener('pointercancel', onNativePointerCancel)
       host.innerHTML = ''
       host.appendChild(canvasEl)
     }
@@ -349,7 +369,7 @@ function buildAdjacentPages() {
   if (flipActive.value) drawReader()
 }
 
-function scheduleAdjacentPaginate(delay = 24) {
+function scheduleAdjacentPaginate(delay = 160) {
   if (adjacentPaginateTimer) clearTimeout(adjacentPaginateTimer)
   adjacentPaginateTimer = setTimeout(() => {
     adjacentPaginateTimer = null
@@ -357,8 +377,15 @@ function scheduleAdjacentPaginate(delay = 24) {
   }, delay)
 }
 
-function schedulePaginate() {
+function schedulePaginate(delay = 0) {
   if (repaginateTimer) { clearTimeout(repaginateTimer); repaginateTimer = null }
+  if (delay > 0) {
+    repaginateTimer = setTimeout(() => {
+      repaginateTimer = null
+      paginate()
+    }, delay)
+    return
+  }
   paginate()
   nextTick(() => {
     paginate()
@@ -399,7 +426,7 @@ function drawPage(page, offsetX = 0, shadow = false) {
   ctx.textBaseline = 'top'
   ctx.textAlign = 'left'
   ctx.font = canvasTitleFont()
-  const title = titleText.value || page.title || ''
+  const title = page.title || ''
   if (title) {
     ctx.fillText(title, props.marginX, titleY.value)
   }
@@ -407,7 +434,7 @@ function drawPage(page, offsetX = 0, shadow = false) {
   ctx.font = canvasTextFont()
   const lineHeight = effectiveLineHeight.value
   const maxY = height - contentBottom.value
-  let y = contentTop.value
+  let y = title ? contentTop.value : titleY.value
   for (const line of page.lines || []) {
     if (y + lineHeight > maxY) break
     ctx.fillText(line.text || ' ', props.marginX, y)
@@ -533,6 +560,7 @@ function beginFlip(direction, progress) {
 
 function finishFlip() {
   boundaryTransitionPending = false
+  boundaryTransitionDirection = 0
   clearBoundaryTransitionTimer()
   flipProgress.value = 0
   flipActive.value = false
@@ -542,6 +570,7 @@ function finishFlip() {
 
 function completeBoundaryFlip(direction) {
   boundaryTransitionPending = true
+  boundaryTransitionDirection = direction
   committing.value = false
   dragging.value = false
   dragDeltaX.value = 0
@@ -558,10 +587,28 @@ function completeBoundaryFlip(direction) {
 function resetBoundaryTransitionState() {
   if (!boundaryTransitionPending) return
   boundaryTransitionPending = false
+  boundaryTransitionDirection = 0
   clearBoundaryTransitionTimer()
   flipProgress.value = 0
   flipActive.value = false
   committing.value = false
+}
+
+function promoteBoundaryPages() {
+  if (!boundaryTransitionPending) return false
+  const promoted = boundaryTransitionDirection > 0 ? nextPages.value : prevPages.value
+  if (!promoted?.length) return false
+  pages.value = promoted
+  currentPage.value = boundaryTransitionDirection > 0 ? 0 : promoted.length - 1
+  flipProgress.value = 0
+  flipActive.value = false
+  committing.value = false
+  boundaryTransitionPending = false
+  boundaryTransitionDirection = 0
+  clearBoundaryTransitionTimer()
+  emit('pageChange', currentPage.value)
+  drawReader()
+  return true
 }
 
 function applyPageChange() {
@@ -688,11 +735,115 @@ function handlePointTap(clientX) {
   else emit('toggleTools')
 }
 
+function onCenterZoneTap() {
+  const now = Date.now()
+  if (now - lastCenterZoneTapAt < 180) return
+  lastCenterZoneTapAt = now
+  if (committing.value || dragging.value) return
+  lastPointerTapAt = now
+  suppressTapUntil = now + 120
+  emit('toggleTools')
+}
+
 function onTap(event) {
   if (Date.now() < suppressTapUntil) return
   if (dragging.value || committing.value) return
   const x = event?.detail?.x ?? event?.changedTouches?.[0]?.clientX ?? viewWidth.value / 2
+  lastPointerTapAt = Date.now()
+  suppressTapUntil = Date.now() + 80
   handlePointTap(x)
+}
+
+function onClick(event) {
+  if (Date.now() - lastPointerTapAt < 120) return
+  if (Date.now() < suppressTapUntil) return
+  if (dragging.value || committing.value) return
+  lastPointerTapAt = Date.now()
+  suppressTapUntil = Date.now() + 80
+  handlePointTap(event?.clientX ?? viewWidth.value / 2)
+}
+
+function onNativeCanvasClick(event) {
+  onClick(event)
+}
+
+function onNativePointerDown(event) {
+  nativePointerStart = { x: event.clientX, y: event.clientY, t: Date.now() }
+}
+
+function onNativePointerUp(event) {
+  const start = nativePointerStart
+  nativePointerStart = null
+  if (!start) return
+  const dx = Math.abs((event.clientX || 0) - start.x)
+  const dy = Math.abs((event.clientY || 0) - start.y)
+  if (dx > 8 || dy > 8) return
+  if (Date.now() - lastPointerTapAt < 120) return
+  if (Date.now() < suppressTapUntil) return
+  lastPointerTapAt = Date.now()
+  suppressTapUntil = Date.now() + 120
+  handlePointTap(event.clientX ?? viewWidth.value / 2)
+}
+
+function onNativePointerCancel() {
+  nativePointerStart = null
+}
+
+function onDocumentPointerDown(event) {
+  if (!isReaderPoint(event.clientX, event.clientY)) return
+  documentPointerStart = { x: event.clientX, y: event.clientY }
+}
+
+function onDocumentPointerUp(event) {
+  const start = documentPointerStart
+  documentPointerStart = null
+  if (!start) return
+  const dx = Math.abs((event.clientX || 0) - start.x)
+  const dy = Math.abs((event.clientY || 0) - start.y)
+  if (dx > 8 || dy > 8) return
+  if (!isReaderPoint(event.clientX, event.clientY)) return
+  if (Date.now() - lastPointerTapAt < 120 || Date.now() < suppressTapUntil) return
+  lastPointerTapAt = Date.now()
+  suppressTapUntil = Date.now() + 120
+  handlePointTap(event.clientX ?? viewWidth.value / 2)
+}
+
+function getElementFromRef(viewRef) {
+  const raw = viewRef?.value
+  return raw?.$el || raw
+}
+
+function attachCenterTapElement() {
+  // #ifdef H5
+  if (typeof document === 'undefined') return
+  const nextEl = getElementFromRef(centerTapRef)
+  if (!nextEl || nextEl === centerTapEl) return
+  detachCenterTapElement()
+  centerTapEl = nextEl
+  centerTapEl.addEventListener('click', onCenterZoneTap)
+  centerTapEl.addEventListener('pointerup', onCenterZoneTap)
+  centerTapEl.addEventListener('touchend', onCenterZoneTap, { passive: false })
+  // #endif
+}
+
+function detachCenterTapElement() {
+  // #ifdef H5
+  if (!centerTapEl) return
+  centerTapEl.removeEventListener('click', onCenterZoneTap)
+  centerTapEl.removeEventListener('pointerup', onCenterZoneTap)
+  centerTapEl.removeEventListener('touchend', onCenterZoneTap)
+  centerTapEl = null
+  // #endif
+}
+
+function isReaderPoint(x, y) {
+  const localX = Number(x) - rootLeft.value
+  const localY = Number(y) - rootTop.value
+  if (!Number.isFinite(localX) || !Number.isFinite(localY)) return false
+  if (localX < 0 || localX > viewWidth.value || localY < 0 || localY > viewHeight.value) return false
+  if (localY < 54) return false
+  if (localY > viewHeight.value - 128) return false
+  return true
 }
 
 function onTouchStart(event) {
@@ -713,9 +864,18 @@ function onTouchMove(event) {
   moveDrag(touch.clientX)
 }
 
-function onTouchEnd() {
+function onTouchEnd(event) {
+  const distance = Math.abs(dragDeltaX.value)
+  const touch = event?.changedTouches?.[0]
+  const clientX = touch?.clientX ?? longPressStart?.x ?? viewWidth.value / 2
+  const shouldTap = dragging.value && distance <= 8 && Date.now() >= suppressTapUntil && !committing.value
   clearLongPressTimer()
   endDrag()
+  if (shouldTap) {
+    lastPointerTapAt = Date.now()
+    suppressTapUntil = Date.now() + 140
+    handlePointTap(clientX)
+  }
 }
 
 function onMouseDown(event) { startDrag(event.clientX) }
@@ -725,6 +885,7 @@ function onMouseUp(event) {
   const wasDragging = dragging.value
   endDrag()
   if (wasDragging && distance <= 8 && Date.now() >= suppressTapUntil && !committing.value) {
+    lastPointerTapAt = Date.now()
     handlePointTap(event.clientX)
     suppressTapUntil = Date.now() + 140
   }
@@ -739,7 +900,8 @@ function clearLongPressTimer() {
 
 function lineAtPoint(x, y) {
   const localY = y - rootTop.value
-  const index = Math.floor((localY - contentTop.value) / Math.max(1, effectiveLineHeight.value + Number(props.paragraphSpacing || 0)))
+  const lineTop = currentPageData.value?.title ? contentTop.value : titleY.value
+  const index = Math.floor((localY - lineTop) / Math.max(1, effectiveLineHeight.value + Number(props.paragraphSpacing || 0)))
   return currentPageData.value?.lines?.[index] || null
 }
 
@@ -800,15 +962,20 @@ function goToPage(idx) {
 watch(
   () => [props.chapter?.id, props.chapter?.content, props.chapter?.title, props.content, props.title, props.fontSize, props.lineHeight, props.marginX, props.marginY, props.paragraphSpacing, props.theme, props.toolsVisible],
   () => {
-    resetBoundaryTransitionState()
-    schedulePaginate()
+    const promoted = promoteBoundaryPages()
+    if (promoted) {
+      schedulePaginate(120)
+    } else {
+      resetBoundaryTransitionState()
+      schedulePaginate()
+    }
   },
   { immediate: true }
 )
 
 watch(
   () => [props.prevContent, props.nextContent],
-  () => scheduleAdjacentPaginate(0)
+  () => scheduleAdjacentPaginate()
 )
 
 watch(() => props.initialPage, (val) => {
@@ -822,9 +989,12 @@ watch(() => [currentPage.value, flipActive.value, flipProgress.value, props.brig
 
 onMounted(() => {
   schedulePaginate()
+  nextTick(attachCenterTapElement)
   // #ifdef H5
   if (typeof window !== 'undefined') {
     window.addEventListener('resize', onResize)
+    document.addEventListener('pointerdown', onDocumentPointerDown, true)
+    document.addEventListener('pointerup', onDocumentPointerUp, true)
   }
   // #endif
 })
@@ -832,6 +1002,7 @@ onMounted(() => {
 function onResize() {
   if (resizeRaf) cancelAnimationFrame(resizeRaf)
   resizeRaf = requestAnimationFrame(schedulePaginate)
+  nextTick(attachCenterTapElement)
 }
 
 onBeforeUnmount(() => {
@@ -841,9 +1012,18 @@ onBeforeUnmount(() => {
   if (repaginateTimer) clearTimeout(repaginateTimer)
   if (adjacentPaginateTimer) clearTimeout(adjacentPaginateTimer)
   if (resizeRaf) cancelAnimationFrame(resizeRaf)
+  detachCenterTapElement()
+  if (canvasEl) {
+    canvasEl.removeEventListener('click', onNativeCanvasClick)
+    canvasEl.removeEventListener('pointerdown', onNativePointerDown)
+    canvasEl.removeEventListener('pointerup', onNativePointerUp)
+    canvasEl.removeEventListener('pointercancel', onNativePointerCancel)
+  }
   // #ifdef H5
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', onResize)
+    document.removeEventListener('pointerdown', onDocumentPointerDown, true)
+    document.removeEventListener('pointerup', onDocumentPointerUp, true)
   }
   // #endif
 })
@@ -881,6 +1061,17 @@ defineExpose({
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+.center-tap-zone {
+  position: absolute;
+  z-index: 35;
+  left: 28%;
+  right: 28%;
+  top: 54px;
+  bottom: 128px;
+  background: rgba(0, 0, 0, 0.001);
+  pointer-events: auto;
 }
 
 :deep(.reader-canvas) {

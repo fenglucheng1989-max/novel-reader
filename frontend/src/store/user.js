@@ -12,7 +12,9 @@ export const useUserStore = defineStore('user', {
     /** @type {string} */
     token: uni.getStorageSync('token') || '',
     /** @type {string} */
-    username: uni.getStorageSync('username') || ''
+    username: uni.getStorageSync('username') || '',
+    /** @type {string} */
+    avatarUrl: uni.getStorageSync('avatarUrl') || ''
   }),
   getters: {
     isLoggedIn: (state) => !!state.token
@@ -21,6 +23,7 @@ export const useUserStore = defineStore('user', {
     syncFromStorage() {
       this.token = uni.getStorageSync('token') || ''
       this.username = uni.getStorageSync('username') || ''
+      this.avatarUrl = uni.getStorageSync('avatarUrl') || ''
     },
     async login(username, password) {
       const res = await request({
@@ -33,6 +36,7 @@ export const useUserStore = defineStore('user', {
         this.username = username
         uni.setStorageSync('token', this.token)
         uni.setStorageSync('username', username)
+        await this.fetchProfile()
       }
       return res
     },
@@ -53,8 +57,46 @@ export const useUserStore = defineStore('user', {
     logout() {
       this.token = ''
       this.username = ''
+      this.avatarUrl = ''
       uni.removeStorageSync('token')
       uni.removeStorageSync('username')
+      uni.removeStorageSync('avatarUrl')
+    },
+    async fetchProfile() {
+      const res = await request({
+        url: '/api/v1/user/profile',
+        method: 'GET',
+        silent: true
+      })
+      if (res.code === 200 && res.data) {
+        if (res.data.avatarUrl !== undefined) {
+          this.avatarUrl = res.data.avatarUrl || ''
+          uni.setStorageSync('avatarUrl', this.avatarUrl)
+        }
+        if (res.data.username) {
+          this.username = res.data.username
+          uni.setStorageSync('username', res.data.username)
+        }
+      }
+      return res
+    },
+    async updateProfile(data) {
+      const res = await request({
+        url: '/api/v1/user/profile',
+        method: 'PUT',
+        data
+      })
+      if (res.code === 200 && res.data) {
+        if (res.data.avatarUrl !== undefined) {
+          this.avatarUrl = res.data.avatarUrl || ''
+          uni.setStorageSync('avatarUrl', this.avatarUrl)
+        }
+        if (res.data.username) {
+          this.username = res.data.username
+          uni.setStorageSync('username', res.data.username)
+        }
+      }
+      return res
     }
   }
 })

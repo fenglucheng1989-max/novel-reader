@@ -1,235 +1,184 @@
 <template>
   <view class="page">
-    <view class="account-card">
-      <view class="avatar">{{ avatarText }}</view>
-      <view class="account-main">
-        <text class="account-title">{{ userStore.isLoggedIn ? userStore.username : '悦读账号' }}</text>
-        <text class="account-subtitle">{{ userStore.isLoggedIn ? '书架、进度和偏好已同步' : '登录后保存你的阅读世界' }}</text>
-        <text v-if="userStore.isLoggedIn && shelfStats" class="account-reading-time">累计阅读 {{ formatMinutes(shelfStats.todayMinutes) }}</text>
+    <!-- Profile Hero -->
+    <view v-if="userStore.isLoggedIn" class="profile-card">
+      <view
+        class="avatar"
+        :class="{ 'avatar--image': userStore.avatarUrl }"
+        :style="userStore.avatarUrl ? { backgroundImage: 'url(' + userStore.avatarUrl + ')' } : {}"
+        @tap="handleChangeAvatar"
+      >
+        <text v-if="!userStore.avatarUrl">{{ avatarText }}</text>
+        <view class="avatar-badge"><text class="avatar-badge-text">+</text></view>
       </view>
-      <text class="account-badge">{{ userStore.isLoggedIn ? '已登录' : '未登录' }}</text>
-    </view>
-
-    <view v-if="userStore.isLoggedIn && shelfStats" class="stats-card">
-      <view class="stats-row">
-        <view class="stat-item">
-          <text class="stat-value">0</text>
-          <text class="stat-label">金币</text>
-        </view>
-        <view class="stat-item">
-          <text class="stat-value">{{ shelfStats.todayMinutes || 0 }}</text>
-          <text class="stat-label">今日分钟</text>
-        </view>
-        <view class="stat-item">
-          <text class="stat-value">{{ shelfStats.streakDays || 0 }}</text>
-          <text class="stat-label">连续天数</text>
-        </view>
-        <view class="stat-item">
-          <text class="stat-value">{{ shelfStats.totalBooks || 0 }}</text>
-          <text class="stat-label">藏书</text>
-        </view>
+      <view class="profile-info">
+        <text class="profile-name">{{ userStore.username }}</text>
+        <text v-if="shelfStats" class="profile-reading">今日 {{ shelfStats.todayMinutes || 0 }} 分钟 · 连续 {{ shelfStats.streakDays || 0 }} 天 · 藏书 {{ shelfStats.totalBooks || 0 }} 本</text>
       </view>
     </view>
 
-    <view v-if="!userStore.isLoggedIn" class="login-card">
-      <view class="login-head">
-        <text class="panel-title">{{ mode === 'login' ? '登录悦读' : '创建账号' }}</text>
-        <text class="panel-subtitle">同步书架、阅读进度和阅读偏好。</text>
+    <!-- Login Card -->
+    <view v-if="!userStore.isLoggedIn" class="login-wrapper">
+    <view class="login-card">
+      <view class="login-hero">
+        <view class="login-book">
+          <view class="login-book-spine"></view>
+          <view class="login-book-left"></view>
+          <view class="login-book-right"></view>
+        </view>
+        <text class="login-quote">翻开书，就是另一个世界</text>
       </view>
 
-      <view class="segment">
-        <button :class="{ active: mode === 'login' }" @tap="mode = 'login'">登录</button>
-        <button :class="{ active: mode === 'register' }" @tap="mode = 'register'">注册</button>
+      <view class="login-switch">
+        <text :class="{ active: mode === 'login' }" @tap="mode = 'login'">登录</text>
+        <text class="login-switch-sep">·</text>
+        <text :class="{ active: mode === 'register' }" @tap="mode = 'register'">注册</text>
       </view>
 
       <view class="field">
-        <text class="field-label">用户名</text>
-        <input v-model="username" class="input" placeholder="请输入用户名" />
+        <input v-model="username" class="input" placeholder="用户名" />
       </view>
       <view class="field">
-        <text class="field-label">密码</text>
-        <input v-model="password" class="input" password placeholder="请输入密码" />
+        <input v-model="password" class="input" password placeholder="密码" />
       </view>
-      <view v-if="mode === 'register'" class="field">
-        <text class="field-label">邮箱</text>
-        <input v-model="email" class="input" placeholder="可选" />
+      <view class="field field--email" :class="{ 'field--show': mode === 'register' }">
+        <input v-model="email" class="input" placeholder="邮箱（可选）" />
       </view>
 
-      <button class="primary" @tap="submit">{{ mode === 'login' ? '登录' : '注册并登录' }}</button>
-      <text class="login-tip">登录后可同步书架、进度和阅读偏好。</text>
+      <view v-if="mode === 'register'" class="legal-row" @tap="acceptLegal = !acceptLegal">
+        <view class="legal-check" :class="{ checked: acceptLegal }">
+          <text v-if="acceptLegal" class="legal-check-mark">&#10003;</text>
+        </view>
+        <text class="legal-copy">我已阅读并同意</text>
+        <text class="legal-link" @tap.stop="goAbout('terms')">《用户协议》</text>
+        <text class="legal-copy">和</text>
+        <text class="legal-link" @tap.stop="goAbout('privacy')">《隐私政策》</text>
+      </view>
+
+      <button class="submit-btn" @tap="submit">{{ mode === 'login' ? '进入悦读' : '创建并进入' }}</button>
+
+      <text class="login-tip" v-if="mode === 'login'">登录后可同步书架、进度和阅读偏好</text>
+    </view>
     </view>
 
-    <view v-else>
-      <view class="preference-card">
-        <view class="panel-head">
-          <view>
-            <text class="panel-title">阅读偏好</text>
-            <text class="panel-subtitle">这些设置会应用到阅读器正文。</text>
-          </view>
-          <text class="theme-pill">{{ themeLabel }}</text>
+    <!-- Quick Actions Grid -->
+    <view v-if="userStore.isLoggedIn" class="actions-card">
+      <view class="actions-grid">
+        <view class="action-cell" @tap="goShelf">
+          <text class="action-label">我的书架</text>
+          <text class="action-desc">继续阅读</text>
         </view>
+        <view class="action-cell" @tap="() => {}">
+          <text class="action-label">阅读历史</text>
+          <text class="action-desc">最近记录</text>
+        </view>
+        <view class="action-cell" @tap="goShelf">
+          <text class="action-label">我的摘录</text>
+          <text class="action-desc">划线收藏</text>
+        </view>
+        <view class="action-cell" @tap="goReaderSettings">
+          <text class="action-label">阅读设置</text>
+          <text class="action-desc">字体主题</text>
+        </view>
+        <view class="action-cell" @tap="toggleNightMode">
+          <text class="action-label">夜间模式</text>
+          <text class="action-desc">{{ readerStore.setting.theme === 'NIGHT' ? '已开启' : '已关闭' }}</text>
+        </view>
+        <view class="action-cell" @tap="clearCache">
+          <text class="action-label">清除缓存</text>
+          <text class="action-desc">释放空间</text>
+        </view>
+      </view>
+    </view>
 
-        <view class="setting-row">
-          <view class="setting-copy">
-            <text class="setting-title">字号</text>
-            <text class="setting-subtitle">当前 {{ readerStore.setting.fontSize }}</text>
-          </view>
-          <view class="stepper">
-            <button @tap="changeFont(-1)">-</button>
-            <text>{{ readerStore.setting.fontSize }}</text>
-            <button @tap="changeFont(1)">+</button>
-          </view>
-        </view>
+    <!-- Preferences (compact) -->
+    <view v-if="userStore.isLoggedIn" class="pref-card" @tap="goReaderSettings">
+      <view class="pref-left">
+        <text class="pref-title">阅读偏好</text>
+        <text class="pref-summary">字号 {{ readerStore.setting.fontSize }} · 行距 {{ readerStore.setting.lineHeight }} · {{ themeLabel }}</text>
+      </view>
+      <text class="pref-arrow">›</text>
+    </view>
 
-        <view class="setting-row">
-          <view class="setting-copy">
-            <text class="setting-title">行距</text>
-            <text class="setting-subtitle">当前 {{ readerStore.setting.lineHeight }}</text>
+    <!-- Content Panels (logged in) -->
+    <template v-if="userStore.isLoggedIn">
+      <!-- My Comments -->
+      <view class="content-card">
+        <view class="content-head">
+          <view class="content-head-left">
+            <text class="content-title">我的评论</text>
+            <text class="content-sub">你评论过的书</text>
           </view>
-          <view class="stepper">
-            <button @tap="changeLineHeight(-2)">-</button>
-            <text>{{ readerStore.setting.lineHeight }}</text>
-            <button @tap="changeLineHeight(2)">+</button>
-          </view>
+          <text class="content-badge">{{ myComments.length }} 条</text>
         </view>
-
-        <view class="theme-grid">
-          <button :class="{ active: readerStore.setting.theme === 'DEFAULT' }" @tap="setTheme('DEFAULT')">
-            <text class="theme-dot default"></text>
-            <text>米白</text>
-          </button>
-          <button :class="{ active: readerStore.setting.theme === 'PARCHMENT' }" @tap="setTheme('PARCHMENT')">
-            <text class="theme-dot parchment"></text>
-            <text>羊皮</text>
-          </button>
-          <button :class="{ active: readerStore.setting.theme === 'LIGHT_GREEN' }" @tap="setTheme('LIGHT_GREEN')">
-            <text class="theme-dot light-green"></text>
-            <text>浅绿</text>
-          </button>
-          <button :class="{ active: readerStore.setting.theme === 'GRAY' }" @tap="setTheme('GRAY')">
-            <text class="theme-dot gray"></text>
-            <text>素灰</text>
-          </button>
-          <button :class="{ active: readerStore.setting.theme === 'NIGHT' }" @tap="setTheme('NIGHT')">
-            <text class="theme-dot night"></text>
-            <text>夜间</text>
-          </button>
-        </view>
-      </view>
-
-      <view class="quick-card" @tap="goShelf">
-        <view>
-          <text class="quick-title">我的书架</text>
-          <text class="quick-subtitle">继续上次的阅读</text>
-        </view>
-        <text class="quick-arrow">›</text>
-      </view>
-      <view class="quick-card" @tap="() => {}">
-        <view>
-          <text class="quick-title">阅读历史</text>
-          <text class="quick-subtitle">最近阅读记录</text>
-        </view>
-        <text class="quick-arrow">›</text>
-      </view>
-      <view class="quick-card" @tap="goShelf">
-        <view>
-          <text class="quick-title">我的摘录</text>
-          <text class="quick-subtitle">划线收藏的句子</text>
-        </view>
-        <text class="quick-arrow">›</text>
-      </view>
-      <view class="quick-card" @tap="goReaderSettings">
-        <view>
-          <text class="quick-title">阅读设置</text>
-          <text class="quick-subtitle">字体、主题与翻页</text>
-        </view>
-        <text class="quick-arrow">›</text>
-      </view>
-      <view class="quick-card">
-        <view>
-          <text class="quick-title">夜间模式</text>
-          <text class="quick-subtitle">{{ readerStore.setting.theme === 'NIGHT' ? '已开启' : '已关闭' }}</text>
-        </view>
-        <switch :checked="readerStore.setting.theme === 'NIGHT'" @change="toggleNightMode" color="#3A3A3A" />
-      </view>
-      <view class="quick-card" @tap="clearCache">
-        <view>
-          <text class="quick-title">清除缓存</text>
-          <text class="quick-subtitle">释放存储空间</text>
-        </view>
-        <text class="quick-arrow">›</text>
-      </view>
-
-      <view class="comment-card-panel">
-        <view class="panel-head">
-          <view>
-            <text class="panel-title">我的评论</text>
-            <text class="panel-subtitle">你评论过的书会出现在这里。</text>
-          </view>
-          <text class="theme-pill">{{ myComments.length }} 条</text>
-        </view>
-        <view v-if="commentsLoading" class="comment-empty">正在加载评论...</view>
-        <view v-else-if="!myComments.length" class="comment-empty">还没有评论过书。</view>
-        <view v-else class="my-comment-list">
+        <view v-if="commentsLoading" class="content-empty">加载中...</view>
+        <view v-else-if="!myComments.length" class="content-empty">还没有评论过书</view>
+        <view v-else class="comment-list">
           <view
             v-for="item in myComments"
             :key="item.id"
-            class="my-comment-item"
+            class="comment-item"
             @tap="goCommentBook(item.bookId)"
           >
-            <text class="comment-book">{{ item.bookTitle || '未知书籍' }}</text>
-            <text v-if="item.chapterTitle" class="comment-chapter">{{ item.chapterTitle }}</text>
-            <text class="comment-content">{{ item.content }}</text>
+            <text class="comment-book-title">{{ item.bookTitle || '未知书籍' }}</text>
+            <text v-if="item.chapterTitle" class="comment-chapter-title">{{ item.chapterTitle }}</text>
+            <text class="comment-text">{{ item.content }}</text>
           </view>
         </view>
       </view>
 
-      <view class="comment-card-panel">
-        <view class="panel-head">
-          <view>
-            <text class="panel-title">阅读历史</text>
-            <text class="panel-subtitle">最近阅读的书籍</text>
+      <!-- Reading History -->
+      <view class="content-card">
+        <view class="content-head">
+          <view class="content-head-left">
+            <text class="content-title">阅读历史</text>
+            <text class="content-sub">最近阅读的书籍</text>
           </view>
-          <text class="theme-pill">{{ readingHistory.length }} 本</text>
+          <text class="content-badge">{{ readingHistory.length }} 本</text>
         </view>
-        <view v-if="historyLoading" class="comment-empty">正在加载...</view>
-        <view v-else-if="!readingHistory.length" class="comment-empty">暂无阅读记录</view>
-        <view v-else class="my-comment-list">
+        <view v-if="historyLoading" class="content-empty">加载中...</view>
+        <view v-else-if="!readingHistory.length" class="content-empty">暂无阅读记录</view>
+        <view v-else class="history-list">
           <view
             v-for="item in readingHistory"
-            :key="item.id || item.bookId"
-            class="my-comment-item"
+            :key="item.bookId"
+            class="history-item"
             @tap="goCommentBook(item.bookId)"
           >
-            <text class="comment-book">{{ item.bookTitle || '未知书籍' }}</text>
-            <text v-if="item.lastChapterTitle" class="comment-chapter">{{ item.lastChapterTitle }}</text>
-            <text class="comment-content">{{ item.lastReadAt ? formatTime(item.lastReadAt) : '' }}</text>
-          </view>
-        </view>
-      </view>
-
-      <view class="comment-card-panel">
-        <view class="panel-head">
-          <view>
-            <text class="panel-title">我的摘录</text>
-            <text class="panel-subtitle">划线收藏的句子</text>
-          </view>
-          <text class="theme-pill">{{ highlightStore.highlights.length }} 条</text>
-        </view>
-        <view v-if="!highlightStore.highlights.length" class="comment-empty">还没有划线摘录。</view>
-        <view v-else>
-          <view v-for="group in highlightsGrouped" :key="group.bookId" class="highlight-group">
-            <text class="highlight-book-title">{{ group.bookTitle || '未知书籍' }}</text>
-            <view v-for="item in group.items" :key="item.id" class="highlight-item">
-              <text class="highlight-quote">"{{ item.quoteText }}"</text>
-              <text class="highlight-meta">第 {{ item.chapterNo }} 章</text>
+            <BookCover :title="item.bookTitle" :cover-url="item.coverUrl" size="md" />
+            <view class="history-info">
+              <text class="history-title">{{ item.bookTitle || '未知书籍' }}</text>
+              <text class="history-author">{{ item.bookAuthor || '佚名' }} · {{ item.status === 'COMPLETED' ? '完结' : '连载' }}</text>
+              <text class="history-chapter" v-if="item.latestChapterTitle">{{ item.latestChapterTitle }}</text>
+              <text class="history-time">{{ item.lastReadAt ? formatTime(item.lastReadAt) : '' }}</text>
             </view>
           </view>
         </view>
       </view>
 
-      <button class="logout" @tap="logout">退出登录</button>
-    </view>
+      <!-- Highlights -->
+      <view class="content-card">
+        <view class="content-head">
+          <view class="content-head-left">
+            <text class="content-title">我的摘录</text>
+            <text class="content-sub">划线收藏的句子</text>
+          </view>
+          <text class="content-badge">{{ highlightStore.highlights.length }} 条</text>
+        </view>
+        <view v-if="!highlightStore.highlights.length" class="content-empty">还没有划线摘录</view>
+        <view v-else class="highlight-list">
+          <view v-for="group in highlightsGrouped" :key="group.bookId" class="highlight-group">
+            <text class="highlight-book">{{ group.bookTitle || '未知书籍' }}</text>
+            <view v-for="item in group.items" :key="item.id" class="highlight-row">
+              <text class="highlight-quote">"{{ item.quoteText }}"</text>
+              <text class="highlight-chapter">第 {{ item.chapterNo }} 章</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <button class="logout-btn" @tap="logout">退出登录</button>
+    </template>
   </view>
 </template>
 
@@ -241,6 +190,7 @@ import { useReaderStore } from '../../store/reader'
 import { useBookStore } from '../../store/book'
 import { useHighlightStore } from '../../store/highlight'
 import { request } from '../../utils/request'
+import BookCover from '../../components/BookCover.vue'
 
 const userStore = useUserStore()
 const readerStore = useReaderStore()
@@ -256,7 +206,7 @@ const shelfStats = ref(null)
 const readingHistory = ref([])
 const historyLoading = ref(false)
 const highlightsGrouped = ref([])
-const statsLoading = ref(false)
+const acceptLegal = ref(false)
 
 const avatarText = computed(() => (userStore.isLoggedIn ? userStore.username.slice(0, 1).toUpperCase() : '悦'))
 const themeLabel = computed(() => {
@@ -270,6 +220,10 @@ const themeLabel = computed(() => {
 async function submit() {
   if (!username.value || !password.value) {
     uni.showToast({ title: '请输入用户名和密码', icon: 'none' })
+    return
+  }
+  if (mode.value === 'register' && !acceptLegal.value) {
+    uni.showToast({ title: '请先阅读并同意用户协议和隐私政策', icon: 'none' })
     return
   }
   if (mode.value === 'login') {
@@ -315,14 +269,11 @@ async function loadMyComments() {
 
 async function loadShelfStats() {
   if (!userStore.isLoggedIn) return
-  statsLoading.value = true
   try {
     await bookStore.loadShelfStats()
     shelfStats.value = bookStore.shelfStats
   } catch {
     shelfStats.value = null
-  } finally {
-    statsLoading.value = false
   }
 }
 
@@ -360,9 +311,9 @@ function formatTime(dateStr) {
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-function toggleNightMode(e) {
-  const val = typeof e === 'object' ? e.detail?.value : (readerStore.setting.theme !== 'NIGHT')
-  readerStore.saveSetting({ theme: val ? 'NIGHT' : 'DEFAULT' })
+function toggleNightMode() {
+  const next = readerStore.setting.theme !== 'NIGHT'
+  readerStore.saveSetting({ theme: next ? 'NIGHT' : 'DEFAULT' })
 }
 
 function clearCache() {
@@ -383,23 +334,80 @@ function goReaderSettings() {
   uni.navigateTo({ url: '/pages/mine/settings' })
 }
 
-function changeFont(delta) {
-  const next = Math.max(14, Math.min(30, readerStore.setting.fontSize + delta))
-  readerStore.saveSetting({ fontSize: next })
+function goAbout(section) {
+  uni.navigateTo({ url: `/pages/mine/about?section=${section}` })
 }
 
-function changeLineHeight(delta) {
-  const next = Math.max(24, Math.min(48, readerStore.setting.lineHeight + delta))
-  readerStore.saveSetting({ lineHeight: next })
+function handleChangeAvatar() {
+  if (!userStore.isLoggedIn) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    return
+  }
+  uni.chooseImage({
+    count: 1,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: async (res) => {
+      const tempFilePath = res.tempFilePaths[0]
+      const base64 = await fileToBase64(tempFilePath)
+      if (!base64) {
+        uni.showToast({ title: '图片读取失败', icon: 'none' })
+        return
+      }
+      try {
+        const result = await userStore.updateProfile({ avatarUrl: base64 })
+        if (result && result.code === 200) {
+          uni.showToast({ title: '头像已更新', icon: 'success' })
+        } else if (result) {
+          uni.showToast({ title: result.message || '头像更新失败', icon: 'none' })
+        }
+      } catch (e) {
+        uni.showToast({ title: e.message || '头像更新失败', icon: 'none' })
+      }
+    }
+  })
 }
 
-function setTheme(theme) {
-  readerStore.saveSetting({ theme })
+function fileToBase64(filePath) {
+  return new Promise((resolve) => {
+    // #ifdef H5
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      const maxW = 256
+      const maxH = 256
+      let w = img.naturalWidth
+      let h = img.naturalHeight
+      if (w > maxW || h > maxH) {
+        const ratio = Math.min(maxW / w, maxH / h)
+        w = Math.round(w * ratio)
+        h = Math.round(h * ratio)
+      }
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', 0.8))
+    }
+    img.onerror = () => resolve(null)
+    img.src = filePath
+    // #endif
+    // #ifndef H5
+    uni.getFileSystemManager().readFile({
+      filePath,
+      encoding: 'base64',
+      success: (res) => resolve('data:image/png;base64,' + res.data),
+      fail: () => resolve(null)
+    })
+    // #endif
+  })
 }
 
 onShow(() => {
   userStore.syncFromStorage()
   if (userStore.isLoggedIn) {
+    userStore.fetchProfile()
     readerStore.loadSetting()
     loadMyComments()
     loadShelfStats()
@@ -413,399 +421,492 @@ onShow(() => {
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 22px 18px 88px;
-  background: #F8F8F6;
+  padding: 12px 10px 88px;
+  background: #F4F4F1;
   box-sizing: border-box;
+  overflow-x: hidden;
 }
 
-.account-card,
-.login-card,
-.preference-card,
-.quick-card,
-.comment-card-panel {
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
-}
-
-.account-card {
+/* ── Profile Card ── */
+.profile-card {
   display: flex;
   align-items: center;
-  padding: 18px;
-  margin-bottom: 14px;
-  background: #3A3A3A;
-  color: #fff;
+  gap: 14px;
+  padding: 16px;
+  margin-bottom: 10px;
+  border-radius: 7px;
+  background: #FFFFFF;
+  box-shadow: 0 6px 18px rgba(31, 31, 31, 0.045);
 }
 
 .avatar {
-  width: 54px;
-  height: 54px;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
-  font-size: 24px;
-  font-weight: 800;
+  background: linear-gradient(135deg, #B0A090, #9B8B7A);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+  position: relative;
+  overflow: visible;
 }
 
-.account-main {
+.avatar--image {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  color: transparent;
+}
+
+
+.avatar-badge {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #3A3A3A;
+  border: 2px solid #FFFFFF;
+}
+
+.avatar-badge-text {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.profile-info {
   min-width: 0;
   flex: 1;
-  margin-left: 14px;
 }
 
-.account-title,
-.account-subtitle,
-.account-badge,
-.panel-title,
-.panel-subtitle,
-.field-label,
-.login-tip,
-.setting-title,
-.setting-subtitle,
-.quick-title,
-.quick-subtitle {
+.profile-name {
   display: block;
-}
-
-.account-title {
+  color: #1F1F1F;
+  font-size: 18px;
+  font-weight: 900;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 24px;
-  font-weight: 800;
 }
 
-.account-subtitle {
-  margin-top: 6px;
-  color: #CCCCCC;
-  font-size: 13px;
-}
-
-.account-reading-time {
+.profile-reading {
   display: block;
-  margin-top: 4px;
-  color: rgba(255, 255, 255, 0.6);
+  margin-top: 3px;
+  color: #A09080;
   font-size: 12px;
+  font-weight: 600;
 }
 
-.account-badge {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
-  color: #CCCCCC;
-  font-size: 12px;
-}
-
-.stats-card {
-  margin-bottom: 14px;
-  padding: 14px 12px;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
-}
-
-.stats-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.stat-item {
-  text-align: center;
-}
-
-.stat-value {
-  display: block;
-  color: #1F1F1F;
-  font-size: 22px;
-  font-weight: 900;
-}
-
-.stat-label {
-  display: block;
-  margin-top: 4px;
-  color: #8C8C8C;
-  font-size: 12px;
-}
-
-.login-card,
-.preference-card {
-  padding: 16px;
-}
-
-.login-head,
-.panel-head {
+/* ── Login Wrapper ── */
+.login-wrapper {
+  min-height: calc(100vh - 100px);
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 14px;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 0;
+  box-sizing: border-box;
 }
 
-.panel-title {
-  color: #1F1F1F;
-  font-size: 20px;
-  font-weight: 800;
-}
-
-.panel-subtitle {
-  margin-top: 5px;
-  color: #8C8C8C;
-  font-size: 13px;
-  line-height: 20px;
-}
-
-.segment {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-bottom: 14px;
-  padding: 4px;
-  border-radius: 8px;
-  background: #F5F5F2;
-}
-
-.segment button {
-  height: 34px;
-  line-height: 34px;
+/* ── Login Card ── */
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  margin-bottom: 10px;
+  padding: 32px 24px 28px;
   border-radius: 7px;
-  background: transparent;
+  background: #FFFFFF;
+  box-shadow: 0 6px 18px rgba(31, 31, 31, 0.045);
+  position: relative;
+  overflow: hidden;
+}
+
+.login-card::before {
+  content: "";
+  position: absolute;
+  top: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 280px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(176, 160, 144, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* ── Hero: Open Book ── */
+.login-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-book {
+  width: 44px;
+  height: 34px;
+  position: relative;
+  margin-bottom: 10px;
+  perspective: 60px;
+}
+
+.login-book-spine {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 2px;
+  background: #B0A090;
+  transform: translateX(-50%);
+}
+
+.login-book-left {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  border-radius: 4px 2px 2px 4px;
+  background: linear-gradient(135deg, #E8E4DC, #D8D2C6);
+  border: 1px solid rgba(176, 160, 144, 0.3);
+  transform-origin: right center;
+  animation: bookLeft 6s ease-in-out infinite;
+}
+
+.login-book-right {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 50%;
+  border-radius: 2px 4px 4px 2px;
+  background: linear-gradient(-135deg, #F0ECE4, #E0DAD0);
+  border: 1px solid rgba(176, 160, 144, 0.3);
+  transform-origin: left center;
+  animation: bookRight 6s ease-in-out infinite;
+}
+
+@keyframes bookLeft {
+  0%, 100% { transform: rotateY(0deg); }
+  25% { transform: rotateY(-25deg); }
+  75% { transform: rotateY(0deg); }
+}
+
+@keyframes bookRight {
+  0%, 100% { transform: rotateY(0deg); }
+  25% { transform: rotateY(25deg); }
+  75% { transform: rotateY(0deg); }
+}
+
+.login-quote {
   color: #5A5A5A;
   font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
 }
 
-.segment button.active {
-  background: #fff;
-  color: #3A3A3A;
+/* ── Login/Register Switch ── */
+.login-switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-switch text {
+  color: #B0B0B0;
+  font-size: 15px;
+  font-weight: 700;
+  transition: color 0.2s ease;
+}
+
+.login-switch text.active {
+  color: #1F1F1F;
+}
+
+.login-switch-sep {
+  color: #D0D0D0 !important;
+  font-weight: 400 !important;
+}
+
+/* ── Fields ── */
+.field {
+  margin-bottom: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.field--email {
+  max-height: 0;
+  margin-bottom: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, margin-bottom 0.3s ease, opacity 0.3s ease;
+}
+
+.field--show {
+  max-height: 58px;
+  margin-bottom: 14px;
+  opacity: 1;
+}
+
+/* ── Legal Checkbox ── */
+.legal-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  margin-bottom: 12px;
+  position: relative;
+  z-index: 1;
+}
+
+.legal-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid #D0D0D0;
+  margin-right: 6px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.legal-check.checked {
+  border-color: #B0A090;
+  background: #B0A090;
+}
+
+.legal-check-mark {
+  color: #fff;
+  font-size: 11px;
   font-weight: 700;
 }
 
-.field {
-  margin-bottom: 10px;
+.legal-copy {
+  color: #8C8C8C;
+  font-size: 12px;
 }
 
-.field-label {
-  margin-bottom: 6px;
-  color: #5A5A5A;
+.legal-link {
+  color: #A09080;
   font-size: 12px;
+  font-weight: 600;
 }
 
 .input {
   width: 100%;
-  height: 44px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid #EBEBE5;
-  background: #fff;
+  height: 48px;
+  padding: 0 4px;
+  background: transparent;
   color: #1F1F1F;
-  font-size: 15px;
+  font-size: 16px;
+  border-bottom: 1px solid #E8E6E0;
+  border-radius: 0;
   box-sizing: border-box;
+  transition: border-bottom-color 0.2s ease;
 }
 
-.primary,
-.logout {
+.input:focus {
+  border-bottom-color: #B0A090;
+}
+
+/* ── Submit Button ── */
+.submit-btn {
   width: 100%;
-  height: 44px;
-  line-height: 44px;
-  border-radius: 8px;
-  font-size: 15px;
-}
-
-.primary {
-  margin-top: 4px;
-  background: #3A3A3A;
+  height: 48px;
+  line-height: 48px;
+  margin-top: 8px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #B0A090, #9B8B7A);
   color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  position: relative;
+  z-index: 1;
 }
 
 .login-tip {
-  margin-top: 12px;
+  display: block;
+  margin-top: 16px;
   color: #B0B0B0;
   font-size: 12px;
-  line-height: 19px;
   text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
-.theme-pill {
-  flex: 0 0 auto;
-  padding: 4px 9px;
-  border-radius: 999px;
-  background: #F0F0ED;
-  color: #A09080;
-  font-size: 12px;
-}
-
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 13px 0;
-  border-bottom: 1px solid #EBEBE5;
-}
-
-.setting-copy {
-  min-width: 0;
-}
-
-.setting-title {
-  color: #1F1F1F;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.setting-subtitle {
-  margin-top: 4px;
-  color: #8C8C8C;
-  font-size: 12px;
-}
-
-.stepper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.stepper button {
-  width: 32px;
-  height: 30px;
-  line-height: 30px;
+/* ── Quick Actions Grid ── */
+.actions-card {
+  margin-bottom: 10px;
+  padding: 14px;
   border-radius: 7px;
-  background: #F0F0ED;
-  color: #3A3A3A;
-  font-size: 15px;
+  background: #FFFFFF;
+  box-shadow: 0 6px 18px rgba(31, 31, 31, 0.045);
 }
 
-.stepper text {
-  width: 28px;
-  color: #1F1F1F;
-  font-size: 14px;
-  text-align: center;
-}
-
-.theme-grid {
+.actions-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  margin-top: 14px;
 }
 
-.theme-grid button {
-  height: 38px;
+.action-cell {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  border-radius: 8px;
-  background: #F0F0ED;
-  color: #5A5A5A;
-  font-size: 13px;
+  height: 72px;
+  border-radius: 7px;
+  background: rgba(160, 144, 128, 0.06);
 }
 
-.theme-grid button.active {
-  background: #3A3A3A;
-  color: #fff;
+.action-label {
+  color: #3A3A3A;
+  font-size: 14px;
+  font-weight: 700;
 }
 
-.theme-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.action-desc {
+  margin-top: 4px;
+  color: #A09080;
+  font-size: 11px;
 }
 
-.theme-dot.default {
-  background: #F8F8F6;
-  border: 1px solid #CCCCCC;
-}
-
-.theme-dot.parchment {
-  background: #F5E6C8;
-  border: 1px solid #C4A882;
-}
-
-.theme-dot.light-green {
-  background: #E8F0E3;
-  border: 1px solid #A8C4A0;
-}
-
-.theme-dot.gray {
-  background: #EBEBE7;
-  border: 1px solid #CCCCCC;
-}
-
-.theme-dot.night {
-  background: #20242a;
-}
-
-.quick-card {
+/* ── Preferences Compact ── */
+.pref-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 12px;
+  margin-bottom: 10px;
   padding: 16px;
+  border-radius: 7px;
+  background: #FFFFFF;
+  box-shadow: 0 6px 18px rgba(31, 31, 31, 0.045);
 }
 
-.quick-title {
+.pref-left {
+  min-width: 0;
+}
+
+.pref-title {
+  display: block;
   color: #1F1F1F;
   font-size: 16px;
   font-weight: 800;
 }
 
-.quick-subtitle {
-  margin-top: 5px;
+.pref-summary {
+  display: block;
+  margin-top: 4px;
   color: #8C8C8C;
   font-size: 13px;
 }
 
-.quick-arrow {
+.pref-arrow {
+  flex-shrink: 0;
   color: #A09080;
   font-size: 28px;
 }
 
-.comment-card-panel {
-  margin-top: 12px;
+/* ── Content Cards ── */
+.content-card {
+  margin-bottom: 10px;
   padding: 16px;
+  border-radius: 7px;
+  background: #FFFFFF;
+  box-shadow: 0 6px 18px rgba(31, 31, 31, 0.045);
 }
 
-.comment-empty {
-  padding: 18px 0 4px;
+.content-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.content-head-left {
+  min-width: 0;
+}
+
+.content-title {
+  display: block;
+  color: #1F1F1F;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.content-sub {
+  display: block;
+  margin-top: 3px;
   color: #8C8C8C;
+  font-size: 13px;
+}
+
+.content-badge {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: rgba(160, 144, 128, 0.12);
+  color: #A09080;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.content-empty {
+  padding: 18px 0 4px;
+  color: #B0B0B0;
   font-size: 13px;
   text-align: center;
 }
 
-.my-comment-list {
+/* ── Comment Items ── */
+.comment-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
+  gap: 8px;
 }
 
-.my-comment-item {
+.comment-item {
   padding: 10px;
-  border-radius: 8px;
-  background: #F5F5F2;
-  border: 1px solid #EBEBE5;
+  border-radius: 7px;
+  background: #F8F8F6;
 }
 
-.comment-book,
-.comment-chapter,
-.comment-content {
+.comment-book-title {
   display: block;
-}
-
-.comment-book {
   color: #3A3A3A;
   font-size: 14px;
   font-weight: 800;
 }
 
-.comment-chapter {
-  margin-top: 3px;
+.comment-chapter-title {
+  display: block;
+  margin-top: 2px;
   color: #B0B0B0;
   font-size: 12px;
 }
 
-.comment-content {
+.comment-text {
+  display: block;
   margin-top: 6px;
   color: #5A5A5A;
   font-size: 13px;
@@ -813,17 +914,75 @@ onShow(() => {
   word-break: break-all;
 }
 
-.logout {
-  margin-top: 14px;
-  background: #F0F0ED;
-  color: #8f3f36;
+/* ── History ── */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #F8F8F6;
+  align-items: flex-start;
+}
+
+.history-item :deep(.book-cover) {
+  flex-shrink: 0;
+  width: 40px;
+  height: 54px;
+  border-radius: 4px;
+}
+
+.history-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.history-title {
+  color: #1F1F1F;
+  font-size: 14px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-author {
+  color: #A09080;
+  font-size: 11px;
+}
+
+.history-chapter {
+  color: #8C8C8C;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-time {
+  color: #B0B0B0;
+  font-size: 10px;
+}
+
+/* ── Highlights ── */
+.highlight-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .highlight-group {
-  margin-top: 14px;
 }
 
-.highlight-book-title {
+.highlight-book {
   display: block;
   color: #1F1F1F;
   font-size: 15px;
@@ -831,11 +990,11 @@ onShow(() => {
   margin-bottom: 6px;
 }
 
-.highlight-item {
+.highlight-row {
   padding: 8px 10px;
   margin-bottom: 6px;
   border-radius: 6px;
-  background: #F5F5F2;
+  background: #F8F8F6;
   border-left: 3px solid #C4A882;
 }
 
@@ -846,10 +1005,23 @@ onShow(() => {
   line-height: 22px;
 }
 
-.highlight-meta {
+.highlight-chapter {
   display: block;
   margin-top: 4px;
   color: #B0B0B0;
   font-size: 11px;
+}
+
+/* ── Logout ── */
+.logout-btn {
+  width: 100%;
+  height: 44px;
+  line-height: 44px;
+  margin-top: 4px;
+  border-radius: 7px;
+  background: #FFFFFF;
+  color: #8C8C8C;
+  font-size: 14px;
+  font-weight: 600;
 }
 </style>

@@ -39,6 +39,8 @@ export function request(options) {
       ...(token && !options.noAuth ? { Authorization: `Bearer ${token}` } : {})
     }
 
+    const silent = options.silent
+
     const primaryUrl = getApiBaseUrl() + options.url
     const fallbackUrl = getDevApiFallbackUrl(options.url)
 
@@ -67,7 +69,7 @@ export function request(options) {
             rejectWithMessage(reject, msg, res.data)
             return
           }
-          uni.showToast({ title: msg, icon: 'none' })
+          if (!silent) uni.showToast({ title: msg, icon: 'none' })
           setTimeout(() => {
             uni.switchTab({ url: '/pages/mine/mine' })
           }, 1500)
@@ -77,13 +79,13 @@ export function request(options) {
 
         if (res.statusCode === 403) {
           const msg = (res.data && res.data.message) || '权限不足'
-          uni.showToast({ title: msg, icon: 'none' })
+          if (!silent) uni.showToast({ title: msg, icon: 'none' })
           rejectWithMessage(reject, msg, res.data)
           return
         }
 
         const message = getResponseMessage(res, '请求失败')
-        uni.showToast({ title: message, icon: 'none' })
+        if (!silent) uni.showToast({ title: message, icon: 'none' })
         rejectWithMessage(reject, message, res.data)
       },
       fail: (err) => {
@@ -92,7 +94,7 @@ export function request(options) {
           return
         }
         const message = err && err.errMsg ? err.errMsg : '网络错误'
-        uni.showToast({ title: message, icon: 'none' })
+        if (!silent) uni.showToast({ title: message, icon: 'none' })
         rejectWithMessage(reject, message, err)
       }
     })

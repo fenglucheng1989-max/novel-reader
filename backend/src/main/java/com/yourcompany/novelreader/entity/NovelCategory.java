@@ -22,6 +22,7 @@ public class NovelCategory {
     private Long id;
     private String name;
     private Long parentId;
+    private String groupKey;
     private Integer sortOrder;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;

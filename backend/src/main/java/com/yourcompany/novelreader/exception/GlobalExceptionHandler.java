@@ -1,5 +1,7 @@
 package com.yourcompany.novelreader.exception;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -15,9 +17,11 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<Map<String, Object>> handleBadCredentials(BadCredentialsException e) {
-        return buildResponse(HttpStatus.UNAUTHORIZED.value(), "Invalid username or password");
+        return buildResponse(HttpStatus.UNAUTHORIZED.value(), "用户名或密码错误");
     }
 
     @ExceptionHandler(UsernameNotFoundException.class)
@@ -36,7 +40,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleUnreadableMessage(HttpMessageNotReadableException e) {
-        return buildResponse(HttpStatus.BAD_REQUEST.value(), "Malformed request body");
+        return buildResponse(HttpStatus.BAD_REQUEST.value(), "请求格式错误");
     }
 
     @ExceptionHandler(BusinessException.class)
@@ -46,7 +50,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneric(Exception e) {
-        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Internal server error");
+        log.error("Unhandled exception", e);
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR.value(), "服务器内部错误");
     }
 
     private ResponseEntity<Map<String, Object>> buildResponse(int code, String message) {

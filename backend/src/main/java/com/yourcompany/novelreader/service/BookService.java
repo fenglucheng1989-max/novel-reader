@@ -14,7 +14,7 @@ import java.util.List;
 
 public interface BookService {
     List<NovelBook> recommend(Long categoryId);
-    List<NovelBook> rank(Long categoryId, Integer limit);
+    List<NovelBook> rank(Long categoryId, Integer limit, String groupKey);
     List<NovelBook> list(Long categoryId, String keyword);
     BookDetailVO detail(Long bookId, Long userId);
     List<ChapterItemVO> chapters(Long bookId);
@@ -28,5 +28,5 @@ public interface BookService {
     void deleteChapter(Long id);
     List<NovelBook> recommendations(Long bookId, Integer limit);
     PageResult<NovelBook> filter(BookFilterDTO filter);
-    List<NovelBook> featured(Integer limit);
+    List<NovelBook> featured(Integer limit, String groupKey);
 }

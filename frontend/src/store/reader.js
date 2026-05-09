@@ -87,7 +87,7 @@ export const useReaderStore = defineStore('reader', {
       uni.setStorageSync(cacheKey, chapter)
     },
     async loadChapters(bookId) {
-      const res = await request({ url: `/api/v1/books/${bookId}/chapters`, noAuth: true })
+      const res = await request({ url: `/api/v1/books/${bookId}/chapters`, noAuth: true, silent: true })
       if (res.code === 200) {
         this.chapters = res.data || []
       }
@@ -104,7 +104,7 @@ export const useReaderStore = defineStore('reader', {
       const res = pending
         ? await pending
         : await (() => {
-          const req = request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}`, noAuth: true })
+          const req = request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}`, noAuth: true, silent: true })
             .finally(() => chapterRequests.delete(requestKey))
           chapterRequests.set(requestKey, req)
           return req
@@ -124,7 +124,7 @@ export const useReaderStore = defineStore('reader', {
       const res = pending
         ? await pending
         : await (() => {
-          const req = request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}`, noAuth: true })
+          const req = request({ url: `/api/v1/books/${bookId}/chapters/${chapterNo}`, noAuth: true, silent: true })
             .finally(() => chapterRequests.delete(requestKey))
           chapterRequests.set(requestKey, req)
           return req
@@ -136,7 +136,7 @@ export const useReaderStore = defineStore('reader', {
       return null
     },
     async loadProgress(bookId) {
-      const res = await request({ url: `/api/v1/reading/progress/${bookId}`, silentAuth: true })
+      const res = await request({ url: `/api/v1/reading/progress/${bookId}`, silentAuth: true, silent: true })
       if (res.code === 200) {
         this.progress = res.data
       }
@@ -150,7 +150,7 @@ export const useReaderStore = defineStore('reader', {
       })
     },
     async loadSetting() {
-      const res = await request({ url: '/api/v1/reading/setting', silentAuth: true })
+      const res = await request({ url: '/api/v1/reading/setting', silentAuth: true, silent: true })
       if (res.code === 200 && res.data) {
         this.setting = {
           fontSize: res.data.fontSize || defaultSetting.fontSize,

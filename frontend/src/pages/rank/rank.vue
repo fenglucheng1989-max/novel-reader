@@ -1,52 +1,67 @@
 <template>
   <view class="page">
-    <view class="rank-shell">
-      <view class="nav-bar">
-        <view class="nav-button" @tap="goBack">‹</view>
-        <text class="nav-title">完整榜单</text>
-        <view class="nav-placeholder"></view>
+    <!-- Header -->
+    <view class="header">
+      <text class="back" @tap="goBack">&#8249;</text>
+      <view class="header-center">
+        <view class="header-title-row">
+          <text class="title-line"></text>
+          <text class="title-ornament">✦</text>
+          <text class="header-title">{{ currentRank.label }}</text>
+          <text class="title-ornament">✦</text>
+          <text class="title-line"></text>
+        </view>
+        <text class="header-sub">{{ currentRank.desc }}</text>
       </view>
+      <text class="header-spacer"></text>
+    </view>
 
-      <view class="rank-tabs">
-        <view
-          v-for="tab in tabs"
-          :key="tab.key"
-          class="rank-tab"
-          :class="{ active: activeTab === tab.key }"
-          @tap="switchTab(tab.key)"
-        >{{ tab.label }}</view>
-      </view>
+    <!-- Category Tabs -->
+    <scroll-view class="cate-scroll" scroll-x :show-scrollbar="false">
+      <text
+        v-for="c in cateTabs"
+        :key="c.key"
+        class="cate-item"
+        :class="{ on: activeCate === c.key }"
+        @tap="activeCate = c.key; load()"
+      >{{ c.name }}</text>
+    </scroll-view>
 
-      <view v-if="loading" class="empty">正在加载榜单...</view>
-      <view v-else-if="!rankBooks.length" class="empty">
-        <text class="empty-title">暂无榜单内容</text>
-        <text class="empty-subtitle">可以先去后台维护书籍和章节。</text>
-      </view>
-      <view v-else class="rank-list">
+    <!-- Body: Left Rail + Right List -->
+    <view class="body-row">
+      <scroll-view class="rail" scroll-y>
         <view
-          v-for="(book, index) in rankBooks"
-          :key="book.id"
-          class="rank-card"
-          @tap="goDetail(book.id)"
+          v-for="r in rankTabs"
+          :key="r.key"
+          class="rail-item"
+          :class="{ active: activeRank === r.key }"
+          @tap="activeRank = r.key; load()"
         >
-          <view class="rank-no" :class="{ top: index < 3 }">{{ index + 1 }}</view>
-          <BookCover :title="book.title" :cover-url="book.coverUrl" size="md" />
-          <view class="book-main">
-            <view class="book-line">
+          <text class="rail-icon" v-if="activeRank === r.key">▪</text>
+          <text>{{ r.label }}</text>
+        </view>
+      </scroll-view>
+
+      <scroll-view class="list-area" scroll-y>
+        <view v-if="loading" class="state">正在加载...</view>
+        <view v-else-if="!rankBooks.length" class="state">暂无内容</view>
+        <view v-else class="list">
+          <view
+            v-for="(book, index) in rankBooks"
+            :key="book.id"
+            class="book-row"
+            @tap="goDetail(book.id)"
+          >
+            <text class="book-no" :class="{ 'book-no--top': index < 3 }">{{ index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1 }}</text>
+            <BookCover :title="book.title" :cover-url="book.coverUrl" size="md" />
+            <view class="book-info">
               <text class="book-title">{{ book.title }}</text>
-              <text class="status-badge" :class="book.status === 'COMPLETED' ? 'status-done' : 'status-ongoing'">{{ statusLabel(book.status) }}</text>
-            </view>
-            <text class="meta">{{ book.author || '佚名' }} · {{ book.chapterCount || 0 }}章 · {{ wordText(book.wordCount) }}</text>
-            <text class="latest">{{ book.latestChapterTitle || '暂无章节' }}</text>
-            <view class="score-row">
-              <text class="score-label">{{ scoreLabel }}</text>
-              <view class="score-track">
-                <view class="score-fill" :style="{ width: scoreWidth(book) }"></view>
-              </view>
+              <text class="book-sub">{{ book.author || '佚名' }} · {{ statusLabel(book.status) }}</text>
+              <text class="book-meta">{{ wordText(book.wordCount) }} <text v-if="book.latestChapterTitle">· {{ book.latestChapterTitle }}</text></text>
             </view>
           </view>
         </view>
-      </view>
+      </scroll-view>
     </view>
   </view>
 </template>
@@ -61,49 +76,54 @@ const bookStore = useBookStore()
 const loading = ref(false)
 const rankBooks = ref([])
 const categoryId = ref(0)
-const activeTab = ref('recommend')
+const activeCate = ref('all')
+const activeRank = ref('recommend')
 
-const tabs = [
-  { key: 'recommend', label: '推荐榜' },
-  { key: 'hot', label: '热门榜' },
-  { key: 'new', label: '新书榜' },
-  { key: 'completed', label: '完结榜' }
+const cateTabs = [
+  { key: 'all', name: '全部' },
+  { key: 'novel', name: '小说' },
+  { key: 'short', name: '短剧' },
+  { key: 'audio', name: '听书' }
 ]
 
-const scoreLabel = computed(() => {
-  if (activeTab.value === 'recommend') return '综合热度'
-  if (activeTab.value === 'hot') return '章节数'
-  if (activeTab.value === 'new') return '最近更新'
-  return '总字数'
-})
+const rankTabs = [
+  { key: 'recommend', label: '推荐榜', desc: '根据阅读热度排行' },
+  { key: 'hot', label: '热门榜', desc: '全网热度排行' },
+  { key: 'new', label: '新书榜', desc: '最近更新优先' },
+  { key: 'completed', label: '完结榜', desc: '完本好书推荐' }
+]
 
-const maxScore = computed(() => {
-  const scores = rankBooks.value.map((book) => rankScore(book))
-  return scores.length ? Math.max(1, ...scores) : 1
-})
+const currentRank = computed(() => rankTabs.find((r) => r.key === activeRank.value) || rankTabs[0])
+
+const cateGroupKeyMap = {
+  all: null,
+  novel: null,
+  short: 'short',
+  audio: 'audio'
+}
 
 async function load() {
   loading.value = true
+  const cid = categoryId.value || null
+  const group = cateGroupKeyMap[activeCate.value]
   try {
     await bookStore.loadCategories()
-    const cid = categoryId.value || null
     let res
-
-    switch (activeTab.value) {
+    switch (activeRank.value) {
       case 'recommend':
-        res = await bookStore.loadRank(cid, 50)
+        res = await bookStore.loadRank(cid, 50, group)
         rankBooks.value = res.code === 200 ? (res.data || []) : []
         break
       case 'hot':
-        res = await bookStore.loadFilter({ categoryId: cid, sortBy: 'chapterCount', pageSize: 50 })
+        res = await bookStore.loadFilter({ categoryId: cid, groupKey: group, sortBy: 'chapterCount', pageSize: 50 })
         rankBooks.value = res.code === 200 ? (res.data?.records || []) : []
         break
       case 'new':
-        res = await bookStore.loadFilter({ categoryId: cid, sortBy: 'latest', pageSize: 50 })
+        res = await bookStore.loadFilter({ categoryId: cid, groupKey: group, sortBy: 'latest', pageSize: 50 })
         rankBooks.value = res.code === 200 ? (res.data?.records || []) : []
         break
       case 'completed':
-        res = await bookStore.loadFilter({ categoryId: cid, status: 'COMPLETED', sortBy: 'wordCount', pageSize: 50 })
+        res = await bookStore.loadFilter({ categoryId: cid, groupKey: group, status: 'COMPLETED', sortBy: 'wordCount', pageSize: 50 })
         rankBooks.value = res.code === 200 ? (res.data?.records || []) : []
         break
     }
@@ -112,47 +132,32 @@ async function load() {
   }
 }
 
-function switchTab(key) {
-  if (activeTab.value === key) return
-  activeTab.value = key
-  load()
-}
-
 function goBack() {
-  uni.navigateBack({
-    fail: () => uni.switchTab({ url: '/pages/index/index' })
-  })
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack()
+  } else {
+    uni.reLaunch({ url: '/pages/index/index' })
+  }
 }
 
 function goDetail(id) {
   uni.navigateTo({ url: `/pages/book/detail?id=${id}` })
 }
 
-function statusLabel(status) {
-  if (status === 'COMPLETED') return '完结'
-  return '连载'
+function statusLabel(s) {
+  return s === 'COMPLETED' ? '完结' : '连载'
 }
 
 function wordText(count) {
-  const value = Number(count || 0)
-  if (value >= 10000) return `${(value / 10000).toFixed(1)}万字`
-  return `${value}字`
-}
-
-function rankScore(book) {
-  if (activeTab.value === 'completed') return Number(book.wordCount || 0)
-  return Number(book.chapterCount || 0) * 1000 + Number(book.wordCount || 0)
-}
-
-function scoreWidth(book) {
-  const percent = Math.max(8, Math.round((rankScore(book) / maxScore.value) * 100))
-  return `${Math.min(percent, 100)}%`
+  const n = Number(count || 0)
+  return n >= 10000 ? `${(n / 10000).toFixed(1)}万字` : `${n}字`
 }
 
 onLoad((query) => {
   categoryId.value = Number(query?.categoryId || 0)
-  if (query?.type && tabs.some((t) => t.key === query.type)) {
-    activeTab.value = query.type
+  if (query?.type && rankTabs.some((t) => t.key === query.type)) {
+    activeRank.value = query.type
   }
   load()
 })
@@ -161,218 +166,230 @@ onLoad((query) => {
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 14px 14px 88px;
-  background: #F8F8F6;
-  box-sizing: border-box;
+  background: #F4F4F1;
+  display: flex;
+  flex-direction: column;
 }
 
-.rank-shell {
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-}
-
-.nav-bar {
-  position: relative;
+/* Header */
+.header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 44px;
-  margin-bottom: 12px;
+  padding: 8px 12px 4px;
 }
 
-.nav-button,
-.nav-placeholder {
-  flex: 0 0 38px;
-  width: 38px;
-  height: 38px;
-}
-
-.nav-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: #fff;
-  border: 1px solid #EBEBE5;
-  color: #3A3A3A;
-  font-size: 28px;
-  font-weight: 500;
-}
-
-.nav-title {
-  position: absolute;
-  left: 50%;
-  max-width: calc(100% - 112px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #1F1F1F;
-  font-size: 17px;
-  font-weight: 900;
-  transform: translateX(-50%);
-}
-
-.rank-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 14px;
-  padding: 6px;
-  border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.04);
-}
-
-.rank-tab {
-  flex: 1;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
+.back {
+  flex-shrink: 0;
+  width: 40px;
   color: #8C8C8C;
-  font-size: 14px;
-  font-weight: 800;
+  font-size: 22px;
 }
 
-.rank-tab.active {
-  background: #3A3A3A;
-  color: #fff;
-}
-
-.rank-list {
+.header-center {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  align-items: center;
 }
 
-.rank-card {
+.header-title-row {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 12px;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+  gap: 8px;
 }
 
-.rank-no {
-  flex: 0 0 28px;
-  color: #A09080;
+.title-line {
+  width: 24px;
+  height: 1px;
+  background: #C4B8A8;
+  border-radius: 1px;
+}
+
+.title-ornament {
+  color: #C4B8A8;
+  font-size: 8px;
+  line-height: 1;
+}
+
+.header-title {
+  color: #1F1F1F;
   font-size: 18px;
   font-weight: 900;
-  text-align: center;
 }
 
-.rank-no.top {
-  color: #3A3A3A;
-}
-
-.book-main {
-  min-width: 0;
-  flex: 1;
-}
-
-.book-line {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.book-title {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #1F1F1F;
-  font-size: 16px;
-  font-weight: 900;
-  display: block;
-}
-
-.status-badge {
-  flex: 0 0 auto;
-  padding: 2px 6px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.status-ongoing {
-  background: #F0F0ED;
-  color: #3A3A3A;
-}
-
-.status-done {
-  background: #F0F0ED;
+.header-sub {
+  margin-top: 4px;
   color: #A09080;
-}
-
-.meta,
-.latest {
-  margin-top: 5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #8C8C8C;
-  font-size: 12px;
-  display: block;
-}
-
-.latest {
-  color: #A09080;
-}
-
-.score-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.score-label {
-  flex: 0 0 auto;
-  color: #8C8C8C;
   font-size: 11px;
 }
 
-.score-track {
-  flex: 1;
-  height: 5px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #EBEBE5;
+.header-spacer {
+  width: 40px;
 }
 
-.score-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: #3A3A3A;
+/* Category Tabs */
+.cate-scroll {
+  padding: 10px 12px 8px;
+  height: 30px;
+  white-space: nowrap;
 }
 
-.empty {
-  padding: 64px 0;
+.cate-scroll :deep(.uni-scroll-view-content) {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  height: 30px;
+}
+
+.cate-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
   color: #8C8C8C;
-  text-align: center;
-}
-
-.empty-title {
-  color: #1F1F1F;
-  font-size: 17px;
+  font-size: 13px;
   font-weight: 800;
-  display: block;
 }
 
-.empty-subtitle {
-  margin-top: 8px;
+.cate-item.on {
+  color: #1F1F1F;
+  font-weight: 900;
+}
+
+.cate-item.on::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 14px;
+  height: 2px;
+  border-radius: 999px;
+  background: #A09080;
+  transform: translateX(-50%);
+}
+
+/* Body */
+.body-row {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  padding: 0 12px;
+  gap: 10px;
+}
+
+/* Left Rail */
+.rail {
+  flex-shrink: 0;
+  width: 72px;
+  height: 100%;
+  padding: 6px 0;
+  border-radius: 8px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.rail-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 40px;
+  color: #8C8C8C;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.rail-item.active {
+  color: #1F1F1F;
+  background: #F4F4F1;
+}
+
+.rail-icon {
+  color: #A09080;
+  font-size: 8px;
+}
+
+/* Right List */
+.list-area {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border-radius: 8px;
+  background: #FFFFFF;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.list {
+  padding: 4px 0;
+}
+
+.book-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+}
+
+.book-row:active {
+  background: #F4F4F1;
+}
+
+.book-no {
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
   color: #B0B0B0;
   font-size: 13px;
-  display: block;
+  font-weight: 900;
 }
 
-@media (min-width: 720px) {
-  .page { padding-left: 22px; padding-right: 22px; }
+.book-no--top {
+  font-size: 18px;
+}
+
+.book-row :deep(.book-cover) {
+  flex-shrink: 0;
+  width: 40px;
+  height: 54px;
+  border-radius: 4px;
+}
+
+.book-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.book-title {
+  color: #1F1F1F;
+  font-size: 14px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-sub {
+  color: #A09080;
+  font-size: 11px;
+}
+
+.book-meta {
+  color: #B0B0B0;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* State */
+.state {
+  padding: 48px 0;
+  color: #8C8C8C;
+  text-align: center;
+  font-size: 13px;
 }
 </style>

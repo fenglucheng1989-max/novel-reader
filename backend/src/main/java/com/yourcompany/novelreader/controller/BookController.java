@@ -38,8 +38,9 @@ public class BookController extends BaseUserController {
 
     @GetMapping("/books/rank")
     public ApiResponse<List<NovelBook>> rank(@RequestParam(required = false) Long categoryId,
-                                             @RequestParam(required = false) Integer limit) {
-        return ApiResponse.success(bookService.rank(categoryId, limit));
+                                             @RequestParam(required = false) Integer limit,
+                                             @RequestParam(required = false) String groupKey) {
+        return ApiResponse.success(bookService.rank(categoryId, limit, groupKey));
     }
 
     @GetMapping("/books")
@@ -86,8 +87,9 @@ public class BookController extends BaseUserController {
     }
 
     @GetMapping("/books/featured")
-    public ApiResponse<List<NovelBook>> featured(@RequestParam(required = false, defaultValue = "6") Integer limit) {
-        return ApiResponse.success(bookService.featured(limit));
+    public ApiResponse<List<NovelBook>> featured(@RequestParam(required = false, defaultValue = "6") Integer limit,
+                                                  @RequestParam(required = false) String groupKey) {
+        return ApiResponse.success(bookService.featured(limit, groupKey));
     }
 
     private boolean isRealUser(Authentication authentication) {

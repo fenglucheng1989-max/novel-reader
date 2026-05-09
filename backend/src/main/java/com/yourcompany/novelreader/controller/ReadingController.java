@@ -1,9 +1,9 @@
 package com.yourcompany.novelreader.controller;
 
 import com.yourcompany.novelreader.dto.ReaderSettingDTO;
+import com.yourcompany.novelreader.dto.ReadingHistoryDTO;
 import com.yourcompany.novelreader.dto.ReadingProgressDTO;
 import com.yourcompany.novelreader.entity.NovelReaderSetting;
-import com.yourcompany.novelreader.entity.NovelReadingHistory;
 import com.yourcompany.novelreader.entity.NovelReadingProgress;
 import com.yourcompany.novelreader.mapper.AppUserMapper;
 import com.yourcompany.novelreader.service.ReadingService;
@@ -42,7 +42,7 @@ public class ReadingController extends BaseUserController {
     }
 
     @GetMapping("/history")
-    public ApiResponse<List<NovelReadingHistory>> history(Authentication authentication) {
+    public ApiResponse<List<ReadingHistoryDTO>> history(Authentication authentication) {
         return ApiResponse.success(readingService.history(currentUserId(authentication)));
     }
 

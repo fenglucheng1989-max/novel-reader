@@ -5,6 +5,7 @@ import lombok.Data;
 @Data
 public class BookFilterDTO {
     private Long categoryId;
+    private String groupKey;
     private String status;
     private Integer minWordCount;
     private Integer maxWordCount;

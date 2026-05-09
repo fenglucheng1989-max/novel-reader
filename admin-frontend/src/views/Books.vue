@@ -16,7 +16,7 @@
       </div>
       <el-button type="primary" @click="$router.push('/books/new')">新增书籍</el-button>
     </div>
-    <el-table :data="books" border v-loading="loading" empty-text="暂无书籍">
+    <el-table :data="pagedBooks" border v-loading="loading" empty-text="暂无书籍">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="title" label="书名" min-width="180" />
       <el-table-column prop="author" label="作者" width="140" />
@@ -42,11 +42,19 @@
         </template>
       </el-table-column>
     </el-table>
+    <div class="pagination-wrap" v-if="books.length > pageSize">
+      <el-pagination
+        v-model:current-page="page"
+        :page-size="pageSize"
+        :total="books.length"
+        layout="total, prev, pager, next"
+      />
+    </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteBook, listBooks, listCategories } from '../api/admin'
 
@@ -55,9 +63,17 @@ const categories = ref([])
 const keyword = ref('')
 const categoryId = ref()
 const loading = ref(false)
+const page = ref(1)
+const pageSize = ref(15)
+
+const pagedBooks = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return books.value.slice(start, start + pageSize.value)
+})
 
 async function load() {
   loading.value = true
+  page.value = 1
   try {
     const res = await listBooks({ keyword: keyword.value, categoryId: categoryId.value })
     books.value = res || []
@@ -89,3 +105,11 @@ onMounted(() => {
   load()
 })
 </script>
+
+<style scoped>
+.pagination-wrap {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+</style>

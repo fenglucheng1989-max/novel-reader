@@ -2,6 +2,7 @@ package com.yourcompany.novelreader.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.yourcompany.novelreader.dto.ReaderSettingDTO;
+import com.yourcompany.novelreader.dto.ReadingHistoryDTO;
 import com.yourcompany.novelreader.dto.ReadingProgressDTO;
 import com.yourcompany.novelreader.entity.NovelReaderSetting;
 import com.yourcompany.novelreader.entity.NovelReadingHistory;
@@ -71,11 +72,8 @@ public class ReadingServiceImpl implements ReadingService {
     }
 
     @Override
-    public List<NovelReadingHistory> history(Long userId) {
-        return historyMapper.selectList(new LambdaQueryWrapper<NovelReadingHistory>()
-                .eq(NovelReadingHistory::getUserId, userId)
-                .orderByDesc(NovelReadingHistory::getReadAt)
-                .last("limit 50"));
+    public List<ReadingHistoryDTO> history(Long userId) {
+        return historyMapper.findHistoryWithBooks(userId);
     }
 
     @Override

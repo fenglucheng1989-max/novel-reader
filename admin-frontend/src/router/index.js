@@ -9,6 +9,9 @@ import Chapters from '../views/Chapters.vue'
 import ChapterForm from '../views/ChapterForm.vue'
 import Categories from '../views/Categories.vue'
 import Import from '../views/Import.vue'
+import Users from '../views/Users.vue'
+import Comments from '../views/Comments.vue'
+import LegalDocuments from '../views/LegalDocuments.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -27,7 +30,10 @@ const router = createRouter({
         { path: 'books/:bookId/chapters/new', component: ChapterForm, meta: { title: '新增章节' } },
         { path: 'chapters/:id/edit', component: ChapterForm, meta: { title: '编辑章节' } },
         { path: 'categories', component: Categories, meta: { title: '分类管理' } },
-        { path: 'import', component: Import, meta: { title: '导入中心' } }
+        { path: 'import', component: Import, meta: { title: '导入中心' } },
+        { path: 'users', component: Users, meta: { title: '用户管理' } },
+        { path: 'comments', component: Comments, meta: { title: '评论管理' } },
+        { path: 'legal-documents', component: LegalDocuments, meta: { title: '法律文档' } }
       ]
     }
   ]

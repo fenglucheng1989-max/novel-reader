@@ -1,18 +1,17 @@
 <template>
-  <view class="detail-page product-page">
+  <view class="detail-page" @touchstart="onTouchStart" @touchend="onTouchEnd">
     <view v-if="loading" class="state">正在加载书籍...</view>
     <view v-else-if="!detail" class="state">书籍不存在</view>
     <template v-else>
       <view class="topbar">
         <text class="back" @tap="goBack">‹ 返回</text>
         <view class="top-actions">
-          <button class="mini-action" @tap="toggleShelf">{{ detail.inBookshelf ? '✓ 在书架' : '+ 书架' }}</button>
-          <button class="mini-action" @tap="startRead">▷ 阅读</button>
+          <text class="mini-action" @tap="toggleShelf">{{ detail.inBookshelf ? '已在书架' : '+ 加书架' }}</text>
+          <text class="mini-action" @tap="onListen">🎧 听书</text>
         </view>
       </view>
-
       <view class="hero">
-        <view class="cover" :style="coverBgStyle">
+        <view class="cover" :style="coverBgStyle" @tap="startRead">
           <text v-if="!detail.book.coverUrl">{{ coverText(detail.book.title) }}</text>
         </view>
         <text class="title">{{ detail.book.title }}</text>
@@ -22,7 +21,7 @@
         </text>
       </view>
 
-      <view class="stats product-card">
+      <view class="stats">
         <view class="stat">
           <text class="stat-value">{{ formatRating(detail.rating) }}</text>
           <text class="stat-label">{{ detail.ratingCount || 0 }} 人评价 ›</text>
@@ -37,130 +36,95 @@
         </view>
       </view>
 
-      <scroll-view v-if="detail.tags?.length" class="tag-row" scroll-x>
-        <text class="hot-tag">大热榜</text>
-        <text v-for="tag in detail.tags" :key="tag" class="tag">{{ tag }}</text>
-        <text class="tag">{{ detail.categoryName || '精选' }}</text>
-      </scroll-view>
-
-      <view class="intro product-card">
-        <text class="intro-text" :class="{ folded: !descExpanded }">{{ detail.book.description || '暂无简介' }}</text>
-        <text v-if="shouldFold" class="more" @tap="descExpanded = !descExpanded">{{ descExpanded ? '收起' : '更多' }}</text>
+      <view class="intro">
+        <view class="intro-head">
+          <text class="section-title">简介</text>
+          <scroll-view class="intro-tags" scroll-x :show-scrollbar="false">
+            <text v-for="tag in detail.tags" :key="tag" class="tag-sm">{{ tag }}</text>
+            <text class="tag-sm">{{ detail.categoryName || '精选' }}</text>
+          </scroll-view>
+        </view>
+        <view v-if="shouldFold" class="intro-body intro-collapsed" @tap="showIntroModal = true">
+          <text class="intro-text">{{ truncatedIntro }}<text class="more-dots">...</text><text class="more-btn">更多</text></text>
+        </view>
+        <text v-else class="intro-text">{{ descText }}</text>
       </view>
 
-      <view class="catalog product-card">
-        <view class="section-head">
-          <text class="section-title">目录</text>
-          <text class="section-more" @tap="startRead">共 {{ detail.chapters.length }} 章 ›</text>
-        </view>
-        <view
-          v-for="chapter in tocPreview"
-          :key="chapter.id"
-          class="chapter-row"
-          @tap="readChapter(chapter.chapterNo)"
-        >
-          <text class="chapter-title">{{ chapter.title }}</text>
-          <text class="chapter-words">{{ chapter.wordCount || 0 }} 字</text>
+      <!-- Intro Modal -->
+      <view v-if="showIntroModal" class="intro-modal" :class="{ 'intro-modal--out': modalLeaving }">
+        <view class="intro-modal-overlay" :class="{ 'intro-modal-overlay--out': modalLeaving }" @tap="closeIntroModal"></view>
+        <view class="intro-modal-panel" :class="{ 'intro-modal-panel--out': modalLeaving }">
+          <view class="intro-modal-head">
+            <text class="intro-modal-title">简介</text>
+            <text class="intro-modal-arrow" @tap="closeIntroModal">‹</text>
+          </view>
+          <view class="intro-modal-body">
+            <text class="intro-modal-text">{{ descText }}</text>
+          </view>
+          <view class="intro-modal-actions">
+            <view class="intro-modal-btn" @tap="startRead">去阅读</view>
+          </view>
         </view>
       </view>
 
-      <view class="reviews product-card">
+      <view class="reviews">
         <view class="section-head review-head">
           <view>
             <text class="section-title">热门评价</text>
             <text class="review-sub">{{ commentTotal ? `${commentTotal} 人评价过这本书` : '读完的人都在这里留下想法' }}</text>
           </view>
-          <text v-if="comments.length" class="section-more" @tap="reviewExpanded = !reviewExpanded">
-            {{ reviewExpanded ? '收起' : `查看 ${commentTotal || comments.length} 条评价` }}
-          </text>
-        </view>
-
-        <button class="write-review" @tap="reviewComposerVisible = !reviewComposerVisible">
-          {{ reviewComposerVisible || !comments.length ? '收起书评' : '写书评' }}
-        </button>
-
-        <view v-if="reviewComposerVisible || !comments.length" class="composer">
-          <textarea
-            v-model="commentText"
-            class="composer-input"
-            maxlength="500"
-            auto-height
-            placeholder="写下你对这本书的想法"
-          />
-          <view class="composer-foot">
-            <text>{{ commentText.length }}/500</text>
-            <button class="send" :disabled="commentSubmitting" @tap="submitBookComment">
-              {{ commentSubmitting ? '发布中' : '发布评价' }}
-            </button>
-          </view>
+          <text v-if="comments.length" class="section-more" @tap="goReviews">{{ commentTotal || comments.length }} 条评价 ›</text>
         </view>
 
         <view v-if="commentsLoading" class="empty-review">正在加载评价...</view>
-        <view v-else-if="!comments.length" class="empty-review">暂无评价，成为第一个评价的人吧</view>
-        <view v-else class="review-list">
-          <view v-for="item in visibleComments" :key="item.id" class="review-item">
-            <view class="avatar">{{ (item.username || '?').slice(0, 1) }}</view>
+        <view v-else-if="!comments.length" class="empty-review">暂无评价</view>
+        <view v-else class="detail-review-list">
+          <view v-for="item in visibleComments" :key="item.id" class="detail-review-item" @tap="goReviews">
+            <text class="avatar-sm">{{ (item.username || '?').slice(0, 1) }}</text>
             <view class="review-body">
-              <view class="review-user-row">
+              <view class="review-head-row">
                 <text class="review-user">{{ item.username || '匿名读者' }}</text>
-                <text class="review-chip">好看</text>
+                <text class="review-chip-tag">好看</text>
+                <text class="review-time">{{ formatTime(item.createdAt) }}</text>
               </view>
-              <text class="review-content text-cut-3">{{ item.content }}</text>
-              <text class="review-meta">☺ 好看 · {{ formatTime(item.createdAt) }}评价</text>
+              <text class="review-text text-cut-3">{{ item.content }}</text>
             </view>
           </view>
         </view>
       </view>
-
-      <view v-if="recommendations.length" class="recommend product-card">
-        <view class="section-head">
-          <text class="section-title">为你精选的好书</text>
-        </view>
-        <scroll-view class="rec-scroll" scroll-x>
-          <view v-for="book in recommendations" :key="book.id" class="rec-card" @tap="goRecommendDetail(book.id)">
-            <view class="rec-cover">{{ coverText(book.title) }}</view>
-            <text class="rec-title text-cut-2">{{ book.title }}</text>
-          </view>
-        </scroll-view>
-      </view>
-
-      <view class="bottom-space" />
     </template>
 
-    <view v-if="detail" class="bottom-cta">
-      <button class="shelf-btn" @tap="toggleShelf">{{ detail.inBookshelf ? '已在书架' : '加入书架' }}</button>
-      <button class="read-btn" @tap="startRead">开始阅读</button>
+    <view v-if="showHint" class="swipe-hint" @tap="startRead">
+      <text class="hint-text">👈 左滑进入正文</text>
     </view>
   </view>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import { useUserStore } from '../../store/user'
 
-const FOLD_THRESHOLD = 92
-const TOC_PREVIEW_COUNT = 3
 const bookStore = useBookStore()
 const userStore = useUserStore()
 
 const id = ref('')
 const detail = ref(null)
 const loading = ref(false)
-const descExpanded = ref(false)
-const recommendations = ref([])
+const showIntroModal = ref(false)
+const modalLeaving = ref(false)
 const comments = ref([])
 const commentTotal = ref(0)
 const commentsLoading = ref(false)
-const commentText = ref('')
-const commentSubmitting = ref(false)
-const reviewExpanded = ref(false)
-const reviewComposerVisible = ref(false)
+const showHint = ref(true)
+const touchStartX = ref(0)
 
-const tocPreview = computed(() => (detail.value?.chapters || []).slice(0, TOC_PREVIEW_COUNT))
-const shouldFold = computed(() => (detail.value?.book?.description || '').length > FOLD_THRESHOLD)
-const visibleComments = computed(() => (reviewExpanded.value ? comments.value : comments.value.slice(0, 2)))
+const TWO_LINE_CHARS = 48
+const descText = computed(() => detail.value?.book?.description || '')
+const shouldFold = computed(() => descText.value.length > TWO_LINE_CHARS)
+const truncatedIntro = computed(() => descText.value.slice(0, TWO_LINE_CHARS))
+const visibleComments = computed(() => comments.value.slice(0, 2))
 const coverBgStyle = computed(() => detail.value?.book?.coverUrl
   ? { background: `center / cover no-repeat url("${detail.value.book.coverUrl}")` }
   : {})
@@ -175,17 +139,7 @@ async function load() {
   } finally {
     loading.value = false
   }
-  loadRecommendations()
   loadComments()
-}
-
-async function loadRecommendations() {
-  try {
-    const res = await bookStore.loadRecommendations(id.value, 8)
-    recommendations.value = res.code === 200 ? (res.data || []) : []
-  } catch {
-    recommendations.value = []
-  }
 }
 
 async function loadComments() {
@@ -199,31 +153,6 @@ async function loadComments() {
     commentTotal.value = 0
   } finally {
     commentsLoading.value = false
-  }
-}
-
-async function submitBookComment() {
-  const content = commentText.value.trim()
-  if (!content) {
-    uni.showToast({ title: '请输入评价内容', icon: 'none' })
-    return
-  }
-  if (!userStore.isLoggedIn) {
-    uni.showToast({ title: '请先登录后再评价', icon: 'none' })
-    setTimeout(() => uni.switchTab({ url: '/pages/mine/mine' }), 700)
-    return
-  }
-  commentSubmitting.value = true
-  try {
-    const res = await bookStore.createComment({ bookId: Number(id.value), content, commentType: 'REVIEW' })
-    if (res.code === 200) {
-      commentText.value = ''
-      reviewComposerVisible.value = false
-      uni.showToast({ title: '评价已发布', icon: 'success' })
-      await loadComments()
-    }
-  } finally {
-    commentSubmitting.value = false
   }
 }
 
@@ -242,12 +171,29 @@ async function toggleShelf() {
   }
 }
 
-function readChapter(chapterNo) {
-  uni.navigateTo({ url: `/pages/reader/reader?bookId=${id.value}&chapterNo=${chapterNo}` })
+function onTouchStart(e) {
+  touchStartX.value = e.touches[0].clientX
+}
+
+function onTouchEnd(e) {
+  const dx = e.changedTouches[0].clientX - touchStartX.value
+  if (dx < -50) {
+    startRead()
+  }
 }
 
 function startRead() {
-  readChapter(1)
+  uni.setStorageSync('swipeHintDismissed', true)
+  showHint.value = false
+  uni.navigateTo({ url: `/pages/reader/reader?bookId=${id.value}&chapterNo=1` })
+}
+
+function closeIntroModal() {
+  modalLeaving.value = true
+  setTimeout(() => {
+    showIntroModal.value = false
+    modalLeaving.value = false
+  }, 250)
 }
 
 function goBack() {
@@ -256,8 +202,12 @@ function goBack() {
   else uni.switchTab({ url: '/pages/index/index' })
 }
 
-function goRecommendDetail(bookId) {
-  uni.navigateTo({ url: `/pages/book/detail?id=${bookId}` })
+function onListen() {
+  uni.showToast({ title: '听书功能即将上线', icon: 'none' })
+}
+
+function goReviews() {
+  uni.navigateTo({ url: `/pages/review/review?bookId=${id.value}` })
 }
 
 function coverText(title) {
@@ -314,12 +264,19 @@ onLoad((query) => {
   id.value = resolveBookId(query)
   load()
 })
+
+onShow(() => {
+  if (!uni.getStorageSync('swipeHintDismissed')) {
+    showHint.value = true
+  }
+})
 </script>
 
 <style scoped>
 .detail-page {
   min-height: 100vh;
-  padding: 10px 12px 84px;
+  padding: 12px 12px 32px;
+  background: #F4F4F1;
 }
 
 .state {
@@ -328,11 +285,12 @@ onLoad((query) => {
   text-align: center;
 }
 
+/* ── Topbar ── */
 .topbar {
-  height: 38px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 24px;
 }
 
 .back {
@@ -342,36 +300,39 @@ onLoad((query) => {
 
 .top-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
 .mini-action {
-  height: 30px;
-  line-height: 30px;
-  margin: 0;
+  height: 28px;
+  line-height: 28px;
   padding: 0 12px;
-  border-radius: 15px;
-  background: rgba(160, 144, 128, 0.2);
-  color: #5A5A5A;
+  border-radius: 14px;
+  background: rgba(160, 144, 128, 0.12);
+  color: #8C7C6C;
   font-size: 13px;
+  font-weight: 800;
 }
 
+/* ── Hero ── */
 .hero {
-  padding: 22px 0 14px;
+  padding: 0 0 18px;
   text-align: center;
 }
 
 .cover {
-  width: 94px;
-  height: 130px;
+  width: 140px;
+  height: 196px;
+  display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 14px;
+  margin: 0 auto 16px;
   border-radius: 8px;
   background: linear-gradient(145deg, #8A8A8A, #3A3A3A 48%, #A09080);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.15);
   color: #fff;
-  font-size: 28px;
+  font-size: 36px;
   font-weight: 900;
 }
 
@@ -394,87 +355,237 @@ onLoad((query) => {
   color: #A09080;
 }
 
+/* ── Stats ── */
 .stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  padding: 12px 6px;
+  padding: 14px 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .stat {
+  position: relative;
   text-align: center;
-  border-right: 1px solid rgba(0,0,0,0.08);
+}
+
+.stat + .stat::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 22px;
+  background: rgba(0,0,0,0.08);
+  transform: translateY(-50%);
 }
 
 .stat:last-child {
-  border-right: 0;
 }
 
 .stat-value {
   display: block;
   color: #1F1F1F;
-  font-size: 21px;
+  font-size: 20px;
   font-weight: 900;
 }
 
 .stat-label {
   display: block;
-  margin-top: 5px;
-  color: #8C8C8C;
+  margin-top: 4px;
+  color: #B0B0B0;
   font-size: 11px;
 }
 
-.tag-row {
-  margin: 12px 0 10px;
-  white-space: nowrap;
+/* ── Intro ── */
+.intro {
+  margin-top: 4px;
 }
 
-.hot-tag,
-.tag {
+.intro-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.intro-tags {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.intro-tags ::-webkit-scrollbar {
+  display: none;
+}
+
+.tag-sm {
   display: inline-flex;
   align-items: center;
-  height: 26px;
-  margin-right: 8px;
-  padding: 0 12px;
-  border-radius: 6px;
+  height: 20px;
+  margin-right: 6px;
+  padding: 0 8px;
+  border-radius: 4px;
   background: rgba(160, 144, 128, 0.18);
   color: #5A5A5A;
-  font-size: 12px;
+  font-size: 11px;
 }
 
-.hot-tag {
-  background: #3A3A3A;
-  color: #fff;
-  font-weight: 800;
+.intro-body {
+  margin-top: 4px;
 }
 
-.intro,
-.catalog,
-.reviews,
-.recommend {
-  margin-top: 12px;
-  padding: 12px;
+.intro-collapsed {
+  cursor: pointer;
 }
 
 .intro-text {
-  display: block;
   color: #5A5A5A;
   font-size: 15px;
-  line-height: 25px;
+  line-height: 26px;
+  word-break: break-word;
 }
 
-.intro-text.folded {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
+.more-dots {
+  color: #5A5A5A;
+  font-size: 15px;
+  line-height: 26px;
 }
 
-.more {
-  display: block;
-  margin-top: 8px;
-  color: #6E6E6E;
-  text-align: right;
+.more-btn {
+  color: #A09080;
   font-size: 13px;
+  font-weight: 800;
+  float: right;
+  line-height: 26px;
+  margin-left: 4px;
+}
+
+/* ── Intro Modal ── */
+.intro-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: modalFadeIn 0.3s ease;
+}
+
+.intro-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.intro-modal-panel {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: #F4F4F1;
+  border-radius: 20px 20px 0 0;
+  overflow: hidden;
+  animation: modalSlideUp 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.intro-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 20px 8px;
+  flex-shrink: 0;
+}
+
+.intro-modal-title {
+  color: #181818;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.intro-modal-arrow {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.05);
+  color: #8C8C8C;
+  font-size: 22px;
+  font-weight: 300;
+  transform: rotate(-90deg);
+}
+
+.intro-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 20px 20px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.intro-modal-text {
+  display: block;
+  color: #5A5A5A;
+  font-size: 17px;
+  line-height: 30px;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.intro-modal-actions {
+  display: flex;
+  padding: 16px 20px 28px;
+  flex-shrink: 0;
+}
+
+.intro-modal-btn {
+  padding: 0 48px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 19px;
+  background: linear-gradient(135deg, #B0A090, #9B8B7A);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 auto;
+}
+
+/* exit animations */
+.intro-modal--out {
+  animation: modalFadeOut 0.25s ease forwards;
+}
+
+.intro-modal-overlay--out {
+  animation: modalFadeOut 0.25s ease forwards;
+}
+
+.intro-modal-panel--out {
+  animation: modalSlideDown 0.25s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
+@keyframes modalFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes modalSlideDown {
+  from { transform: translateY(0); }
+  to { transform: translateY(100%); }
 }
 
 .section-head {
@@ -497,30 +608,6 @@ onLoad((query) => {
   line-height: 26px;
 }
 
-.chapter-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 0;
-  border-top: 1px solid rgba(0,0,0,0.06);
-}
-
-.chapter-row:first-of-type {
-  margin-top: 10px;
-}
-
-.chapter-title {
-  min-width: 0;
-  flex: 1;
-  color: #3A3A3A;
-  font-size: 13px;
-}
-
-.chapter-words {
-  color: #B0B0B0;
-  font-size: 11px;
-}
-
 .review-sub {
   display: block;
   margin-top: 6px;
@@ -528,83 +615,46 @@ onLoad((query) => {
   font-size: 11px;
 }
 
-.write-review {
-  width: 96px;
-  height: 30px;
-  line-height: 30px;
-  margin: 14px 0 0 auto;
-  border-radius: 17px;
-  border: 1px solid rgba(0,0,0,0.12);
-  background: #F5F5F2;
-  color: #5A5A5A;
-  font-size: 12px;
-}
-
-.composer {
-  margin-top: 12px;
-  padding: 12px;
-  border-radius: 8px;
-  background: #F5F5F2;
-  border: 1px solid rgba(0,0,0,0.08);
-}
-
-.composer-input {
-  width: 100%;
-  min-height: 84px;
-  color: #1F1F1F;
-  font-size: 13px;
-  line-height: 21px;
-}
-
-.composer-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 8px;
-  color: #B0B0B0;
-  font-size: 12px;
-}
-
-.send {
-  width: 94px;
-  height: 34px;
-  line-height: 34px;
-  margin: 0;
-  border-radius: 8px;
-  background: #3A3A3A;
-  color: #fff;
-  font-size: 12px;
+/* ── Reviews (compact, no card) ── */
+.reviews {
+  margin-top: 16px;
 }
 
 .empty-review {
-  padding: 26px 0 12px;
+  padding: 20px 0 8px;
   color: #B0B0B0;
   text-align: center;
   font-size: 14px;
 }
 
-.review-list {
-  margin-top: 8px;
+.detail-review-list {
+  margin-top: 4px;
 }
 
-.review-item {
+.detail-review-item {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   padding: 10px 0;
-  border-top: 1px solid rgba(0,0,0,0.06);
+  border-bottom: 1px solid rgba(0,0,0,0.05);
 }
 
-.avatar {
-  flex: 0 0 34px;
-  width: 34px;
-  height: 34px;
+.detail-review-item:last-child {
+  border-bottom: none;
+}
+
+.avatar-sm {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
   background: #F0F0ED;
   color: #A09080;
+  font-size: 12px;
   font-weight: 900;
+  margin-top: 1px;
 }
 
 .review-body {
@@ -612,119 +662,66 @@ onLoad((query) => {
   flex: 1;
 }
 
-.review-user-row {
+.review-head-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 5px;
+  gap: 6px;
+  margin-bottom: 3px;
 }
 
 .review-user {
   color: #A09080;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
 }
 
-.review-chip {
-  padding: 2px 7px;
-  border-radius: 10px;
+.review-chip-tag {
+  padding: 1px 6px;
+  border-radius: 8px;
   background: rgba(160, 144, 128, 0.18);
   color: #A09080;
-  font-size: 11px;
-}
-
-.review-content {
-  color: #3A3A3A;
-  font-size: 15px;
-  line-height: 24px;
-}
-
-.review-meta {
-  display: block;
-  margin-top: 8px;
-  color: #B0B0B0;
-  font-size: 13px;
-}
-
-.rec-scroll {
-  margin-top: 12px;
-  white-space: nowrap;
-}
-
-.rec-card {
-  display: inline-flex;
-  width: 86px;
-  flex-direction: column;
-  margin-right: 12px;
-  vertical-align: top;
-}
-
-.rec-cover {
-  width: 82px;
-  height: 108px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 7px;
-  background: linear-gradient(145deg, #3A3A3A, #A09080);
-  color: #fff;
-  font-size: 20px;
-  font-weight: 900;
-}
-
-.rec-title {
-  margin-top: 8px;
-  color: #3A3A3A;
-  font-size: 13px;
+  font-size: 10px;
   line-height: 18px;
 }
 
-.bottom-space {
-  height: 28px;
+.review-time {
+  margin-left: auto;
+  color: #B0B0B0;
+  font-size: 11px;
+  flex-shrink: 0;
 }
 
-.bottom-cta {
+.review-text {
+  display: block;
+  color: #3A3A3A;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* ── Swipe Hint ── */
+.swipe-hint {
   position: fixed;
   left: 50%;
-  right: auto;
-  bottom: 0;
-  z-index: 12;
-  width: min(100vw, 480px);
-  display: grid;
-  grid-template-columns: 0.85fr 1.45fr;
-  gap: 12px;
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  bottom: 48px;
+  z-index: 100;
   transform: translateX(-50%);
-  background: rgba(248, 248, 246, 0.94);
-  backdrop-filter: blur(10px);
+  animation: hintFloat 2s ease-in-out infinite;
 }
 
-.shelf-btn,
-.read-btn {
-  height: 46px;
-  line-height: 46px;
-  margin: 0;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 800;
-}
-
-.shelf-btn {
-  background: #F5F5F2;
-  color: #5A5A5A;
-  border: 1px solid rgba(0,0,0,0.08);
-}
-
-.read-btn {
-  background: #3A3A3A;
+.hint-text {
+  display: block;
+  padding: 10px 24px;
+  border-radius: 999px;
+  background: rgba(58, 58, 58, 0.88);
   color: #fff;
+  font-size: 14px;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
 }
 
-@media (max-width: 480px) {
-  .bottom-cta {
-    left: 0;
-    width: 100vw;
-    transform: none;
-  }
+@keyframes hintFloat {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-6px); }
 }
+
 </style>

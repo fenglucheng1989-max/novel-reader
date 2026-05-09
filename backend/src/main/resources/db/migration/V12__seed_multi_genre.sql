@@ -103,7 +103,7 @@ FROM novel_category c WHERE c.name = '武侠'
 
 INSERT INTO novel_book(title, author, category_id, description, cover_url, status, word_count, chapter_count, latest_chapter_title, source_type, sort_order)
 SELECT '剑出天山', '顾北', c.id,
-  '天山剑派覆灭那天，掌门幼女叶寒霜被一名老仆抱进密道逃出生天。十五年后，她背着师父传下的残缺剑谱走出深山，却发现当年灭门的凶手们个个都已位高权重。她只有一把剑、半本剑谱，和一句师父临终前的话：剑出天山，莫问归途。',
+  '天山剑派覆灭那天，掌门幼女叶寒霜被一名老仆抱进密道逃出生天。十五年后，她背着师父传下的残缺剑谱走出深山，却发现当年灭门的凶手们个个都已位高权重。她只有一把剑、半本剑谱，和一句师父临终前的话：剑出天山，莫问归途。从此她踏上了一条注定孤独的复仇之路，从西域大漠到江南水乡，从江湖草莽到朝堂之上，她遇到了形形色色的人——有人对她伸出援手，有人对她暗藏杀机，更有人在暗中默默守护。她的剑法在血与火的淬炼中愈发凌厉，但她也逐渐发现，当年的灭门惨案背后隐藏着一个远比复仇更加深重的阴谋。这个阴谋牵涉到整个武林的命运，甚至关乎天下苍生的存亡。当真相一层层剥开，她必须在仇恨与大义之间做出抉择。',
   'https://picsum.photos/seed/tian-shan-sword/360/520',
   'ONGOING', 41000, 2, '第二章 长安故人', 'MANUAL', 18
 FROM novel_category c WHERE c.name = '武侠'

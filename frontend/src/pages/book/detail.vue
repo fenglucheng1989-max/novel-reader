@@ -275,7 +275,7 @@ onShow(() => {
 <style scoped>
 .detail-page {
   min-height: 100vh;
-  padding: 12px 12px 32px;
+  padding: 12px 20px 32px;
   background: #F4F4F1;
 }
 

@@ -14,7 +14,9 @@ export const useUserStore = defineStore('user', {
     /** @type {string} */
     username: uni.getStorageSync('username') || '',
     /** @type {string} */
-    avatarUrl: uni.getStorageSync('avatarUrl') || ''
+    avatarUrl: uni.getStorageSync('avatarUrl') || '',
+    /** @type {string} */
+    email: uni.getStorageSync('email') || ''
   }),
   getters: {
     isLoggedIn: (state) => !!state.token
@@ -24,6 +26,7 @@ export const useUserStore = defineStore('user', {
       this.token = uni.getStorageSync('token') || ''
       this.username = uni.getStorageSync('username') || ''
       this.avatarUrl = uni.getStorageSync('avatarUrl') || ''
+      this.email = uni.getStorageSync('email') || ''
     },
     async login(username, password) {
       const res = await request({
@@ -58,9 +61,11 @@ export const useUserStore = defineStore('user', {
       this.token = ''
       this.username = ''
       this.avatarUrl = ''
+      this.email = ''
       uni.removeStorageSync('token')
       uni.removeStorageSync('username')
       uni.removeStorageSync('avatarUrl')
+      uni.removeStorageSync('email')
     },
     async fetchProfile() {
       const res = await request({
@@ -76,6 +81,10 @@ export const useUserStore = defineStore('user', {
         if (res.data.username) {
           this.username = res.data.username
           uni.setStorageSync('username', res.data.username)
+        }
+        if (res.data.email !== undefined) {
+          this.email = res.data.email || ''
+          uni.setStorageSync('email', this.email)
         }
       }
       return res
@@ -94,6 +103,10 @@ export const useUserStore = defineStore('user', {
         if (res.data.username) {
           this.username = res.data.username
           uni.setStorageSync('username', res.data.username)
+        }
+        if (res.data.email !== undefined) {
+          this.email = res.data.email || ''
+          uni.setStorageSync('email', this.email)
         }
       }
       return res

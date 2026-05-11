@@ -104,16 +104,6 @@
       </view>
     </view>
 
-    <view class="section">
-      <text class="section-title">通用设置</text>
-      <view class="setting-row" @tap="clearCache">
-        <view class="setting-info">
-          <text class="setting-name">清除缓存</text>
-          <text class="setting-desc">释放本地存储空间</text>
-        </view>
-        <text class="arrow">›</text>
-      </view>
-    </view>
   </view>
 </template>
 
@@ -124,8 +114,8 @@ import { useUserStore } from '../../store/user'
 
 const readerStore = useReaderStore()
 const userStore = useUserStore()
-const brightness = ref(Number(uni.getStorageSync('readerBrightness') || 80))
-const eyeProtection = ref(Boolean(uni.getStorageSync('readerEyeProtection') || false))
+const brightness = ref(Number(readerStore.setting.brightness ?? uni.getStorageSync('readerBrightness') ?? 80))
+const eyeProtection = ref(Boolean(readerStore.setting.eyeProtection ?? uni.getStorageSync('readerEyeProtection') ?? false))
 
 const themes = [
   { key: 'DEFAULT', label: '米白', bg: '#F8F8F6', border: '#CCCCCC' },
@@ -176,26 +166,12 @@ function setTurnMode(val) {
 
 function onBrightness(e) {
   brightness.value = Math.max(20, Math.min(100, Number(e.detail.value || 80)))
-  uni.setStorageSync('readerBrightness', brightness.value)
+  readerStore.updateLocalSetting({ brightness: brightness.value })
 }
 
 function onEyeProtection(e) {
   eyeProtection.value = !!e.detail.value
-  uni.setStorageSync('readerEyeProtection', eyeProtection.value)
-}
-
-function clearCache() {
-  uni.showModal({
-    title: '清除缓存',
-    content: '确定要清除所有本地缓存吗？这不会影响书架和阅读进度。',
-    success: (res) => {
-      if (res.confirm) {
-        const keys = uni.getStorageInfoSync().keys || []
-        keys.filter(k => k.startsWith('chapter:v2:')).forEach(k => uni.removeStorageSync(k))
-        uni.showToast({ title: '缓存已清除', icon: 'success' })
-      }
-    }
-  })
+  readerStore.updateLocalSetting({ eyeProtection: eyeProtection.value })
 }
 
 function goBack() {

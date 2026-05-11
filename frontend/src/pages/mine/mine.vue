@@ -1,184 +1,164 @@
 <template>
   <view class="page">
-    <!-- Profile Hero -->
-    <view v-if="userStore.isLoggedIn" class="profile-card">
-      <view
-        class="avatar"
-        :class="{ 'avatar--image': userStore.avatarUrl }"
-        :style="userStore.avatarUrl ? { backgroundImage: 'url(' + userStore.avatarUrl + ')' } : {}"
-        @tap="handleChangeAvatar"
-      >
-        <text v-if="!userStore.avatarUrl">{{ avatarText }}</text>
-        <view class="avatar-badge"><text class="avatar-badge-text">+</text></view>
-      </view>
-      <view class="profile-info">
-        <text class="profile-name">{{ userStore.username }}</text>
-        <text v-if="shelfStats" class="profile-reading">今日 {{ shelfStats.todayMinutes || 0 }} 分钟 · 连续 {{ shelfStats.streakDays || 0 }} 天 · 藏书 {{ shelfStats.totalBooks || 0 }} 本</text>
-      </view>
-    </view>
-
-    <!-- Login Card -->
-    <view v-if="!userStore.isLoggedIn" class="login-wrapper">
-    <view class="login-card">
-      <view class="login-hero">
-        <view class="login-book">
-          <view class="login-book-spine"></view>
-          <view class="login-book-left"></view>
-          <view class="login-book-right"></view>
-        </view>
-        <text class="login-quote">翻开书，就是另一个世界</text>
-      </view>
-
-      <view class="login-switch">
-        <text :class="{ active: mode === 'login' }" @tap="mode = 'login'">登录</text>
-        <text class="login-switch-sep">·</text>
-        <text :class="{ active: mode === 'register' }" @tap="mode = 'register'">注册</text>
-      </view>
-
-      <view class="field">
-        <input v-model="username" class="input" placeholder="用户名" />
-      </view>
-      <view class="field">
-        <input v-model="password" class="input" password placeholder="密码" />
-      </view>
-      <view class="field field--email" :class="{ 'field--show': mode === 'register' }">
-        <input v-model="email" class="input" placeholder="邮箱（可选）" />
-      </view>
-
-      <view v-if="mode === 'register'" class="legal-row" @tap="acceptLegal = !acceptLegal">
-        <view class="legal-check" :class="{ checked: acceptLegal }">
-          <text v-if="acceptLegal" class="legal-check-mark">&#10003;</text>
-        </view>
-        <text class="legal-copy">我已阅读并同意</text>
-        <text class="legal-link" @tap.stop="goAbout('terms')">《用户协议》</text>
-        <text class="legal-copy">和</text>
-        <text class="legal-link" @tap.stop="goAbout('privacy')">《隐私政策》</text>
-      </view>
-
-      <button class="submit-btn" @tap="submit">{{ mode === 'login' ? '进入悦读' : '创建并进入' }}</button>
-
-      <text class="login-tip" v-if="mode === 'login'">登录后可同步书架、进度和阅读偏好</text>
-    </view>
-    </view>
-
-    <!-- Quick Actions Grid -->
-    <view v-if="userStore.isLoggedIn" class="actions-card">
-      <view class="actions-grid">
-        <view class="action-cell" @tap="goShelf">
-          <text class="action-label">我的书架</text>
-          <text class="action-desc">继续阅读</text>
-        </view>
-        <view class="action-cell" @tap="() => {}">
-          <text class="action-label">阅读历史</text>
-          <text class="action-desc">最近记录</text>
-        </view>
-        <view class="action-cell" @tap="goShelf">
-          <text class="action-label">我的摘录</text>
-          <text class="action-desc">划线收藏</text>
-        </view>
-        <view class="action-cell" @tap="goReaderSettings">
-          <text class="action-label">阅读设置</text>
-          <text class="action-desc">字体主题</text>
-        </view>
-        <view class="action-cell" @tap="toggleNightMode">
-          <text class="action-label">夜间模式</text>
-          <text class="action-desc">{{ readerStore.setting.theme === 'NIGHT' ? '已开启' : '已关闭' }}</text>
-        </view>
-        <view class="action-cell" @tap="clearCache">
-          <text class="action-label">清除缓存</text>
-          <text class="action-desc">释放空间</text>
-        </view>
-      </view>
-    </view>
-
-    <!-- Preferences (compact) -->
-    <view v-if="userStore.isLoggedIn" class="pref-card" @tap="goReaderSettings">
-      <view class="pref-left">
-        <text class="pref-title">阅读偏好</text>
-        <text class="pref-summary">字号 {{ readerStore.setting.fontSize }} · 行距 {{ readerStore.setting.lineHeight }} · {{ themeLabel }}</text>
-      </view>
-      <text class="pref-arrow">›</text>
-    </view>
-
-    <!-- Content Panels (logged in) -->
+    <!-- ===== Logged In ===== -->
     <template v-if="userStore.isLoggedIn">
-      <!-- My Comments -->
-      <view class="content-card">
-        <view class="content-head">
-          <view class="content-head-left">
-            <text class="content-title">我的评论</text>
-            <text class="content-sub">你评论过的书</text>
-          </view>
-          <text class="content-badge">{{ myComments.length }} 条</text>
-        </view>
-        <view v-if="commentsLoading" class="content-empty">加载中...</view>
-        <view v-else-if="!myComments.length" class="content-empty">还没有评论过书</view>
-        <view v-else class="comment-list">
+      <!-- Profile Card -->
+      <view class="profile-card">
+        <view class="profile-main">
           <view
-            v-for="item in myComments"
-            :key="item.id"
-            class="comment-item"
-            @tap="goCommentBook(item.bookId)"
+            class="profile-avatar"
+            :class="{ 'profile-avatar--image': userStore.avatarUrl }"
+            :style="userStore.avatarUrl ? { backgroundImage: 'url(' + userStore.avatarUrl + ')' } : {}"
+            @tap="handleChangeAvatar"
           >
-            <text class="comment-book-title">{{ item.bookTitle || '未知书籍' }}</text>
-            <text v-if="item.chapterTitle" class="comment-chapter-title">{{ item.chapterTitle }}</text>
-            <text class="comment-text">{{ item.content }}</text>
-          </view>
-        </view>
-      </view>
-
-      <!-- Reading History -->
-      <view class="content-card">
-        <view class="content-head">
-          <view class="content-head-left">
-            <text class="content-title">阅读历史</text>
-            <text class="content-sub">最近阅读的书籍</text>
-          </view>
-          <text class="content-badge">{{ readingHistory.length }} 本</text>
-        </view>
-        <view v-if="historyLoading" class="content-empty">加载中...</view>
-        <view v-else-if="!readingHistory.length" class="content-empty">暂无阅读记录</view>
-        <view v-else class="history-list">
-          <view
-            v-for="item in readingHistory"
-            :key="item.bookId"
-            class="history-item"
-            @tap="goCommentBook(item.bookId)"
-          >
-            <BookCover :title="item.bookTitle" :cover-url="item.coverUrl" size="md" />
-            <view class="history-info">
-              <text class="history-title">{{ item.bookTitle || '未知书籍' }}</text>
-              <text class="history-author">{{ item.bookAuthor || '佚名' }} · {{ item.status === 'COMPLETED' ? '完结' : '连载' }}</text>
-              <text class="history-chapter" v-if="item.latestChapterTitle">{{ item.latestChapterTitle }}</text>
-              <text class="history-time">{{ item.lastReadAt ? formatTime(item.lastReadAt) : '' }}</text>
+            <text v-if="!userStore.avatarUrl" class="profile-avatar-text">{{ avatarText }}</text>
+            <view class="profile-avatar-badge">
+              <text class="profile-avatar-badge-text">+</text>
             </view>
           </view>
-        </view>
-      </view>
-
-      <!-- Highlights -->
-      <view class="content-card">
-        <view class="content-head">
-          <view class="content-head-left">
-            <text class="content-title">我的摘录</text>
-            <text class="content-sub">划线收藏的句子</text>
-          </view>
-          <text class="content-badge">{{ highlightStore.highlights.length }} 条</text>
-        </view>
-        <view v-if="!highlightStore.highlights.length" class="content-empty">还没有划线摘录</view>
-        <view v-else class="highlight-list">
-          <view v-for="group in highlightsGrouped" :key="group.bookId" class="highlight-group">
-            <text class="highlight-book">{{ group.bookTitle || '未知书籍' }}</text>
-            <view v-for="item in group.items" :key="item.id" class="highlight-row">
-              <text class="highlight-quote">"{{ item.quoteText }}"</text>
-              <text class="highlight-chapter">第 {{ item.chapterNo }} 章</text>
+          <view class="profile-copy">
+            <view class="profile-name-row">
+              <text class="profile-name">{{ userStore.username }}</text>
+              <text class="profile-edit" @tap="goProfile">编辑</text>
             </view>
+            <text v-if="shelfStats" class="profile-stats">今日 {{ shelfStats.todayMinutes || 0 }} 分钟 · 连续 {{ shelfStats.streakDays || 0 }} 天 · 藏书 {{ shelfStats.totalBooks || 0 }} 本</text>
+            <text v-else class="profile-stats">探索你的阅读世界</text>
           </view>
         </view>
       </view>
 
-      <button class="logout-btn" @tap="logout">退出登录</button>
+      <!-- Section: 阅读 -->
+      <text class="section-title">阅读</text>
+      <view class="menu-group">
+        <view class="menu-item" @tap="goHistory">
+          <view class="menu-icon"><text class="menu-icon-text">&#x1F550;</text></view>
+          <view class="menu-copy">
+            <text class="menu-title">阅读历史</text>
+            <text class="menu-sub">最近阅读记录</text>
+          </view>
+          <text class="menu-arrow">&#8250;</text>
+        </view>
+        <view class="menu-item" @tap="goReaderSettings">
+          <view class="menu-icon"><text class="menu-icon-text">&#x2699;</text></view>
+          <view class="menu-copy">
+            <text class="menu-title">阅读设置</text>
+            <text class="menu-sub">字号 {{ readerStore.setting.fontSize }} · 行距 {{ readerStore.setting.lineHeight }} · {{ themeLabel }}</text>
+          </view>
+          <text class="menu-arrow">&#8250;</text>
+        </view>
+        <view class="menu-item menu-item--toggle" @tap="toggleNightMode">
+          <view class="menu-icon"><text class="menu-icon-text">&#x1F319;</text></view>
+          <view class="menu-copy">
+            <text class="menu-title">夜间模式</text>
+          </view>
+          <switch :checked="readerStore.setting.theme === 'NIGHT'" color="#A09080" style="transform:scale(0.85)" />
+        </view>
+      </view>
+
+      <!-- Section: 内容 -->
+      <text class="section-title">内容</text>
+      <view class="menu-group">
+        <view class="menu-item" @tap="goComments">
+          <view class="menu-icon"><text class="menu-icon-text">&#x1F4AC;</text></view>
+          <view class="menu-copy">
+            <text class="menu-title">我的评论</text>
+            <text class="menu-sub">{{ commentsCount }} 条评论</text>
+          </view>
+          <text class="menu-arrow">&#8250;</text>
+        </view>
+        <view class="menu-item" @tap="goHighlights">
+          <view class="menu-icon"><text class="menu-icon-text">&#x270F;</text></view>
+          <view class="menu-copy">
+            <text class="menu-title">我的摘录</text>
+            <text class="menu-sub">{{ highlightStore.highlights.length }} 条摘录</text>
+          </view>
+          <text class="menu-arrow">&#8250;</text>
+        </view>
+      </view>
+
+      <!-- Section: 帐号 -->
+      <text class="section-title">帐号</text>
+      <view class="menu-group">
+        <view class="menu-item" @tap="goProfile">
+          <view class="menu-icon"><text class="menu-icon-text">&#x1F464;</text></view>
+          <view class="menu-copy">
+            <text class="menu-title">编辑资料</text>
+            <text class="menu-sub">修改用户名、邮箱、头像</text>
+          </view>
+          <text class="menu-arrow">&#8250;</text>
+        </view>
+        <view class="menu-item" @tap="goPassword">
+          <view class="menu-icon"><text class="menu-icon-text">&#x1F512;</text></view>
+          <view class="menu-copy">
+            <text class="menu-title">修改密码</text>
+            <text class="menu-sub">更新登录密码</text>
+          </view>
+          <text class="menu-arrow">&#8250;</text>
+        </view>
+        <view class="menu-item" @tap="clearCache">
+          <view class="menu-icon"><text class="menu-icon-text">&#x1F5D1;</text></view>
+          <view class="menu-copy">
+            <text class="menu-title">清除缓存</text>
+            <text class="menu-sub">释放本地存储空间</text>
+          </view>
+          <text class="menu-arrow">&#8250;</text>
+        </view>
+      </view>
+
+      <!-- Section: 其他 -->
+      <text class="section-title">其他</text>
+      <view class="menu-group">
+        <view class="menu-item" @tap="goAbout('about')">
+          <view class="menu-icon"><text class="menu-icon-text">&#x2139;</text></view>
+          <view class="menu-copy">
+            <text class="menu-title">关于悦读</text>
+            <text class="menu-sub">用户协议、隐私政策</text>
+          </view>
+          <text class="menu-arrow">&#8250;</text>
+        </view>
+      </view>
+
+      <!-- Logout -->
+      <view class="logout-wrap">
+        <text class="logout-btn" @tap="logout">退出登录</text>
+      </view>
     </template>
+
+    <!-- ===== Not Logged In ===== -->
+    <template v-else>
+      <view class="login-card">
+        <view class="login-hero">
+          <view class="login-book">
+            <view class="login-book-spine"></view>
+            <view class="login-book-left"></view>
+            <view class="login-book-right"></view>
+          </view>
+          <text class="login-quote">翻开书，就是另一个世界</text>
+        </view>
+        <view class="login-tabs">
+          <text class="login-tab" :class="{ active: mode === 'login' }" @tap="mode = 'login'">登录</text>
+          <text class="login-tab" :class="{ active: mode === 'register' }" @tap="mode = 'register'">注册</text>
+        </view>
+        <view class="login-fields">
+          <input class="login-input" v-model="username" placeholder="用户名" maxlength="30" />
+          <input class="login-input" v-model="password" password placeholder="密码" maxlength="50" />
+          <input v-if="mode === 'register'" class="login-input" v-model="email" placeholder="邮箱（选填）" maxlength="100" />
+          <view v-if="mode === 'register'" class="legal-row" @tap="acceptLegal = !acceptLegal">
+            <view class="legal-check" :class="{ checked: acceptLegal }">
+              <text v-if="acceptLegal" class="legal-check-mark">&#10003;</text>
+            </view>
+            <text class="legal-copy">我已阅读并同意</text>
+            <text class="legal-link" @tap.stop="goAbout('terms')">《用户协议》</text>
+            <text class="legal-copy">和</text>
+            <text class="legal-link" @tap.stop="goAbout('privacy')">《隐私政策》</text>
+          </view>
+        </view>
+        <view class="login-btn" @tap="submit">
+          <text>{{ mode === 'login' ? '登录' : '注册' }}</text>
+        </view>
+      </view>
+    </template>
+
   </view>
 </template>
 
@@ -189,34 +169,34 @@ import { useUserStore } from '../../store/user'
 import { useReaderStore } from '../../store/reader'
 import { useBookStore } from '../../store/book'
 import { useHighlightStore } from '../../store/highlight'
-import { request } from '../../utils/request'
-import BookCover from '../../components/BookCover.vue'
 
 const userStore = useUserStore()
 const readerStore = useReaderStore()
 const bookStore = useBookStore()
 const highlightStore = useHighlightStore()
+
+// Auth
 const mode = ref('login')
 const username = ref('')
 const password = ref('')
 const email = ref('')
-const myComments = ref([])
-const commentsLoading = ref(false)
-const shelfStats = ref(null)
-const readingHistory = ref([])
-const historyLoading = ref(false)
-const highlightsGrouped = ref([])
 const acceptLegal = ref(false)
 
-const avatarText = computed(() => (userStore.isLoggedIn ? userStore.username.slice(0, 1).toUpperCase() : '悦'))
+// Data
+const shelfStats = ref(null)
+const commentsCount = ref(0)
+
+const avatarText = computed(() => (userStore.username || '悦').slice(0, 1).toUpperCase())
 const themeLabel = computed(() => {
-  if (readerStore.setting.theme === 'GRAY') return '素灰'
-  if (readerStore.setting.theme === 'NIGHT') return '夜间'
-  if (readerStore.setting.theme === 'PARCHMENT') return '羊皮'
-  if (readerStore.setting.theme === 'LIGHT_GREEN') return '浅绿'
+  const t = readerStore.setting.theme
+  if (t === 'GRAY') return '素灰'
+  if (t === 'NIGHT') return '夜间'
+  if (t === 'PARCHMENT') return '羊皮'
+  if (t === 'LIGHT_GREEN') return '浅绿'
   return '米白'
 })
 
+// ── Auth ──
 async function submit() {
   if (!username.value || !password.value) {
     uni.showToast({ title: '请输入用户名和密码', icon: 'none' })
@@ -240,86 +220,26 @@ function logout() {
   uni.showToast({ title: '已退出', icon: 'none' })
 }
 
-function goShelf() {
-  uni.switchTab({ url: '/pages/bookshelf/bookshelf' })
-}
+// ── Nav ──
+function goHistory() { uni.switchTab({ url: '/pages/bookshelf/bookshelf?tab=history' }) }
+function goReaderSettings() { uni.navigateTo({ url: '/pages/mine/settings' }) }
+function goComments() { uni.navigateTo({ url: '/pages/mine/comments' }) }
+function goHighlights() { uni.navigateTo({ url: '/pages/mine/highlights' }) }
+function goProfile() { uni.navigateTo({ url: '/pages/mine/profile' }) }
+function goPassword() { uni.navigateTo({ url: '/pages/mine/password' }) }
+function goAbout(section) { uni.navigateTo({ url: `/pages/mine/about?section=${section}` }) }
 
-function goCommentBook(bookId) {
-  if (!bookId) return
-  uni.navigateTo({ url: `/pages/book/detail?id=${bookId}` })
-}
-
-async function loadMyComments() {
-  if (!userStore.isLoggedIn) {
-    myComments.value = []
-    return
-  }
-  commentsLoading.value = true
-  try {
-    const res = await bookStore.loadMyComments(1, 20)
-    if (res.code === 200) {
-      myComments.value = res.data?.records || []
-    }
-  } catch {
-    myComments.value = []
-  } finally {
-    commentsLoading.value = false
-  }
-}
-
-async function loadShelfStats() {
-  if (!userStore.isLoggedIn) return
-  try {
-    await bookStore.loadShelfStats()
-    shelfStats.value = bookStore.shelfStats
-  } catch {
-    shelfStats.value = null
-  }
-}
-
-async function loadReadingHistory() {
-  if (!userStore.isLoggedIn) return
-  historyLoading.value = true
-  try {
-    const res = await request({ url: '/api/v1/reading/history', silentAuth: true })
-    if (res.code === 200) {
-      readingHistory.value = res.data?.records || res.data || []
-    }
-  } catch {
-    readingHistory.value = []
-  } finally {
-    historyLoading.value = false
-  }
-}
-
-function formatMinutes(mins) {
-  const m = Number(mins || 0)
-  if (!m) return '0 分钟'
-  if (m < 60) return `${m}分钟`
-  const h = Math.floor(m / 60)
-  const mm = m % 60
-  return mm > 0 ? `${h}小时${mm}分钟` : `${h}小时`
-}
-
-function formatTime(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  const diff = Date.now() - d.getTime()
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}分钟前`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`
-  return `${d.getMonth() + 1}月${d.getDate()}日`
-}
-
+// ── Night Mode ──
 function toggleNightMode() {
-  const next = readerStore.setting.theme !== 'NIGHT'
-  readerStore.saveSetting({ theme: next ? 'NIGHT' : 'DEFAULT' })
+  const next = readerStore.setting.theme === 'NIGHT' ? 'DEFAULT' : 'NIGHT'
+  readerStore.saveSetting({ theme: next })
 }
 
+// ── Cache ──
 function clearCache() {
   uni.showModal({
     title: '清除缓存',
-    content: '确定要清除所有本地缓存吗？这不会影响书架和阅读进度。',
+    content: '确定清除所有本地缓存吗？不会影响书架和阅读进度。',
     success: (res) => {
       if (res.confirm) {
         const keys = uni.getStorageInfoSync().keys || []
@@ -330,35 +250,23 @@ function clearCache() {
   })
 }
 
-function goReaderSettings() {
-  uni.navigateTo({ url: '/pages/mine/settings' })
-}
-
-function goAbout(section) {
-  uni.navigateTo({ url: `/pages/mine/about?section=${section}` })
-}
-
+// ── Avatar ──
 function handleChangeAvatar() {
-  if (!userStore.isLoggedIn) {
-    uni.showToast({ title: '请先登录', icon: 'none' })
-    return
-  }
   uni.chooseImage({
     count: 1,
     sizeType: ['compressed'],
-    sourceType: ['album', 'camera'],
     success: async (res) => {
-      const tempFilePath = res.tempFilePaths[0]
-      const base64 = await fileToBase64(tempFilePath)
-      if (!base64) {
-        uni.showToast({ title: '图片读取失败', icon: 'none' })
-        return
-      }
+      const path = res.tempFilePaths?.[0]
+      if (!path) return
       try {
-        const result = await userStore.updateProfile({ avatarUrl: base64 })
-        if (result && result.code === 200) {
+        const fs = uni.getFileSystemManager()
+        const data = fs.readFileSync(path, 'base64')
+        const ext = (path.split('.').pop() || 'png').replace(/^jpeg$/, 'jpg')
+        const dataUrl = `data:image/${ext};base64,${data}`
+        const result = await userStore.updateProfile({ avatarUrl: dataUrl })
+        if (result.code === 200) {
           uni.showToast({ title: '头像已更新', icon: 'success' })
-        } else if (result) {
+        } else {
           uni.showToast({ title: result.message || '头像更新失败', icon: 'none' })
         }
       } catch (e) {
@@ -368,40 +276,19 @@ function handleChangeAvatar() {
   })
 }
 
-function fileToBase64(filePath) {
-  return new Promise((resolve) => {
-    // #ifdef H5
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      const maxW = 256
-      const maxH = 256
-      let w = img.naturalWidth
-      let h = img.naturalHeight
-      if (w > maxW || h > maxH) {
-        const ratio = Math.min(maxW / w, maxH / h)
-        w = Math.round(w * ratio)
-        h = Math.round(h * ratio)
-      }
-      canvas.width = w
-      canvas.height = h
-      const ctx = canvas.getContext('2d')
-      ctx.drawImage(img, 0, 0, w, h)
-      resolve(canvas.toDataURL('image/jpeg', 0.8))
-    }
-    img.onerror = () => resolve(null)
-    img.src = filePath
-    // #endif
-    // #ifndef H5
-    uni.getFileSystemManager().readFile({
-      filePath,
-      encoding: 'base64',
-      success: (res) => resolve('data:image/png;base64,' + res.data),
-      fail: () => resolve(null)
-    })
-    // #endif
-  })
+// ── Lifecycle ──
+async function loadShelfStats() {
+  try {
+    const res = await bookStore.loadShelfStats()
+    if (res.code === 200) shelfStats.value = res.data
+  } catch { shelfStats.value = null }
+}
+
+async function loadCommentCount() {
+  try {
+    const res = await bookStore.loadMyComments(1, 1)
+    commentsCount.value = res.data?.total || 0
+  } catch { commentsCount.value = 0 }
 }
 
 onShow(() => {
@@ -409,619 +296,361 @@ onShow(() => {
   if (userStore.isLoggedIn) {
     userStore.fetchProfile()
     readerStore.loadSetting()
-    loadMyComments()
     loadShelfStats()
-    loadReadingHistory()
+    loadCommentCount()
+    highlightStore.loadFromStorage()
+    highlightStore.syncFromServer()
   }
-  highlightStore.loadFromStorage()
-  highlightsGrouped.value = highlightStore.getGroupedHighlights()
 })
 </script>
 
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 12px 10px 88px;
+  padding: 12px 11px calc(48px + env(safe-area-inset-bottom));
   background: #F4F4F1;
   box-sizing: border-box;
-  overflow-x: hidden;
 }
 
 /* ── Profile Card ── */
 .profile-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
+  padding: 15px 15px 14px;
   margin-bottom: 10px;
-  border-radius: 7px;
+  border-radius: 9px;
   background: #FFFFFF;
-  box-shadow: 0 6px 18px rgba(31, 31, 31, 0.045);
+  box-shadow: 0 4px 11px rgba(15, 23, 42, 0.045);
 }
 
-.avatar {
-  flex-shrink: 0;
-  width: 48px;
-  height: 48px;
+.profile-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.profile-avatar {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #B0A090, #9B8B7A);
+  background-size: cover;
+  background-position: center;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #B0A090, #9B8B7A);
-  color: #fff;
-  font-size: 20px;
-  font-weight: 900;
-  position: relative;
-  overflow: visible;
+  border: 3px solid #FFFFFF;
+  box-shadow: 0 0 0 1px #e8e4dc, 0 6px 13px rgba(15, 23, 42, 0.10);
+  flex-shrink: 0;
 }
 
-.avatar--image {
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+.profile-avatar--image {
   color: transparent;
 }
 
+.profile-avatar-text {
+  color: #fff;
+  font-size: 23px;
+  font-weight: 700;
+}
 
-.avatar-badge {
+.profile-avatar-badge {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
+  right: -1px;
+  bottom: -1px;
   width: 18px;
   height: 18px;
+  border-radius: 50%;
+  background: #A09080;
+  border: 2px solid #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  background: #3A3A3A;
-  border: 2px solid #FFFFFF;
+  box-shadow: 0 3px 7px rgba(15, 23, 42, 0.12);
 }
 
-.avatar-badge-text {
+.profile-avatar-badge-text {
   color: #fff;
-  font-size: 11px;
+  font-size: 13px;
+  line-height: 13px;
   font-weight: 700;
-  line-height: 1;
 }
 
-.profile-info {
-  min-width: 0;
+.profile-copy {
   flex: 1;
+  min-width: 0;
+}
+
+.profile-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .profile-name {
-  display: block;
-  color: #1F1F1F;
   font-size: 18px;
-  font-weight: 900;
+  line-height: 24px;
+  font-weight: 800;
+  color: #1F1F1F;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
-.profile-reading {
-  display: block;
-  margin-top: 3px;
+.profile-edit {
+  flex-shrink: 0;
   color: #A09080;
   font-size: 12px;
   font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: #F4F4F1;
 }
 
-/* ── Login Wrapper ── */
-.login-wrapper {
-  min-height: calc(100vh - 100px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px 0;
-  box-sizing: border-box;
+.profile-stats {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 18px;
+  color: #A09080;
+  font-weight: 600;
 }
 
-/* ── Login Card ── */
-.login-card {
-  width: 100%;
-  max-width: 360px;
-  margin-bottom: 10px;
-  padding: 32px 24px 28px;
-  border-radius: 7px;
+/* ── Section Title ── */
+.section-title {
+  display: block;
+  margin: 0 5px 6px;
+  color: #A09080;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 700;
+}
+
+/* ── Menu Group ── */
+.menu-group {
   background: #FFFFFF;
-  box-shadow: 0 6px 18px rgba(31, 31, 31, 0.045);
-  position: relative;
+  border-radius: 9px;
+  box-shadow: 0 4px 11px rgba(15, 23, 42, 0.045);
+  margin-bottom: 14px;
   overflow: hidden;
 }
 
-.login-card::before {
-  content: "";
-  position: absolute;
-  top: -60px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 280px;
-  height: 140px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(176, 160, 144, 0.12) 0%, transparent 70%);
-  pointer-events: none;
-}
-
-/* ── Hero: Open Book ── */
-.login-hero {
+.menu-item {
+  min-height: 49px;
+  padding: 0 13px;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  margin-bottom: 20px;
-  position: relative;
-  z-index: 1;
+  gap: 10px;
+  border-bottom: 1px solid #F4F4F1;
 }
 
-.login-book {
-  width: 44px;
-  height: 34px;
-  position: relative;
-  margin-bottom: 10px;
-  perspective: 60px;
+.menu-item:last-child {
+  border-bottom: none;
 }
 
-.login-book-spine {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  border-radius: 2px;
-  background: #B0A090;
-  transform: translateX(-50%);
+.menu-item--toggle {
+  /* no extra styles needed */;
 }
 
-.login-book-left {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 50%;
-  border-radius: 4px 2px 2px 4px;
-  background: linear-gradient(135deg, #E8E4DC, #D8D2C6);
-  border: 1px solid rgba(176, 160, 144, 0.3);
-  transform-origin: right center;
-  animation: bookLeft 6s ease-in-out infinite;
-}
-
-.login-book-right {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 50%;
-  border-radius: 2px 4px 4px 2px;
-  background: linear-gradient(-135deg, #F0ECE4, #E0DAD0);
-  border: 1px solid rgba(176, 160, 144, 0.3);
-  transform-origin: left center;
-  animation: bookRight 6s ease-in-out infinite;
-}
-
-@keyframes bookLeft {
-  0%, 100% { transform: rotateY(0deg); }
-  25% { transform: rotateY(-25deg); }
-  75% { transform: rotateY(0deg); }
-}
-
-@keyframes bookRight {
-  0%, 100% { transform: rotateY(0deg); }
-  25% { transform: rotateY(25deg); }
-  75% { transform: rotateY(0deg); }
-}
-
-.login-quote {
-  color: #5A5A5A;
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 1px;
-}
-
-/* ── Login/Register Switch ── */
-.login-switch {
+.menu-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #F9F8F6;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  margin-bottom: 24px;
-  position: relative;
-  z-index: 1;
+  flex-shrink: 0;
 }
 
-.login-switch text {
-  color: #B0B0B0;
+.menu-icon-text {
+  font-size: 14px;
+  line-height: 14px;
+}
+
+.menu-copy {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 0;
+}
+
+.menu-title {
+  display: block;
+  color: #1F1F1F;
   font-size: 15px;
-  font-weight: 700;
-  transition: color 0.2s ease;
-}
-
-.login-switch text.active {
-  color: #1F1F1F;
-}
-
-.login-switch-sep {
-  color: #D0D0D0 !important;
-  font-weight: 400 !important;
-}
-
-/* ── Fields ── */
-.field {
-  margin-bottom: 14px;
-  position: relative;
-  z-index: 1;
-}
-
-.field--email {
-  max-height: 0;
-  margin-bottom: 0;
-  opacity: 0;
-  overflow: hidden;
-  transition: max-height 0.3s ease, margin-bottom 0.3s ease, opacity 0.3s ease;
-}
-
-.field--show {
-  max-height: 58px;
-  margin-bottom: 14px;
-  opacity: 1;
-}
-
-/* ── Legal Checkbox ── */
-.legal-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0;
-  margin-bottom: 12px;
-  position: relative;
-  z-index: 1;
-}
-
-.legal-check {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 2px solid #D0D0D0;
-  margin-right: 6px;
-  transition: border-color 0.2s ease, background 0.2s ease;
-}
-
-.legal-check.checked {
-  border-color: #B0A090;
-  background: #B0A090;
-}
-
-.legal-check-mark {
-  color: #fff;
-  font-size: 11px;
+  line-height: 20px;
   font-weight: 700;
 }
 
-.legal-copy {
-  color: #8C8C8C;
-  font-size: 12px;
-}
-
-.legal-link {
-  color: #A09080;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.input {
-  width: 100%;
-  height: 48px;
-  padding: 0 4px;
-  background: transparent;
-  color: #1F1F1F;
-  font-size: 16px;
-  border-bottom: 1px solid #E8E6E0;
-  border-radius: 0;
-  box-sizing: border-box;
-  transition: border-bottom-color 0.2s ease;
-}
-
-.input:focus {
-  border-bottom-color: #B0A090;
-}
-
-/* ── Submit Button ── */
-.submit-btn {
-  width: 100%;
-  height: 48px;
-  line-height: 48px;
-  margin-top: 8px;
-  border-radius: 24px;
-  background: linear-gradient(135deg, #B0A090, #9B8B7A);
-  color: #fff;
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: 2px;
-  position: relative;
-  z-index: 1;
-}
-
-.login-tip {
-  display: block;
-  margin-top: 16px;
-  color: #B0B0B0;
-  font-size: 12px;
-  text-align: center;
-  position: relative;
-  z-index: 1;
-}
-
-/* ── Quick Actions Grid ── */
-.actions-card {
-  margin-bottom: 10px;
-  padding: 14px;
-  border-radius: 7px;
-  background: #FFFFFF;
-  box-shadow: 0 6px 18px rgba(31, 31, 31, 0.045);
-}
-
-.actions-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.action-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 72px;
-  border-radius: 7px;
-  background: rgba(160, 144, 128, 0.06);
-}
-
-.action-label {
-  color: #3A3A3A;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.action-desc {
-  margin-top: 4px;
-  color: #A09080;
-  font-size: 11px;
-}
-
-/* ── Preferences Compact ── */
-.pref-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  padding: 16px;
-  border-radius: 7px;
-  background: #FFFFFF;
-  box-shadow: 0 6px 18px rgba(31, 31, 31, 0.045);
-}
-
-.pref-left {
-  min-width: 0;
-}
-
-.pref-title {
-  display: block;
-  color: #1F1F1F;
-  font-size: 16px;
-  font-weight: 800;
-}
-
-.pref-summary {
-  display: block;
-  margin-top: 4px;
-  color: #8C8C8C;
-  font-size: 13px;
-}
-
-.pref-arrow {
-  flex-shrink: 0;
-  color: #A09080;
-  font-size: 28px;
-}
-
-/* ── Content Cards ── */
-.content-card {
-  margin-bottom: 10px;
-  padding: 16px;
-  border-radius: 7px;
-  background: #FFFFFF;
-  box-shadow: 0 6px 18px rgba(31, 31, 31, 0.045);
-}
-
-.content-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.content-head-left {
-  min-width: 0;
-}
-
-.content-title {
-  display: block;
-  color: #1F1F1F;
-  font-size: 17px;
-  font-weight: 900;
-}
-
-.content-sub {
-  display: block;
-  margin-top: 3px;
-  color: #8C8C8C;
-  font-size: 13px;
-}
-
-.content-badge {
-  flex-shrink: 0;
-  padding: 3px 9px;
-  border-radius: 99px;
-  background: rgba(160, 144, 128, 0.12);
-  color: #A09080;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.content-empty {
-  padding: 18px 0 4px;
-  color: #B0B0B0;
-  font-size: 13px;
-  text-align: center;
-}
-
-/* ── Comment Items ── */
-.comment-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.comment-item {
-  padding: 10px;
-  border-radius: 7px;
-  background: #F8F8F6;
-}
-
-.comment-book-title {
-  display: block;
-  color: #3A3A3A;
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.comment-chapter-title {
+.menu-sub {
   display: block;
   margin-top: 2px;
   color: #B0B0B0;
   font-size: 12px;
+  line-height: 17px;
 }
 
-.comment-text {
-  display: block;
-  margin-top: 6px;
-  color: #5A5A5A;
-  font-size: 13px;
-  line-height: 20px;
-  word-break: break-all;
-}
-
-/* ── History ── */
-.history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.history-item {
-  display: flex;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 8px;
-  background: #F8F8F6;
-  align-items: flex-start;
-}
-
-.history-item :deep(.book-cover) {
+.menu-arrow {
+  color: #D0D0C8;
+  font-size: 18px;
   flex-shrink: 0;
-  width: 40px;
-  height: 54px;
-  border-radius: 4px;
-}
-
-.history-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.history-title {
-  color: #1F1F1F;
-  font-size: 14px;
-  font-weight: 800;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.history-author {
-  color: #A09080;
-  font-size: 11px;
-}
-
-.history-chapter {
-  color: #8C8C8C;
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.history-time {
-  color: #B0B0B0;
-  font-size: 10px;
-}
-
-/* ── Highlights ── */
-.highlight-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.highlight-group {
-}
-
-.highlight-book {
-  display: block;
-  color: #1F1F1F;
-  font-size: 15px;
-  font-weight: 800;
-  margin-bottom: 6px;
-}
-
-.highlight-row {
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  border-radius: 6px;
-  background: #F8F8F6;
-  border-left: 3px solid #C4A882;
-}
-
-.highlight-quote {
-  display: block;
-  color: #3A3A3A;
-  font-size: 14px;
-  line-height: 22px;
-}
-
-.highlight-chapter {
-  display: block;
-  margin-top: 4px;
-  color: #B0B0B0;
-  font-size: 11px;
 }
 
 /* ── Logout ── */
+.logout-wrap {
+  padding: 20px 0 0;
+  text-align: center;
+}
+
 .logout-btn {
-  width: 100%;
-  height: 44px;
-  line-height: 44px;
-  margin-top: 4px;
-  border-radius: 7px;
-  background: #FFFFFF;
-  color: #8C8C8C;
+  display: inline-block;
+  padding: 8px 36px;
+  border-radius: 999px;
+  border: 1px solid #D0D0C8;
+  color: #B0B0B0;
   font-size: 14px;
   font-weight: 600;
 }
+
+/* ── Login Card (not logged in) ── */
+.login-card {
+  background: #FFFFFF;
+  border-radius: 9px;
+  box-shadow: 0 4px 11px rgba(15, 23, 42, 0.045);
+  padding: 32px 18px 28px;
+  margin-top: 12px;
+}
+
+.login-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.login-book {
+  width: 48px;
+  height: 48px;
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.login-book-spine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 48px;
+  background: #8C7B6B;
+  border-radius: 2px 0 0 2px;
+}
+
+.login-book-left {
+  position: absolute;
+  left: 6px;
+  top: 0;
+  width: 20px;
+  height: 48px;
+  background: linear-gradient(135deg, #C4B5A5, #A09080);
+  border-radius: 0 2px 0 0;
+}
+
+.login-book-right {
+  position: absolute;
+  left: 26px;
+  top: 0;
+  width: 22px;
+  height: 48px;
+  background: linear-gradient(135deg, #D4C8B8, #B0A090);
+  border-radius: 0 2px 2px 0;
+}
+
+.login-quote {
+  color: #A09080;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.login-tabs {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.login-tab {
+  color: #B0B0B0;
+  font-size: 18px;
+  font-weight: 800;
+  padding-bottom: 4px;
+}
+
+.login-tab.active {
+  color: #1F1F1F;
+  border-bottom: 2px solid #A09080;
+}
+
+.login-fields {
+  margin-bottom: 20px;
+}
+
+.login-input {
+  background: #F9F8F6;
+  border-radius: 7px;
+  height: 44px;
+  padding: 0 15px;
+  font-size: 14px;
+  margin-bottom: 12px;
+  box-sizing: border-box;
+}
+
+.legal-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.legal-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1px solid #D0D0C8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.legal-check.checked {
+  background: #A09080;
+  border-color: #A09080;
+}
+
+.legal-check-mark {
+  color: #fff;
+  font-size: 12px;
+}
+
+.legal-copy {
+  color: #8C8C8C;
+}
+
+.legal-link {
+  color: #A09080;
+  font-weight: 600;
+}
+
+.login-btn {
+  height: 44px;
+  line-height: 44px;
+  text-align: center;
+  border-radius: 999px;
+  background: #3A3A3A;
+  color: #FFFFFF;
+  font-size: 16px;
+  font-weight: 700;
+}
+
 </style>

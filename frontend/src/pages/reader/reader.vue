@@ -1,1696 +1,2180 @@
 <template>
   <view class="reader-root">
-    <!-- ==================== SCROLL mode ==================== -->
-    <view v-if="readerStore.setting.turnMode === 'SCROLL'" class="reader reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }" @tap="onContentTap">
-      <scroll-view class="content-scroll" scroll-y :scroll-top="scrollTop" @scroll="onScroll">
-        <view v-if="loading || !bookId" class="empty">正在加载章节...</view>
-        <view v-else-if="chapter" class="chapter-content" :style="scrollTextStyle">
-          <text class="chapter-title">{{ chapter.title }}</text>
-          <view
-            v-for="(line, index) in paragraphs"
-            :key="index"
-            :id="`paragraph-${index}`"
-            class="paragraph"
-            :class="{
-              'paragraph-selected': selectedParagraph?.index === index,
-              'paragraph-highlighted': !!paragraphHighlight(index)
-            }"
-            :style="paragraphHighlight(index) ? { backgroundColor: paragraphHighlight(index).color, borderBottom: '2px solid ' + (paragraphHighlight(index).color || '#FFEB3B') } : {}"
-            @longpress.stop="openParagraphTools(line, index, $event)"
-            @contextmenu.prevent.stop="openParagraphTools(line, index, $event)"
-          >
-            <template v-if="selectedParagraph?.index === index">
-              <text>{{ selectedParts(line).before }}</text>
-              <text class="selected-text">{{ selectedParts(line).selected }}</text>
-              <text>{{ selectedParts(line).after }}</text>
-              <text
-                class="selection-handle handle-start"
-                @touchstart.stop="startRangeHandle('start')"
-                @touchmove.stop.prevent="moveRangeHandle($event, line)"
-                @touchend.stop="stopRangeHandle"
-                @mousedown.stop="startRangeHandle('start')"
-              />
-              <text
-                class="selection-handle handle-end"
-                @touchstart.stop="startRangeHandle('end')"
-                @touchmove.stop.prevent="moveRangeHandle($event, line)"
-                @touchend.stop="stopRangeHandle"
-                @mousedown.stop="startRangeHandle('end')"
-              />
-            </template>
-            <template v-else>{{ line }}</template>
-            <text v-if="paragraphCommentCount(index)" class="paragraph-bubble" @tap.stop="showParagraphComments(index)">
-              {{ paragraphCommentCount(index) }}
-            </text>
+    <!-- ====== Reading Area + 3D Page Stage ====== -->
+    <view
+      ref="readerAreaRef"
+      class="reader-area"
+      @touchstart="onTouchStart"
+      @touchmove="onTouchMove"
+      @touchend="onTouchEnd"
+    >
+      <view ref="pageStageRef" class="page-stage">
+        <!-- Static front page -->
+        <view ref="frontPageRef" class="front-page">
+          <view class="chapter-title" ref="frontTitleRef">{{ chapterTitle }}</view>
+          <view class="page-body" ref="frontBodyRef" />
+        </view>
+        <!-- Static back page (hidden, prepared for flip) -->
+        <view ref="backPageRef" class="back-page" style="display:none">
+          <view class="chapter-title" ref="backTitleRef"></view>
+          <view class="page-body" ref="backBodyRef" />
+        </view>
+        <!-- Animated flipping element -->
+        <view
+          ref="flipPageRef"
+          class="flipping-page"
+          style="display:none"
+          @transitionend="onFlipTransitionEnd"
+        >
+          <view class="flip-front" ref="flipFrontRef">
+            <view class="chapter-title" ref="flipFrontTitleRef"></view>
+            <view class="page-body" ref="flipFrontBodyRef" />
+          </view>
+          <view class="flip-back" ref="flipBackRef">
+            <view class="chapter-title" ref="flipBackTitleRef"></view>
+            <view class="page-body" ref="flipBackBodyRef" />
           </view>
         </view>
-        <view v-else class="empty">{{ readerEmptyMessage }}</view>
-      </scroll-view>
-    </view>
-
-    <!-- ==================== PAGE mode ==================== -->
-    <view v-else-if="(loading && !rawContent) || !bookId" class="reader-page-loading reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }">
-      <text>正在加载章节...</text>
-    </view>
-
-    <ViewPageReader
-      v-else-if="rawContent"
-      class="reader-brightness-layer"
-      :key="`${readerRenderKey}-${bookId}`"
-      ref="pageReaderRef"
-      :chapter="chapter"
-      :title="chapter?.title || currentTitle"
-      :content="rawContent"
-      :prev-content="prevChapterContent"
-      :next-content="nextChapterContent"
-      :font-size="readerStore.setting.fontSize"
-      :line-height="readerStore.setting.lineHeight"
-      :margin-x="readerStore.setting.marginX"
-      :margin-y="readerStore.setting.marginY"
-      :paragraph-spacing="readerStore.setting.paragraphSpacing"
-      :theme="readerStore.setting.theme"
-      :turn-mode="readerStore.setting.turnMode"
-      :brightness="brightness"
-      :initial-page="pageModePage"
-      :comments="chapterComments"
-      :tools-visible="showTools && !settingVisible"
-      @prev="prevChapter"
-      @next="nextChapter"
-      @pageChange="onPageChange"
-      @toggleTools="toggleTools"
-      @paragraphSelect="openParagraphToolsFromPage"
-      @commentBubbleTap="showParagraphComments"
-    />
-    <view
-      v-if="rawContent && readerStore.setting.turnMode !== 'SCROLL' && (showTools || settingVisible || catalogVisible || paragraphMenuVisible || paragraphComposerVisible || typoFeedbackVisible || paragraphCommentsVisible)"
-      ref="centerToggleRef"
-      class="reader-center-toggle"
-      @tap.stop="hideToolsLayer"
-      @click.stop="hideToolsLayer"
-      @touchend.stop.prevent="hideToolsLayer"
-      @pointerup.stop="hideToolsLayer"
-    />
-    <view v-else class="reader-page-loading reader-brightness-layer" :style="{ ...pageStyle, ...brightnessStyle }">
-      <text>{{ readerEmptyMessage }}</text>
-    </view>
-
-    <!-- ==================== Tool layers ==================== -->
-    <ReaderTopBar
-      :visible="showTools && !settingVisible"
-      :title="currentTitle || chapter?.title || '阅读'"
-      @back="goBack"
-      @bookshelf="toggleBookshelf"
-      @setting="toggleSetting"
-    />
-
-    <ReaderBottomBar
-      :visible="showTools && !settingVisible"
-      :page-indicator="pageIndicator"
-      :progress-percent="progressPercent"
-      :is-night="readerStore.setting.theme === 'NIGHT'"
-      :is-first-chapter="isFirstChapter"
-      :is-last-chapter="isLastChapter"
-      @prev="prevChapter"
-      @next="nextChapter"
-      @catalog="onCatalogTap"
-      @discuss="discussVisible = true"
-      @night="toggleNight"
-      @setting="toggleSetting"
-    />
-
-    <!-- ==================== Setting sheet ==================== -->
-    <ReaderSettingSheet
-      :visible="settingVisible"
-      :setting="readerStore.setting"
-      :brightness="brightness"
-      :eye-protection="eyeProtection"
-      @close="settingVisible = false"
-      @update:setting="saveSetting"
-      @update:brightness="onBrightnessChange"
-      @update:eye-protection="onEyeProtectionChange"
-      @more="onMoreSettings"
-    />
-
-    <view v-if="paragraphMenuVisible" class="paragraph-tools-hitarea" @tap.stop="clearParagraphTools" />
-    <view
-      v-if="paragraphMenuVisible"
-      class="paragraph-tools-menu"
-      :style="paragraphMenuStyle"
-      @tap.stop
-    >
-      <view class="paragraph-tools-arrow" :style="paragraphMenuArrowStyle" />
-      <button
-        v-for="item in paragraphMenuItems"
-        :key="item.key"
-        class="paragraph-tools-item"
-        @tap.stop="runParagraphTool(item.key)"
-      >
-        {{ item.label }}
-      </button>
-    </view>
-
-    <view v-if="paragraphComposerVisible || typoFeedbackVisible" class="paragraph-feedback-sheet" @tap.stop>
-      <text class="feedback-title">{{ typoFeedbackVisible ? '错字反馈' : '写段评' }}</text>
-      <text class="feedback-quote">{{ selectedText }}</text>
-      <textarea
-        v-model="feedbackText"
-        class="feedback-input"
-        maxlength="500"
-        auto-height
-        :placeholder="typoFeedbackVisible ? '说明错字或建议修改内容' : '写下你对这一段的想法'"
-      />
-      <view class="feedback-actions">
-        <button class="feedback-cancel" @tap.stop="clearParagraphTools">取消</button>
-        <button class="feedback-submit" :disabled="feedbackSubmitting" @tap.stop="submitParagraphFeedback">
-          {{ feedbackSubmitting ? '提交中' : '提交' }}
-        </button>
       </view>
+      <!-- Tap zones: left 33% / center 34% / right 33% -->
+      <view class="tap-zone tap-left"  @click.stop="prevPage" />
+      <view class="tap-zone tap-center" @click.stop="toggleToolbar" />
+      <view class="tap-zone tap-right" @click.stop="nextPage" />
     </view>
 
-    <view v-if="catalogVisible" class="reader-sheet-mask" @tap.stop="catalogVisible = false" />
-    <view v-if="catalogVisible" class="catalog-sheet" @tap.stop>
-      <view class="sheet-handle" />
-      <view class="catalog-head">
-        <text class="catalog-title">目录</text>
-        <text class="catalog-sub">{{ chapterNo }} / {{ maxChapterNo || '?' }} 章</text>
-      </view>
-      <scroll-view class="catalog-list" scroll-y>
-        <view
-          v-for="item in readerStore.chapters"
-          :key="item.id"
-          class="catalog-item"
-          :class="{ active: Number(item.chapterNo) === Number(chapterNo) }"
-          @tap="jumpChapter(item.chapterNo)"
-        >
-          <text class="catalog-item-title">{{ item.title }}</text>
-          <text class="catalog-item-meta">{{ item.wordCount || 0 }} 字</text>
+    <!-- ====== Persistent Back Indicator ====== -->
+    <view ref="backIndicatorRef" class="back-indicator" @click.stop="goBack">
+      <text class="back-arrow">‹</text>
+      <text class="back-label" ref="backIndicatorTextRef">返回</text>
+    </view>
+
+    <!-- ====== Top Control Bar ====== -->
+    <view ref="topBarRef" class="top-bar">
+      <view class="top-bar-row">
+        <text class="top-btn top-back" @click.stop="goBack">&lt;</text>
+        <text class="top-btn top-shelf" @click.stop="addToBookshelf">加入书架</text>
+        <view class="top-btn top-download" @click.stop="downloadChapter">
+          <text>下载</text>
+          <text class="free-badge">免费</text>
         </view>
-      </scroll-view>
+        <view class="top-btn top-comments" @click.stop="openComments">
+          <text>💬</text>
+          <text ref="commentBadgeRef" class="comment-badge" style="display:none">99+</text>
+        </view>
+        <text class="top-btn top-share" @click.stop="showShareCard">分享</text>
+        <text class="top-btn top-more" @click.stop="showMoreMenu">⋯</text>
+      </view>
     </view>
 
-    <view v-if="paragraphCommentsVisible" class="reader-sheet-mask" @tap.stop="paragraphCommentsVisible = false" />
-    <view v-if="paragraphCommentsVisible" class="paragraph-comments-sheet" @tap.stop>
-      <view class="sheet-handle" />
-      <text class="feedback-title">本段评论</text>
-      <text class="feedback-quote">{{ selectedParagraph?.text || '这一段' }}</text>
-      <view v-if="selectedParagraphComments.length" class="paragraph-comment-list">
-        <view v-for="item in selectedParagraphComments" :key="item.id" class="paragraph-comment-item">
-          <text class="paragraph-comment-user">{{ item.username || '读者' }}</text>
-          <text class="paragraph-comment-text">{{ item.content }}</text>
+    <!-- ====== Bottom Panel ====== -->
+    <view ref="bottomPanelRef" class="bottom-panel">
+      <view class="bottom-panel-inner">
+        <!-- Progress row -->
+        <view class="bp-row bp-progress-row">
+          <view class="chapter-nav-btn" @click.stop="prevChapter">上一章</view>
+          <view class="progress-col">
+            <text class="progress-page-label">{{ currentPage + 1 }}&nbsp;/&nbsp;{{ totalPages || 1 }}</text>
+            <view class="progress-track" ref="progressTrackRef">
+              <view class="progress-fill" ref="progressFillRef" />
+              <view class="progress-thumb" ref="progressThumbRef" />
+            </view>
+          </view>
+          <view class="chapter-nav-btn" @click.stop="nextChapter">下一章</view>
+        </view>
+        <!-- Actions row -->
+        <view class="bp-row bp-actions-row">
+          <view class="bp-action" @click.stop="openCatalog">
+            <text class="bp-action-icon">📖</text>
+            <text class="bp-action-label">目录</text>
+          </view>
+          <view class="bp-action" @click.stop="toggleNightMode">
+            <text class="bp-action-icon" ref="nightIconRef">{{ isNight ? '☀️' : '🌙' }}</text>
+            <text class="bp-action-label" ref="nightLabelRef">{{ isNight ? '日间' : '夜间' }}</text>
+          </view>
+          <view class="bp-action" @click.stop="openSettings">
+            <text class="bp-action-icon">⚙️</text>
+            <text class="bp-action-label">设置</text>
+          </view>
+          <view class="bp-action" @click.stop="showMoreAdaptations">
+            <text class="bp-action-icon">⋯</text>
+            <text class="bp-action-label">更多改编</text>
+          </view>
         </view>
       </view>
-      <text v-else class="paragraph-comment-empty">暂无段评</text>
-      <button class="feedback-submit full" @tap.stop="openParagraphComposer">写段评</button>
     </view>
 
-    <!-- ==================== Discuss sheet ==================== -->
-    <view v-if="discussVisible" class="reader-sheet-mask" @tap.stop="discussVisible = false" />
-    <view v-if="discussVisible" class="paragraph-comments-sheet" @tap.stop style="max-height: 60vh;">
-      <view class="sheet-handle" />
-      <text class="feedback-title">本章讨论</text>
-      <view v-if="chapterComments.length" class="paragraph-comment-list">
-        <view v-for="item in chapterComments" :key="item.id" class="paragraph-comment-item">
-          <text class="paragraph-comment-user">{{ item.username || '读者' }}</text>
-          <text class="paragraph-comment-text">{{ item.content }}</text>
+    <!-- ====== Text Selection Floating Menu ====== -->
+    <view ref="selectionMenuRef" class="selection-menu">
+      <view class="selection-menu-body" ref="selectionMenuBodyRef">
+        <!-- Row 1: actions -->
+        <view class="sel-row sel-row-actions">
+          <text class="sel-action" @click.stop="listenSelection">听</text>
+          <text class="sel-action" @click.stop="openCommentEditor">写段评</text>
+          <text class="sel-action" ref="highlightBtnRef" @click.stop="toggleHighlight">{{ hasCurrentHighlight ? '取消划线' : '划线' }}</text>
+          <text class="sel-action" @click.stop="shareSelection">分享</text>
+          <text class="sel-action" @click.stop="copySelection">复制</text>
+          <text class="sel-action" @click.stop="lookupDictionary">词典</text>
+          <text ref="typoBtnRef2" class="sel-action sel-action-typo" style="display:none" @click.stop="reportTypo">错字反馈</text>
+        </view>
+        <!-- Row 2: tags -->
+        <view class="sel-row sel-row-tags">
+          <text class="sel-tag" @click.stop="tagSelection('名场面')">名场面</text>
+          <text class="sel-tag" @click.stop="tagSelection('名台词')">名台词</text>
+          <text class="sel-tag" @click.stop="tagSelection('好磕')">好磕</text>
+          <text class="sel-tag" @click.stop="tagSelection('好虐')">好虐</text>
         </view>
       </view>
-      <text v-else class="paragraph-comment-empty">暂无讨论，长按段落可以写段评</text>
+      <view class="sel-arrow" ref="selArrowRef" />
+    </view>
+
+    <!-- ====== Share Card Modal ====== -->
+    <view ref="shareOverlayRef" class="modal-overlay" style="display:none" @click.stop="closeShare">
+      <view class="share-card" @click.stop>
+        <view class="share-card-head">
+          <text class="share-book-name">{{ bookTitle }}</text>
+        </view>
+        <view class="share-card-quote">
+          <text ref="shareQuoteRef">{{ selectedTextForShare }}</text>
+        </view>
+        <view class="share-card-meta">
+          <text class="share-card-tagline">悦读 · 发现好故事</text>
+          <view class="share-card-qr"><text>QR</text></view>
+        </view>
+        <view class="share-card-channels">
+          <text class="share-channel" @click.stop="shareToChannel('书友圈')">书友圈</text>
+          <text class="share-channel" @click.stop="shareToChannel('微信')">微信</text>
+          <text class="share-channel" @click.stop="shareToChannel('朋友圈')">朋友圈</text>
+          <text class="share-channel" @click.stop="shareToChannel('QQ')">QQ</text>
+        </view>
+        <text class="share-card-close" @click.stop="closeShare">关闭</text>
+      </view>
+    </view>
+
+    <!-- ====== Comment Editor Sheet ====== -->
+    <view ref="commentOverlayRef" class="modal-overlay" style="display:none" @click.stop="closeCommentEditor">
+      <view class="comment-editor" @click.stop>
+        <text class="comment-editor-title">写段评</text>
+        <view class="comment-editor-quote">
+          <text ref="commentQuoteRef">{{ selectionText }}</text>
+        </view>
+        <textarea
+          ref="commentTextareaRef"
+          class="comment-editor-input"
+          maxlength="500"
+          placeholder="写下你对这一段的想法..."
+        />
+        <view class="comment-editor-actions">
+          <view class="comment-btn comment-btn-cancel" @click.stop="closeCommentEditor">取消</view>
+          <view class="comment-btn comment-btn-submit" @click.stop="submitComment">发布</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ====== Settings Panel ====== -->
+    <view ref="settingsOverlayRef" class="settings-overlay" @click.stop="closeSettings">
+      <view ref="settingsSheetRef" class="settings-sheet" @click.stop>
+        <view class="sheet-handle" />
+
+        <!-- Brightness + eye protection -->
+        <view class="setting-row">
+          <text class="setting-label">亮度</text>
+          <view class="brightness-row">
+            <text class="brightness-icon">☀️</text>
+            <slider
+              class="slider brightness-slider"
+              :min="10"
+              :max="100"
+              :value="brightness"
+              activeColor="#333"
+              backgroundColor="#e0e0e0"
+              block-size="18"
+              @change="onBrightnessChange"
+            />
+            <text class="brightness-icon brightness-icon-big">☀️</text>
+          </view>
+          <switch ref="eyeSwitchRef2" class="setting-switch" color="#C4A882" @change="onEyeProtectionChange" />
+        </view>
+
+        <!-- Font size -->
+        <view class="setting-row">
+          <text class="setting-label">字号</text>
+          <view class="stepper-row">
+            <text class="stepper-btn" @click.stop="adjustFontSize(-1)">A-</text>
+            <text class="stepper-value">{{ fontSize }}</text>
+            <text class="stepper-btn" @click.stop="adjustFontSize(1)">A+</text>
+          </view>
+        </view>
+
+        <!-- Font family -->
+        <view class="setting-row">
+          <text class="setting-label">字体</text>
+          <view ref="fontOptionsWrapRef" class="font-options">
+            <text
+              v-for="f in fontOptions"
+              :key="f.value"
+              class="font-option"
+              @click.stop="selectFont(f.value)"
+            >{{ f.label }}</text>
+          </view>
+        </view>
+
+        <!-- Color themes -->
+        <view class="setting-row">
+          <text class="setting-label">主题</text>
+          <view ref="themeChipsRef" class="theme-chips">
+            <view
+              v-for="t in themeOptions"
+              :key="t.key"
+              class="theme-chip"
+              @click.stop="selectTheme(t.key)"
+            >
+              <view class="theme-chip-swatch" :style="{ backgroundColor: t.bg }" />
+              <text class="theme-chip-tick" ref="themeTickRef">✓</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- Wallpaper -->
+        <view class="setting-row">
+          <text class="setting-label">壁纸</text>
+          <view ref="wallpaperRef" class="wallpaper-row">
+            <view
+              v-for="(wp, i) in wallpapers"
+              :key="i"
+              class="wallpaper-chip"
+              :style="{ backgroundImage: wp }"
+              @click.stop="selectWallpaper(i)"
+            />
+            <view class="wallpaper-chip wallpaper-upload" @click.stop="uploadWallpaper">
+              <text>+</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- Turn mode -->
+        <view class="setting-row">
+          <text class="setting-label">翻页</text>
+          <view ref="turnModeRef" class="turn-mode-row">
+            <text
+              v-for="m in turnModes"
+              :key="m.value"
+              class="turn-mode-item"
+              @click.stop="selectTurnMode(m.value)"
+            >{{ m.label }}</text>
+          </view>
+        </view>
+
+        <!-- Paragraph spacing -->
+        <view class="setting-row">
+          <text class="setting-label">间距</text>
+          <view class="stepper-row">
+            <text class="stepper-btn" @click.stop="adjustSpacing(-1)">−</text>
+            <text class="stepper-value">{{ paragraphSpacing }}</text>
+            <text class="stepper-btn" @click.stop="adjustSpacing(1)">+</text>
+          </view>
+        </view>
+
+        <!-- Paragraph break -->
+        <view class="setting-row">
+          <text class="setting-label">段间空行</text>
+          <switch ref="paraBreakSwitchRef2" class="setting-switch" color="#333" @change="onParagraphBreakChange" />
+        </view>
+
+        <!-- Inline comments -->
+        <view class="setting-row">
+          <text class="setting-label">评论透传</text>
+          <switch ref="inlineCommentsSwitchRef2" class="setting-switch" color="#333" @change="onInlineCommentsChange" />
+        </view>
+
+        <view class="setting-more-row" @click.stop="showAllSettings">
+          <text>更多设置 ›</text>
+        </view>
+      </view>
     </view>
   </view>
 </template>
 
 <script setup>
-import { computed, ref, nextTick, watch, onBeforeUnmount, onMounted, getCurrentInstance } from 'vue'
-import { onLoad, onUnload, onShow } from '@dcloudio/uni-app'
-import { useReaderStore } from '../../store/reader'
-import { useUserStore } from '../../store/user'
-import { useBookStore } from '../../store/book'
-import { readerThemes, themeStyle } from '../../utils/reader'
-import { useHighlightStore } from '../../store/highlight'
-import ViewPageReader from './components/ViewPageReader.vue'
-import ReaderTopBar from './components/ReaderTopBar.vue'
-import ReaderBottomBar from './components/ReaderBottomBar.vue'
-import ReaderSettingSheet from './components/ReaderSettingSheet.vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
+import { request } from '../../utils/request'
 
-const readerStore = useReaderStore()
-const userStore = useUserStore()
-const bookStore = useBookStore()
-const highlightStore = useHighlightStore()
-const instance = getCurrentInstance()
+// ===================== STATE =====================
+// --- book ---
 const bookId = ref('')
 const chapterNo = ref(1)
-const loading = ref(true)
-const loadFailed = ref(false)
-const showTools = ref(true)
-const settingVisible = ref(false)
-const scrollTop = ref(0)
-const position = ref(0)
-const pageModePage = ref(0)
-const pageReaderRef = ref(null)
-const centerToggleRef = ref(null)
-const brightness = ref(Number(uni.getStorageSync('readerBrightness') || 80))
-const eyeProtection = ref(Boolean(uni.getStorageSync('readerEyeProtection') || false))
-const currentChapter = ref(null)
-const currentTitle = ref('')
-const currentContent = ref('')
-const selectedParagraph = ref(null)
-const selectedStart = ref(0)
-const selectedEnd = ref(0)
-const activeRangeHandle = ref('')
-const paragraphMenuVisible = ref(false)
-const paragraphMenuStyle = ref({})
-const paragraphMenuArrowStyle = ref({})
-const paragraphComposerVisible = ref(false)
-const typoFeedbackVisible = ref(false)
-const feedbackText = ref('')
-const feedbackSubmitting = ref(false)
-const chapterComments = ref([])
-const catalogVisible = ref(false)
-const paragraphCommentsVisible = ref(false)
-const discussVisible = ref(false)
-const chapterSwitching = ref(false)
-const readerRenderKey = ref(0)
-let autoPageTimer = null
-let autoSaveTimer = null
-let initializing = false
-let showRetryTimer = null
-let chapterLoadRetryTimer = null
-let chapterLoadRetryCount = 0
-let lastToolsToggleAt = 0
-let centerToggleEl = null
-let centerTogglePointerStart = null
-const lastReaderRouteKey = 'reader:lastRoute'
+const maxChapterNo = ref(0)
+const chapterTitle = ref('')
+const bookTitle = ref('')
+const rawContent = ref('')
 
-// ---- computed ----
-const storeChapterForRoute = computed(() => {
-  const stored = readerStore.chapter
-  if (!stored?.content) return null
-  if (String(stored.bookId) !== String(bookId.value)) return null
-  if (Number(stored.chapterNo) !== Number(chapterNo.value)) return null
-  return stored
-})
-const currentChapterForRoute = computed(() => {
-  const current = currentChapter.value
-  if (!current?.content) return null
-  if (String(current.bookId) !== String(bookId.value)) return null
-  if (Number(current.chapterNo) !== Number(chapterNo.value)) return null
-  return current
-})
-const chapter = computed(() => currentChapterForRoute.value || storeChapterForRoute.value)
-const rawContent = computed(() => currentContent.value || chapter.value?.content || '')
-const maxChapterNo = computed(() => {
-  const list = readerStore.chapters || []
-  return list.length ? Math.max(...list.map((item) => Number(item.chapterNo || 0))) : 0
-})
-const readerEmptyMessage = computed(() => {
-  if (!loadFailed.value) return '正在加载章节...'
-  return isChapterOutOfRange() ? '章节不存在' : '章节加载失败，轻点重试'
-})
-const isFirstChapter = computed(() => chapterNo.value <= 1)
-const isLastChapter = computed(() => maxChapterNo.value > 0 && chapterNo.value >= maxChapterNo.value)
-const cachedPrevChapter = computed(() => {
-  if (chapterNo.value <= 1) return null
-  return readerStore.getCachedChapter(bookId.value, chapterNo.value - 1)
-})
-const cachedNextChapter = computed(() => {
-  if (maxChapterNo.value && chapterNo.value >= maxChapterNo.value) return null
-  return readerStore.getCachedChapter(bookId.value, chapterNo.value + 1)
-})
-const prevChapterContent = computed(() => cachedPrevChapter.value?.content || '')
-const nextChapterContent = computed(() => cachedNextChapter.value?.content || '')
-const chapterIndicator = computed(() => {
-  if (!maxChapterNo.value) return `第 ${chapterNo.value} 章`
-  return `第 ${chapterNo.value} / ${maxChapterNo.value} 章`
-})
-const pageIndicator = computed(() => {
-  if (readerStore.setting.turnMode !== 'SCROLL') {
-    const ref = pageReaderRef.value
-    const total = getReaderExposeNumber(ref?.totalPages)
-    const page = getReaderExposeNumber(ref?.currentPage)
-    if (total > 1) {
-      return `${page + 1} / ${total} 页`
-    }
-    return chapterIndicator.value
-  }
-  return chapterIndicator.value
-})
-const progressPercent = computed(() => {
-  if (readerStore.setting.turnMode === 'SCROLL') {
-    if (scrollContentHeight.value > 0) {
-      const viewH = window?.innerHeight || 667
-      const maxScroll = Math.max(0, scrollContentHeight.value - viewH)
-      if (maxScroll <= 0) return 0
-      return Math.min(100, Math.round((position.value / maxScroll) * 100))
-    }
-    return 0
-  }
-  const ref = pageReaderRef.value
-  const total = getReaderExposeNumber(ref?.totalPages)
-  const page = getReaderExposeNumber(ref?.currentPage)
-  if (total > 1) {
-    return Math.round((page / (total - 1)) * 100)
-  }
-  return 0
-})
-const paragraphs = computed(() => {
-  if (!chapter.value?.content) return []
-  return chapter.value.content
-    .replace(/\r\n/g, '\n')
-    .split(/\n{1,}|(?<=。|！|？|"|")\s+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-})
-const chapterHighlights = computed(() =>
-  highlightStore.getHighlightsByChapter(Number(bookId.value), Number(chapterNo.value))
+// --- reading settings (persisted) ---
+const fontSize = ref(18)
+const fontFamily = ref('SERIF')
+const theme = ref('PARCHMENT')
+const brightness = ref(80)
+const eyeProtection = ref(false)
+const turnMode = ref('SIMULATION')
+const paragraphSpacing = ref(6)
+const paragraphBreak = ref(true)
+const showInlineComments = ref(true)
+const currentWallpaper = ref(-1)
+const nightOverride = ref(false)
+
+// --- toolbar ---
+const toolbarVisible = ref(false)
+let autoHideTimer = null
+
+// --- page state ---
+const pages = ref([])
+const currentPage = ref(0)
+const isFlipping = ref(false)
+const flipDirection = ref(1)
+
+// --- chapter cache ---
+const chapterCache = {}  // key: "bookId:chapterNo" → { title, content, maxChapterNo }
+
+// --- split settling ---
+let splitSettleTimer = null
+
+// --- touch/drag ---
+let touchStartX = 0
+let touchStartY = 0
+let touchTimestamp = 0
+let isDragging = false
+
+// --- text selection ---
+const selectionVisible = ref(false)
+const selectionText = ref('')
+const selectedTextForShare = ref('')
+const menuX = ref(0)
+const menuY = ref(0)
+
+// --- highlights ---
+const highlights = ref([])
+
+// --- comment editor ---
+const commentWriterVisible = ref(false)
+const commentText = ref('')
+const commentCount = ref(0)
+
+// --- share ---
+const shareVisible = ref(false)
+
+// --- settings ---
+const settingsVisible = ref(false)
+
+// ===================== COMPUTED =====================
+const isNight = computed(() => theme.value === 'NIGHT' || nightOverride.value)
+const totalPages = computed(() => Math.max(1, pages.value.length))
+const currentHighlight = computed(() =>
+  selectionText.value
+    ? highlights.value.find(h => h.text === selectionText.value && h.chapterNo === chapterNo.value)
+    : null
 )
-function paragraphHighlight(index) {
-  return chapterHighlights.value.find(h => Number(h.paragraphIndex) === Number(index))
+const hasCurrentHighlight = computed(() => !!currentHighlight.value)
+
+// ===================== CONSTANTS =====================
+const THEMES = {
+  DEFAULT:     { bg: '#FFFFFF', text: '#1F1F1F' },
+  PARCHMENT:   { bg: '#F9F5E8', text: '#3D2B1F' },
+  LIGHT_GREEN: { bg: '#E8F0E3', text: '#2D3A28' },
+  LIGHT_BLUE:  { bg: '#E4ECF0', text: '#1F2A3A' },
+  NIGHT:       { bg: '#161A1D', text: '#D8D1C7' },
 }
 
-function getReaderExposeNumber(value) {
-  const raw = value && typeof value === 'object' && 'value' in value ? value.value : value
-  const num = Number(raw || 0)
-  return Number.isFinite(num) ? num : 0
-}
-const selectedParagraphComments = computed(() => {
-  if (!selectedParagraph.value) return []
-  return chapterComments.value.filter((item) => Number(item.paragraphIndex) === Number(selectedParagraph.value.index))
+const themeOptions = [
+  { key: 'DEFAULT',     bg: '#FFFFFF' },
+  { key: 'PARCHMENT',   bg: '#F9F5E8' },
+  { key: 'LIGHT_GREEN', bg: '#E8F0E3' },
+  { key: 'LIGHT_BLUE',  bg: '#E4ECF0' },
+  { key: 'NIGHT',       bg: '#161A1D' },
+]
+
+const fontOptions = [
+  { label: '宋体', value: 'SERIF' },
+  { label: '楷体', value: 'KAITI' },
+]
+
+const turnModes = [
+  { label: '仿真', value: 'SIMULATION' },
+  { label: '覆盖', value: 'COVER' },
+  { label: '平移', value: 'SLIDE' },
+  { label: '上下', value: 'SCROLL' },
+  { label: '无',   value: 'NONE' },
+]
+
+const wallpapers = [
+  'linear-gradient(135deg, #f5f0e8, #e8dcc8)',
+  'linear-gradient(135deg, #e8e0d0, #d8cebc)',
+  'linear-gradient(135deg, #f0ece4, #e4dcd0)',
+  'radial-gradient(circle at 20% 30%, #f0e8dc, #e0d4c0)',
+]
+
+// ===================== DOM REFS =====================
+const readerAreaRef = ref(null)
+const pageStageRef = ref(null)
+const backIndicatorRef = ref(null)
+const backIndicatorTextRef = ref(null)
+const frontPageRef = ref(null)
+const frontTitleRef = ref(null)
+const frontBodyRef = ref(null)
+const backPageRef = ref(null)
+const backTitleRef = ref(null)
+const backBodyRef = ref(null)
+const flipPageRef = ref(null)
+const flipFrontRef = ref(null)
+const flipFrontTitleRef = ref(null)
+const flipFrontBodyRef = ref(null)
+const flipBackRef = ref(null)
+const flipBackTitleRef = ref(null)
+const flipBackBodyRef = ref(null)
+const topBarRef = ref(null)
+const commentBadgeRef = ref(null)
+const bottomPanelRef = ref(null)
+const progressTrackRef = ref(null)
+const progressFillRef = ref(null)
+const progressThumbRef = ref(null)
+const listenFabRef = ref(null)
+const nightIconRef = ref(null)
+const nightLabelRef = ref(null)
+const selectionMenuRef = ref(null)
+const selectionMenuBodyRef = ref(null)
+const selArrowRef = ref(null)
+const highlightBtnRef = ref(null)
+const typoBtnRef2 = ref(null)
+const shareOverlayRef = ref(null)
+const shareQuoteRef = ref(null)
+const commentOverlayRef = ref(null)
+const commentQuoteRef = ref(null)
+const commentTextareaRef = ref(null)
+const settingsOverlayRef = ref(null)
+const settingsSheetRef = ref(null)
+const eyeSwitchRef2 = ref(null)
+const fontOptionsWrapRef = ref(null)
+const themeChipsRef = ref(null)
+const themeTickRef = ref(null)
+const wallpaperRef = ref(null)
+const turnModeRef = ref(null)
+const paraBreakSwitchRef2 = ref(null)
+const inlineCommentsSwitchRef2 = ref(null)
+
+// ===================== LIFECYCLE =====================
+onLoad((query) => {
+  bookId.value = query.bookId || ''
+  chapterNo.value = Number(query.chapterNo ?? 1)
+  bookTitle.value = query.title || ''
+  loadSettings()
+  restoreChapterCache()
+  loadChapter()
 })
-const selectedText = computed(() => {
-  const text = selectedParagraph.value?.text || ''
-  if (!text) return ''
-  const start = Math.max(0, Math.min(selectedStart.value, selectedEnd.value))
-  const end = Math.max(start + 1, Math.max(selectedStart.value, selectedEnd.value))
-  return text.slice(start, Math.min(end, text.length))
-})
-const paragraphMenuItems = computed(() => {
-  const count = selectedParagraph.value ? paragraphCommentCount(selectedParagraph.value.index) : 0
-  return [
-    { key: 'comment', label: `段评${count ? ` (${count})` : ''}` },
-    { key: 'feedback', label: '反馈' },
-    { key: 'copy', label: '复制' },
-    { key: 'highlight', label: '划线' },
-    { key: 'share', label: '分享' }
-  ]
-})
-const textStyle = computed(() => themeStyle(readerStore.setting))
-const scrollTextStyle = computed(() => ({
-  ...textStyle.value,
-  padding: `62px ${readerStore.setting.marginX || 22}px 82px`,
-  '--paragraph-spacing': `${16 + Number(readerStore.setting.paragraphSpacing || 0)}px`
-}))
-const pageStyle = computed(() => {
-  const theme = readerThemes[readerStore.setting.theme] || readerThemes.DEFAULT
-  return { backgroundColor: theme.background }
-})
-const brightnessStyle = computed(() => {
-  const filters = [`brightness(${brightness.value / 100})`]
-  if (eyeProtection.value) filters.push('sepia(0.25)', 'saturate(0.85)')
-  return { filter: filters.join(' ') }
-})
-
-// ---- load ----
-function applyChapterData(data) {
-  currentChapter.value = { ...data }
-  currentTitle.value = data.title || ''
-  currentContent.value = data.content || ''
-  readerStore.$patch({ chapter: data })
-  saveLastReaderRoute()
-  loadFailed.value = false
-  chapterLoadRetryCount = 0
-}
-
-function isChapterOutOfRange(no = chapterNo.value) {
-  const currentNo = Number(no || 0)
-  const maxNo = Number(maxChapterNo.value || 0)
-  return Boolean(maxNo && currentNo > maxNo)
-}
-
-function scheduleChapterLoadRetry() {
-  if (chapterLoadRetryCount >= 2 || isChapterOutOfRange()) return false
-  if (chapterLoadRetryTimer) clearTimeout(chapterLoadRetryTimer)
-  chapterLoadRetryCount += 1
-  chapterLoadRetryTimer = setTimeout(() => {
-    chapterLoadRetryTimer = null
-    loadChapter({ restoreSavedProgress: false, fromRetry: true })
-  }, 420)
-  return true
-}
-
-function markChapterLoadFailed() {
-  if (rawContent.value) return
-  currentChapter.value = null
-  currentTitle.value = ''
-  currentContent.value = ''
-  readerStore.$patch({ chapter: null })
-  if (!scheduleChapterLoadRetry()) {
-    loadFailed.value = true
-  }
-}
-
-async function loadChapter({ restoreSavedProgress = true, fromRetry = false } = {}) {
-  if (!fromRetry) {
-    chapterLoadRetryCount = 0
-    if (chapterLoadRetryTimer) {
-      clearTimeout(chapterLoadRetryTimer)
-      chapterLoadRetryTimer = null
-    }
-  }
-  const cached = readerStore.getCachedChapter(bookId.value, chapterNo.value)
-  loading.value = !cached
-  loadFailed.value = false
-  try {
-    const res = cached
-      ? { code: 200, message: 'success', data: cached, cached: true }
-      : await readerStore.loadChapter(bookId.value, chapterNo.value)
-    if (res?.code !== 200 || !res?.data?.content) {
-      const recovered = await recoverMissingChapter()
-      if (!recovered) {
-        markChapterLoadFailed()
-      }
-    } else {
-      applyChapterData(res.data)
-      await nextTick()
-      instance?.proxy?.$forceUpdate?.()
-    }
-  } catch (error) {
-    markChapterLoadFailed()
-  } finally {
-    loading.value = false
-    preloadAdjacentChapters()
-    loadChapterComments()
-  }
-  if (restoreSavedProgress && userStore.isLoggedIn) {
-    readerStore.loadProgress(bookId.value).then((res) => {
-      if (res?.code === 200) restoreProgress(res.data)
-    }).catch(() => {})
-  }
-  highlightStore.loadFromStorage()
-  startAutoSave()
-}
-
-function saveLastReaderRoute() {
-  if (!bookId.value || !chapterNo.value) return
-  uni.setStorageSync(lastReaderRouteKey, {
-    bookId: String(bookId.value),
-    chapterNo: Number(chapterNo.value),
-    at: Date.now()
-  })
-}
-
-function getLastReaderRoute() {
-  const last = uni.getStorageSync(lastReaderRouteKey)
-  if (!last?.bookId || !last?.chapterNo) return null
-  return last
-}
-
-async function recoverMissingChapter() {
-  if (!bookId.value) {
-    const last = getLastReaderRoute()
-    if (last?.bookId) {
-      await initReader({ bookId: last.bookId, chapterNo: last.chapterNo || 1 }, { force: true })
-      return true
-    }
-    return false
-  }
-  const maxNo = Number(maxChapterNo.value || 0)
-  if (maxNo && chapterNo.value > maxNo) {
-    chapterNo.value = maxNo
-    syncReaderUrl()
-    await loadChapter({ restoreSavedProgress: false })
-    return true
-  }
-  return false
-}
-
-async function loadChapterComments() {
-  if (!chapter.value?.id) {
-    chapterComments.value = []
-    return
-  }
-  try {
-    const res = await bookStore.loadChapterComments(chapter.value.id, 1, 80)
-    chapterComments.value = res.code === 200 ? (res.data?.records || []) : []
-  } catch {
-    chapterComments.value = []
-  }
-}
-
-function preloadAdjacentChapters() {
-  if (!bookId.value) return
-  const current = Number(chapterNo.value || 1)
-  const maxNo = Number(maxChapterNo.value || 0)
-  const targets = [current - 1, current + 1, current + 2]
-    .filter((no) => no > 0 && (!maxNo || no <= maxNo))
-  targets.forEach((no) => {
-    readerStore.preloadChapter(bookId.value, no).catch(() => {})
-  })
-}
-
-async function ensureChapterPreloaded(no) {
-  if (!bookId.value || !no) return null
-  const cached = readerStore.getCachedChapter(bookId.value, no)
-  if (cached) return cached
-  try {
-    return await readerStore.preloadChapter(bookId.value, no)
-  } catch {
-    return null
-  }
-}
-
-function restoreProgress(progress) {
-  if (!progress || Number(progress.chapterNo) !== Number(chapterNo.value)) {
-    scrollTop.value = 0
-    position.value = 0
-    pageModePage.value = 0
-    return
-  }
-  const savedPosition = Number(progress.position || 0)
-  position.value = savedPosition
-  if (readerStore.setting.turnMode === 'PAGE') {
-    pageModePage.value = savedPosition
-  } else {
-    setTimeout(() => { scrollTop.value = savedPosition }, 80)
-  }
-}
-
-function onPageChange(pageIdx) {
-  pageModePage.value = pageIdx
-  position.value = pageIdx
-  const ref = pageReaderRef.value
-  const total = Number(ref?.totalPages || 0)
-  if (readerStore.setting.turnMode !== 'SCROLL' && total > 0) {
-    if (pageIdx >= total - 2) {
-      ensureChapterPreloaded(Number(chapterNo.value) + 1)
-    }
-    if (pageIdx <= 1 && Number(chapterNo.value) > 1) {
-      ensureChapterPreloaded(Number(chapterNo.value) - 1)
-    }
-  }
-}
-
-function paragraphCommentCount(index) {
-  return chapterComments.value.filter((item) => Number(item.paragraphIndex) === Number(index)).length
-}
-
-function selectedParts(text) {
-  const start = Math.max(0, Math.min(selectedStart.value, selectedEnd.value, text.length))
-  const end = Math.max(start + 1, Math.min(Math.max(selectedStart.value, selectedEnd.value), text.length))
-  return {
-    before: text.slice(0, start),
-    selected: text.slice(start, end),
-    after: text.slice(end)
-  }
-}
-
-function getViewportSize() {
-  // #ifdef H5
-  if (typeof window !== 'undefined') {
-    return {
-      width: window.innerWidth || 375,
-      height: window.innerHeight || 667
-    }
-  }
-  // #endif
-  const sys = uni.getSystemInfoSync()
-  return {
-    width: sys.windowWidth || 375,
-    height: sys.windowHeight || 667
-  }
-}
-
-function getEventPoint(event, fallbackY) {
-  const source = event?.touches?.[0] ||
-    event?.changedTouches?.[0] ||
-    event?.detail ||
-    event ||
-    {}
-  const viewport = getViewportSize()
-  const x = Number(source.clientX ?? source.x ?? source.pageX ?? viewport.width / 2)
-  const y = Number(source.clientY ?? source.y ?? source.pageY ?? fallbackY ?? viewport.height / 2)
-  return {
-    x: Number.isFinite(x) ? x : viewport.width / 2,
-    y: Number.isFinite(y) ? y : (fallbackY ?? viewport.height / 2)
-  }
-}
-
-function positionParagraphMenu(point) {
-  const viewport = getViewportSize()
-  const menuWidth = Math.min(318, Math.max(260, viewport.width - 24))
-  const menuHeight = 44
-  const gap = 12
-  const sidePadding = 10
-  const topPadding = 10
-  const bottomPadding = 12
-  const desiredLeft = point.x - menuWidth / 2
-  const left = Math.max(sidePadding, Math.min(desiredLeft, viewport.width - menuWidth - sidePadding))
-  let top = point.y - menuHeight - gap
-  let arrowTop = menuHeight - 1
-  let arrowDirection = 'down'
-
-  if (top < topPadding) {
-    top = point.y + gap
-    arrowTop = -5
-    arrowDirection = 'up'
-  }
-  top = Math.max(topPadding, Math.min(top, viewport.height - menuHeight - bottomPadding))
-
-  const arrowLeft = Math.max(14, Math.min(point.x - left - 6, menuWidth - 26))
-  paragraphMenuStyle.value = {
-    width: `${menuWidth}px`,
-    left: `${left}px`,
-    top: `${top}px`
-  }
-  paragraphMenuArrowStyle.value = {
-    left: `${arrowLeft}px`,
-    top: `${arrowTop}px`,
-    transform: arrowDirection === 'down' ? 'rotate(45deg)' : 'rotate(225deg)'
-  }
-}
-
-function openParagraphTools(text, index, event, toolbarY) {
-  if (!text) return
-  selectedParagraph.value = { text, index }
-  selectedStart.value = Math.max(0, Math.floor(text.length * 0.36))
-  selectedEnd.value = Math.min(text.length, Math.max(selectedStart.value + 4, Math.floor(text.length * 0.62)))
-  paragraphComposerVisible.value = false
-  typoFeedbackVisible.value = false
-  paragraphCommentsVisible.value = false
-  feedbackText.value = ''
-  showTools.value = false
-  settingVisible.value = false
-  positionParagraphMenu(getEventPoint(event, toolbarY))
-  paragraphMenuVisible.value = true
-}
-
-function openParagraphToolsFromPage(payload) {
-  if (!payload?.text) return
-  openParagraphTools(payload.text, payload.index, payload, payload.toolbarY)
-}
-
-function runParagraphTool(key) {
-  paragraphMenuVisible.value = false
-  if (key === 'comment') openParagraphComposer()
-  else if (key === 'feedback') openTypoFeedback()
-  else if (key === 'copy') copySelectedParagraph()
-  else if (key === 'highlight') highlightParagraph()
-  else if (key === 'share') shareParagraph()
-}
-
-function startRangeHandle(type) {
-  activeRangeHandle.value = type
-}
-
-function stopRangeHandle() {
-  activeRangeHandle.value = ''
-}
-
-function moveRangeHandle(event, text) {
-  if (!activeRangeHandle.value || !text) return
-  const touch = event.touches?.[0] || event.changedTouches?.[0]
-  const clientX = touch?.clientX ?? event.clientX
-  if (clientX == null) return
-  let ratio = 0.5
-  // #ifdef H5
-  const el = typeof document !== 'undefined' ? document.getElementById(`paragraph-${selectedParagraph.value?.index}`) : null
-  const rect = el?.getBoundingClientRect?.()
-  if (rect?.width) ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-  // #endif
-  const pos = Math.max(0, Math.min(text.length, Math.round(text.length * ratio)))
-  if (activeRangeHandle.value === 'start') {
-    selectedStart.value = Math.min(pos, selectedEnd.value - 1)
-  } else {
-    selectedEnd.value = Math.max(pos, selectedStart.value + 1)
-  }
-}
-
-function showParagraphComments(payload) {
-  const index = typeof payload === 'object' ? payload.paragraphIndex : payload
-  const text = selectedParagraph.value?.index === index
-    ? selectedParagraph.value.text
-    : (paragraphs.value[index] || '这一段')
-  selectedParagraph.value = { text, index }
-  paragraphComposerVisible.value = false
-  typoFeedbackVisible.value = false
-  paragraphCommentsVisible.value = true
-  showTools.value = false
-}
-
-function openParagraphComposer() {
-  paragraphMenuVisible.value = false
-  paragraphComposerVisible.value = true
-  typoFeedbackVisible.value = false
-}
-
-function openTypoFeedback() {
-  paragraphMenuVisible.value = false
-  typoFeedbackVisible.value = true
-  paragraphComposerVisible.value = false
-}
-
-function clearParagraphTools() {
-  selectedParagraph.value = null
-  selectedStart.value = 0
-  selectedEnd.value = 0
-  activeRangeHandle.value = ''
-  paragraphMenuVisible.value = false
-  paragraphComposerVisible.value = false
-  typoFeedbackVisible.value = false
-  paragraphCommentsVisible.value = false
-  feedbackText.value = ''
-  feedbackSubmitting.value = false
-}
-
-function closeReaderOverlays() {
-  const hadOverlay = paragraphMenuVisible.value ||
-    paragraphComposerVisible.value ||
-    typoFeedbackVisible.value ||
-    paragraphCommentsVisible.value ||
-    catalogVisible.value ||
-    settingVisible.value
-  clearParagraphTools()
-  catalogVisible.value = false
-  settingVisible.value = false
-  return hadOverlay
-}
-
-function copySelectedParagraph() {
-  if (!selectedParagraph.value?.text) return
-  uni.setClipboardData({
-    data: selectedText.value || selectedParagraph.value.text,
-    success: () => {
-      uni.showToast({ title: '已复制', icon: 'success' })
-      clearParagraphTools()
-    }
-  })
-}
-
-function highlightParagraph() {
-  if (!selectedParagraph.value) return
-  const quote = selectedText.value || selectedParagraph.value.text
-  highlightStore.addHighlight({
-    bookId: Number(bookId.value),
-    bookTitle: chapter.value?.bookTitle || currentTitle.value || '',
-    chapterNo: Number(chapterNo.value),
-    paragraphIndex: selectedParagraph.value.index,
-    quoteText: quote,
-    color: 'rgba(255, 235, 59, 0.5)'
-  })
-  uni.showToast({ title: '已划线', icon: 'success' })
-  clearParagraphTools()
-}
-
-function shareParagraph() {
-  if (!selectedParagraph.value) return
-  const quote = selectedText.value || selectedParagraph.value.text
-  const title = chapter.value?.bookTitle || currentTitle.value || '阅读'
-  uni.setClipboardData({
-    data: `《${title}》\n\n${quote}`,
-    success: () => {
-      uni.showToast({ title: '已复制到剪贴板', icon: 'success' })
-      clearParagraphTools()
-    }
-  })
-}
-
-async function submitParagraphFeedback() {
-  const content = feedbackText.value.trim()
-  if (!content) {
-    uni.showToast({ title: typoFeedbackVisible.value ? '请输入反馈内容' : '请输入段评内容', icon: 'none' })
-    return
-  }
-  if (!userStore.isLoggedIn) {
-    uni.showToast({ title: '请先登录后再提交', icon: 'none' })
-    setTimeout(() => uni.switchTab({ url: '/pages/mine/mine' }), 800)
-    return
-  }
-  if (!selectedParagraph.value || !chapter.value?.id) return
-  feedbackSubmitting.value = true
-  try {
-    const isTypo = typoFeedbackVisible.value
-    const res = await bookStore.createComment({
-      bookId: Number(bookId.value),
-      chapterId: Number(chapter.value.id),
-      content,
-      commentType: isTypo ? 'TYPO' : 'PARAGRAPH',
-      paragraphIndex: selectedParagraph.value.index,
-      quoteText: selectedText.value || selectedParagraph.value.text
-    })
-    if (res.code === 200) {
-      if (!isTypo && res.data) {
-        chapterComments.value = [res.data, ...chapterComments.value]
-      }
-      uni.showToast({ title: isTypo ? '反馈已提交' : '段评已发布', icon: 'success' })
-      clearParagraphTools()
-    }
-  } finally {
-    feedbackSubmitting.value = false
-  }
-}
-
-// ---- tools & setting ----
-function onContentTap(e) {
-  if (closeReaderOverlays()) {
-    return
-  }
-  if (readerStore.setting.turnMode === 'SCROLL') {
-    const x = (e?.detail?.x ?? e?.changedTouches?.[0]?.clientX) || 0
-    const width = window?.innerWidth || (uni.getSystemInfoSync().windowWidth || 375)
-    const ratio = x / (width || 375)
-    if (ratio < 0.3) { prevChapter(); return }
-    if (ratio > 0.7) { nextChapter(); return }
-  }
-  showTools.value = !showTools.value
-}
-
-function toggleTools() {
-  const now = Date.now()
-  if (now - lastToolsToggleAt < 160) return
-  lastToolsToggleAt = now
-  if (chapterSwitching.value) return
-  if (closeReaderOverlays()) {
-    return
-  }
-  showTools.value = !showTools.value
-}
-
-function hideToolsLayer() {
-  const now = Date.now()
-  if (now - lastToolsToggleAt < 160) return
-  lastToolsToggleAt = now + 650
-  closeReaderOverlays()
-  showTools.value = false
-}
-
-function onCenterToggleNative(event) {
-  event?.preventDefault?.()
-  event?.stopPropagation?.()
-  hideToolsLayer()
-}
-
-function resolveElement(viewRef) {
-  const raw = viewRef?.value
-  return raw?.$el || raw
-}
-
-function bindCenterToggle() {
-  // #ifdef H5
-  if (typeof document === 'undefined') return
-  const nextEl = resolveElement(centerToggleRef) || document.querySelector('.reader-center-toggle')
-  if (!nextEl || nextEl === centerToggleEl) return
-  unbindCenterToggle()
-  centerToggleEl = nextEl
-  centerToggleEl.addEventListener('click', onCenterToggleNative)
-  centerToggleEl.addEventListener('pointerup', onCenterToggleNative)
-  centerToggleEl.addEventListener('touchend', onCenterToggleNative, { passive: false })
-  // #endif
-}
-
-function isCenterToggleActive() {
-  return Boolean(
-    rawContent.value &&
-    readerStore.setting.turnMode !== 'SCROLL' &&
-    (showTools.value || settingVisible.value || catalogVisible.value || paragraphMenuVisible.value || paragraphComposerVisible.value || typoFeedbackVisible.value || paragraphCommentsVisible.value)
-  )
-}
-
-function isCenterTogglePoint(x, y) {
-  if (!isCenterToggleActive()) return false
-  const width = window?.innerWidth || uni.getSystemInfoSync().windowWidth || 375
-  const height = window?.innerHeight || uni.getSystemInfoSync().windowHeight || 667
-  return x >= width * 0.28 && x <= width * 0.72 && y >= 54 && y <= height - 128
-}
-
-function onDocumentCenterPointerDown(event) {
-  if (!isCenterTogglePoint(event.clientX, event.clientY)) return
-  centerTogglePointerStart = { x: event.clientX, y: event.clientY }
-}
-
-function onDocumentCenterPointerUp(event) {
-  const start = centerTogglePointerStart
-  centerTogglePointerStart = null
-  if (!start || !isCenterTogglePoint(event.clientX, event.clientY)) return
-  const dx = Math.abs(event.clientX - start.x)
-  const dy = Math.abs(event.clientY - start.y)
-  if (dx > 10 || dy > 10) return
-  event.preventDefault?.()
-  event.stopPropagation?.()
-  hideToolsLayer()
-}
-
-function onDocumentCenterClick(event) {
-  if (!isCenterTogglePoint(event.clientX, event.clientY)) return
-  event.preventDefault?.()
-  event.stopPropagation?.()
-  hideToolsLayer()
-}
-
-function unbindCenterToggle() {
-  // #ifdef H5
-  if (!centerToggleEl) return
-  centerToggleEl.removeEventListener('click', onCenterToggleNative)
-  centerToggleEl.removeEventListener('pointerup', onCenterToggleNative)
-  centerToggleEl.removeEventListener('touchend', onCenterToggleNative)
-  centerToggleEl = null
-  // #endif
-}
-
-function toggleSetting() {
-  clearParagraphTools()
-  catalogVisible.value = false
-  settingVisible.value = !settingVisible.value
-}
-
-function toggleBookshelf() {
-  if (!bookId.value) return
-  uni.showToast({ title: '已加入书架', icon: 'none' })
-}
-
-function toggleNight() {
-  const next = readerStore.setting.theme === 'NIGHT' ? 'DEFAULT' : 'NIGHT'
-  saveSetting({ theme: next })
-}
-
-function onCatalogTap() {
-  catalogVisible.value = true
-  showTools.value = false
-}
-
-async function jumpChapter(no) {
-  catalogVisible.value = false
-  await switchChapter(Number(no || 1), { toLastPage: false })
-}
-
-function onMoreSettings() {
-  uni.showToast({ title: '更多设置即将上线', icon: 'none' })
-}
-
-function onBrightnessChange(val) {
-  brightness.value = Math.max(20, Math.min(100, Number(val) || 80))
-  uni.setStorageSync('readerBrightness', brightness.value)
-}
-
-function onEyeProtectionChange(val) {
-  eyeProtection.value = !!val
-  uni.setStorageSync('readerEyeProtection', eyeProtection.value)
-}
-
-// ---- chapter nav ----
-async function goBack() {
-  await saveProgress()
-  stopAutoPage()
-  const pages = getCurrentPages()
-  if (pages.length > 1) {
-    uni.navigateBack()
-    return
-  }
-  if (bookId.value) {
-    uni.redirectTo({ url: `/pages/book/detail?id=${bookId.value}` })
-    return
-  }
-  uni.switchTab({ url: '/pages/index/index' })
-}
-
-async function prevChapter() {
-  if (chapterNo.value <= 1) {
-    uni.showToast({ title: '已经是第一章', icon: 'none' })
-    return
-  }
-  await switchChapter(chapterNo.value - 1, { toLastPage: true })
-}
-
-async function nextChapter() {
-  if (maxChapterNo.value && chapterNo.value >= maxChapterNo.value) {
-    uni.showToast({ title: '已经是最后一章', icon: 'none' })
-    return
-  }
-  await switchChapter(chapterNo.value + 1, { toLastPage: false })
-}
-
-async function switchChapter(targetChapterNo, { toLastPage = false } = {}) {
-  if (chapterSwitching.value) return
-  if (!bookId.value || !targetChapterNo) return
-  const normalizedNo = Number(targetChapterNo)
-  const maxNo = Number(maxChapterNo.value || 0)
-  if (!normalizedNo || normalizedNo < 1 || (maxNo && normalizedNo > maxNo)) {
-    uni.showToast({ title: '章节不存在', icon: 'none' })
-    return
-  }
-  chapterSwitching.value = true
-  if (chapterLoadRetryTimer) {
-    clearTimeout(chapterLoadRetryTimer)
-    chapterLoadRetryTimer = null
-  }
-  chapterLoadRetryCount = 0
-  closeReaderOverlays()
-  saveProgress().catch(() => {})
-  try {
-    const target = await ensureChapterPreloaded(normalizedNo)
-    if (!target?.content) {
-      uni.showToast({ title: '章节不存在', icon: 'none' })
-      return
-    }
-    stopAutoPage()
-    chapterNo.value = Number(target.chapterNo || normalizedNo)
-    // Update data in-place so ViewPageReader stays mounted and repaginates
-    currentChapter.value = { ...target }
-    currentTitle.value = target.title || ''
-    currentContent.value = target.content || ''
-    readerStore.$patch({ chapter: target })
-    saveLastReaderRoute()
-    loadFailed.value = false
-    pageModePage.value = toLastPage ? Number.MAX_SAFE_INTEGER : 0
-    position.value = 0
-    syncReaderUrl()
-    await nextTick()
-    if (toLastPage) {
-      pageReaderRef.value?.goToLastPage()
-    } else {
-      pageReaderRef.value?.goToPage?.(0)
-    }
-    preloadAdjacentChapters()
-    loadChapterComments()
-    startAutoPage()
-  } finally {
-    chapterSwitching.value = false
-  }
-}
-
-const scrollContentHeight = ref(0)
-
-function onScroll(event) {
-  position.value = Math.floor(event.detail.scrollTop || 0)
-  const sh = Number(event.detail.scrollHeight || 0)
-  if (sh) scrollContentHeight.value = sh
-}
-
-// ---- auto page ----
-function startAutoPage() {
-  if (!readerStore.setting.autoPageEnabled) return
-  stopAutoPage()
-  const interval = (readerStore.setting.autoPageInterval || 15) * 1000
-  autoPageTimer = setInterval(() => {
-    if (settingVisible.value) return
-    if (readerStore.setting.turnMode === 'PAGE' && pageReaderRef.value) {
-      const total = pageReaderRef.value.totalPages || 0
-      const cur = pageReaderRef.value.currentPage || 0
-      if (cur < total - 1) {
-        pageReaderRef.value.doFlip?.(1)
-      } else {
-        nextChapter()
-      }
-    }
-  }, interval)
-}
-
-function stopAutoPage() {
-  if (autoPageTimer) {
-    clearInterval(autoPageTimer)
-    autoPageTimer = null
-  }
-}
-
-function restartAutoPage() {
-  stopAutoPage()
-  startAutoPage()
-}
-
-function startAutoSave() {
-  stopAutoSave()
-  autoSaveTimer = setInterval(() => {
-    if (userStore.isLoggedIn && chapter.value) {
-      saveProgress()
-    }
-  }, 5000)
-}
-
-function stopAutoSave() {
-  if (autoSaveTimer) {
-    clearInterval(autoSaveTimer)
-    autoSaveTimer = null
-  }
-}
-
-watch(() => readerStore.setting.autoPageEnabled, (enabled) => {
-  if (enabled) startAutoPage()
-  else stopAutoPage()
-})
-
-watch(() => readerStore.setting.autoPageInterval, () => {
-  if (readerStore.setting.autoPageEnabled) restartAutoPage()
-})
-
-watch(
-  () => [
-    rawContent.value,
-    readerStore.setting.turnMode,
-    showTools.value,
-    settingVisible.value,
-    catalogVisible.value,
-    paragraphMenuVisible.value,
-    paragraphComposerVisible.value,
-    typoFeedbackVisible.value,
-    paragraphCommentsVisible.value
-  ],
-  () => nextTick(bindCenterToggle)
-)
-
-// ---- setting ----
-function saveSetting(patch) {
-  if (userStore.isLoggedIn) {
-    readerStore.saveSetting(patch)
-  } else {
-    readerStore.updateLocalSetting(patch)
-  }
-}
-
-async function saveProgress() {
-  if (!userStore.isLoggedIn || !chapter.value) return null
-  return readerStore.saveProgress(bookId.value, {
-    chapterId: chapter.value.id,
-    chapterNo: chapterNo.value,
-    position: position.value,
-    progressPercent: 0,
-    durationSeconds: 0
-  })
-}
-
-// ---- init ----
-function resolveReaderQuery(query = {}) {
-  const resolved = { ...(query || {}) }
-  // #ifdef H5
-  if ((!resolved.bookId || !resolved.chapterNo) && typeof window !== 'undefined') {
-    const hash = window.location.hash || ''
-    const queryText = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : ''
-    const params = new URLSearchParams(queryText)
-    if (!resolved.bookId) resolved.bookId = params.get('bookId') || ''
-    if (!resolved.chapterNo) resolved.chapterNo = params.get('chapterNo') || ''
-    if (!resolved.page) resolved.page = params.get('page') || ''
-  }
-  // #endif
-  if (!resolved.bookId) {
-    const last = getLastReaderRoute()
-    if (last?.bookId) {
-      resolved.bookId = last.bookId
-      resolved.chapterNo = resolved.chapterNo || last.chapterNo || 1
-    }
-  }
-  return resolved
-}
-
-function syncReaderUrl() {
-  // #ifdef H5
-  if (typeof window === 'undefined' || !bookId.value) return
-  const nextHash = `/pages/reader/reader?bookId=${encodeURIComponent(bookId.value)}&chapterNo=${encodeURIComponent(chapterNo.value)}`
-  if ((window.location.hash || '').replace(/^#/, '') === nextHash) return
-  window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${nextHash}`)
-  // #endif
-}
-
-async function initReader(query, options = {}) {
-  if (initializing && !options.force) return
-  initializing = true
-  const resolved = resolveReaderQuery(query)
-  bookId.value = resolved.bookId
-  chapterNo.value = Number(resolved.chapterNo || 1)
-  syncReaderUrl()
-  pageModePage.value = resolved.page === 'last' ? Number.MAX_SAFE_INTEGER : Number(resolved.page || 0)
-    if (!bookId.value) {
-      currentChapter.value = null
-      currentTitle.value = ''
-      currentContent.value = ''
-      readerStore.$patch({ chapter: null })
-    uni.showToast({ title: '缺少书籍参数', icon: 'none' })
-    initializing = false
-    return
-  }
-  try {
-    if (userStore.isLoggedIn) {
-      readerStore.loadSetting().catch(() => {})
-    }
-    await readerStore.loadChapters(bookId.value)
-    await loadChapter({ restoreSavedProgress: !resolved.page })
-    if (resolved.page === 'last') {
-      await nextTick()
-      pageReaderRef.value?.goToLastPage()
-    }
-    startAutoPage()
-  } finally {
-    initializing = false
-  }
-}
-
-function hasLoadedChapter(targetBookId, targetChapterNo) {
-  const loaded = currentChapter.value || readerStore.chapter
-  return !!loaded?.content &&
-    String(loaded.bookId) === String(targetBookId) &&
-    Number(loaded.chapterNo) === Number(targetChapterNo)
-}
-
-async function ensureReaderReady() {
-  if (initializing) {
-    showRetryTimer = setTimeout(ensureReaderReady, 120)
-    return
-  }
-  const resolved = resolveReaderQuery()
-  const targetBookId = resolved.bookId || bookId.value
-  const targetChapterNo = Number(resolved.chapterNo || chapterNo.value || 1)
-  if (!targetBookId) return
-  if (hasLoadedChapter(targetBookId, targetChapterNo)) {
-    bookId.value = targetBookId
-    chapterNo.value = targetChapterNo
-    syncReaderUrl()
-    return
-  }
-  await initReader({ bookId: targetBookId, chapterNo: targetChapterNo }, { force: true })
-}
-
-onLoad((query) => { initReader(query) })
 
 onMounted(() => {
-  if (showRetryTimer) clearTimeout(showRetryTimer)
-  showRetryTimer = setTimeout(ensureReaderReady, 0)
-  nextTick(bindCenterToggle)
-  // #ifdef H5
-  if (typeof window !== 'undefined') {
-    window.addEventListener('hashchange', ensureReaderReady)
-    document.addEventListener('pointerdown', onDocumentCenterPointerDown, true)
-    document.addEventListener('pointerup', onDocumentCenterPointerUp, true)
-    document.addEventListener('click', onDocumentCenterClick, true)
-  }
-  // #endif
-})
-
-onShow(() => {
-  if (showRetryTimer) clearTimeout(showRetryTimer)
-  showRetryTimer = setTimeout(ensureReaderReady, 0)
-})
-
-onUnload(() => {
-  if (showRetryTimer) clearTimeout(showRetryTimer)
-  if (chapterLoadRetryTimer) clearTimeout(chapterLoadRetryTimer)
-  unbindCenterToggle()
-  stopAutoPage()
-  stopAutoSave()
-  saveProgress()
+  document.addEventListener('selectionchange', onSelectionChange)
+  document.addEventListener('click', onDocClick)
+  applyAllUI()
+  updateBackIndicator()
 })
 
 onBeforeUnmount(() => {
-  if (showRetryTimer) clearTimeout(showRetryTimer)
-  if (chapterLoadRetryTimer) clearTimeout(chapterLoadRetryTimer)
-  unbindCenterToggle()
-  // #ifdef H5
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('hashchange', ensureReaderReady)
-    document.removeEventListener('pointerdown', onDocumentCenterPointerDown, true)
-    document.removeEventListener('pointerup', onDocumentCenterPointerUp, true)
-    document.removeEventListener('click', onDocumentCenterClick, true)
-  }
-  // #endif
-  stopAutoPage()
-  stopAutoSave()
+  clearAutoHideTimer()
+  document.removeEventListener('selectionchange', onSelectionChange)
+  document.removeEventListener('click', onDocClick)
 })
+
+// ===================== UI SYNC (directive bug workaround) =====================
+
+/** Get native DOM element from a uni-app component proxy, a plain DOM element, or a Vue ref */
+function $el(thing) {
+  if (!thing) return null
+  const v = thing.$el ?? thing  // component proxy → DOM element
+  return v
+}
+
+function toggleClass(thing, cls, state) {
+  const el = $el(thing)
+  if (el?.classList) el.classList.toggle(cls, !!state)
+}
+
+/** Full UI sync, called on mount & on major state changes */
+function applyAllUI() {
+  nextTick(() => {
+    applyReaderTheme()
+    applyToolbar()
+    applySelectionMenu()
+    applyModals()
+    applySettingsPanel()
+    applyActiveStates()
+    applySwitches()
+    applyBadge()
+    applyProgressBar()
+  })
+}
+
+function applyReaderTheme() {
+  const el = $el(readerAreaRef.value)
+  if (!el) return
+  const t = THEMES[theme.value] ?? THEMES.PARCHMENT
+  const bgColor = t.bg
+  el.style.backgroundColor = bgColor
+  el.style.color = t.text
+  el.style.fontSize = `${fontSize.value}px`
+  el.style.fontFamily =
+    fontFamily.value === 'SERIF'
+      ? "'Noto Serif SC','Source Han Serif SC',SimSun,STSong,serif"
+      : "'KaiTi','STKaiti',Kai,serif"
+  el.style.lineHeight = '1.8'
+
+  const filters = []
+  if (eyeProtection.value) filters.push('sepia(0.2) saturate(0.9) brightness(0.95)')
+  if (brightness.value < 100) filters.push(`brightness(${brightness.value / 100})`)
+  el.style.filter = filters.length ? filters.join(' ') : 'none'
+
+  // Wallpaper background
+  if (currentWallpaper.value >= 0 && wallpapers[currentWallpaper.value]) {
+    el.style.backgroundImage = wallpapers[currentWallpaper.value]
+    el.style.backgroundSize = 'cover'
+  } else {
+    el.style.backgroundImage = ''
+  }
+
+  // Stage perspective
+  const st = $el(pageStageRef.value)
+  if (st) st.style.perspective = turnMode.value === 'SIMULATION' ? '1500px' : 'none'
+
+  // Sync background to flip elements so they're opaque during 3D rotation
+  const flipEls = [flipFrontRef, flipBackRef, frontPageRef, backPageRef]
+  flipEls.forEach(ref => {
+    const dom = $el(ref.value)
+    if (dom) dom.style.backgroundColor = bgColor
+  })
+}
+
+function applyToolbar() {
+  const v = toolbarVisible.value
+  toggleClass(topBarRef.value, 'visible', v)
+  toggleClass(bottomPanelRef.value, 'visible', v)
+  toggleClass(listenFabRef.value, 'visible', v)
+}
+
+function applySelectionMenu() {
+  const el = $el(selectionMenuRef.value)
+  if (!el) return
+  if (selectionVisible.value && selectionText.value) {
+    el.style.display = 'block'
+    el.style.left = `${menuX.value}px`
+    el.style.top = `${menuY.value}px`
+    el.style.opacity = '1'
+    el.style.pointerEvents = 'auto'
+    // Show/hide typo button
+    const tb = $el(typoBtnRef2.value)
+    if (tb) tb.style.display = selectionText.value.length > 5 ? '' : 'none'
+    // Update highlight button text
+    const hb = $el(highlightBtnRef.value)
+    if (hb) hb.textContent = hasCurrentHighlight.value ? '取消划线' : '划线'
+  } else {
+    el.style.display = 'none'
+    el.style.opacity = '0'
+    el.style.pointerEvents = 'none'
+  }
+}
+
+function applyModals() {
+  const sh = $el(shareOverlayRef.value)
+  const cm = $el(commentOverlayRef.value)
+  if (sh) sh.style.display = shareVisible.value ? 'flex' : 'none'
+  if (cm) cm.style.display = commentWriterVisible.value ? 'flex' : 'none'
+}
+
+function applySettingsPanel() {
+  toggleClass(settingsOverlayRef.value, 'visible', settingsVisible.value)
+  toggleClass(settingsSheetRef.value, 'visible', settingsVisible.value)
+}
+
+function applyActiveStates() {
+  // Font select
+  const fw = $el(fontOptionsWrapRef.value)
+  if (fw) {
+    const items = fw.querySelectorAll('.font-option')
+    items.forEach((el, i) => el.classList.toggle('active', fontOptions[i]?.value === fontFamily.value))
+  }
+  // Theme chips
+  const tw = $el(themeChipsRef.value)
+  if (tw) {
+    const chips = tw.querySelectorAll('.theme-chip')
+    chips.forEach((el, i) => {
+      const active = themeOptions[i]?.key === theme.value
+      el.classList.toggle('active', active)
+      const tick = el.querySelector('.theme-chip-tick')
+      if (tick) tick.style.display = active ? '' : 'none'
+    })
+  }
+  // Wallpaper
+  const ww = $el(wallpaperRef.value)
+  if (ww) {
+    const chips = ww.querySelectorAll('.wallpaper-chip')
+    chips.forEach((el, i) => el.classList.toggle('active', i === currentWallpaper.value))
+  }
+  // Turn mode
+  const tm = $el(turnModeRef.value)
+  if (tm) {
+    const items = tm.querySelectorAll('.turn-mode-item')
+    items.forEach((el, i) => el.classList.toggle('active', turnModes[i]?.value === turnMode.value))
+  }
+}
+
+function applySwitches() {
+  [eyeSwitchRef2, paraBreakSwitchRef2, inlineCommentsSwitchRef2].forEach((refVal, i) => {
+    const el = $el(refVal.value)
+    if (el) {
+      const input = el.querySelector('input') ?? el
+      const states = [eyeProtection.value, paragraphBreak.value, showInlineComments.value]
+      if (input.checked !== undefined) input.checked = states[i]
+    }
+  })
+}
+
+function applyBadge() {
+  const el = $el(commentBadgeRef.value)
+  if (!el) return
+  if (commentCount.value > 0) {
+    el.style.display = ''
+    el.textContent = commentCount.value > 99 ? '99+' : String(commentCount.value)
+  } else {
+    el.style.display = 'none'
+  }
+}
+
+function applyProgressBar() {
+  const fill = $el(progressFillRef.value)
+  const thumb = $el(progressThumbRef.value)
+  const total = totalPages.value
+  const cur = Math.max(0, Math.min(currentPage.value, total - 1))
+  const pct = total <= 1 ? 0 : (cur / (total - 1)) * 100
+  if (fill) fill.style.width = `${pct}%`
+  if (thumb) thumb.style.left = `${pct}%`
+}
+
+// ===================== WATCHERS =====================
+watch([fontSize, fontFamily, theme, brightness, eyeProtection, paragraphSpacing, paragraphBreak], () => {
+  applyReaderTheme()
+  saveSettings()
+})
+watch(turnMode, () => { applyReaderTheme(); applyActiveStates(); saveSettings() })
+watch(currentWallpaper, () => { applyReaderTheme(); applyActiveStates(); saveSettings() })
+watch(showInlineComments, saveSettings)
+watch(toolbarVisible, applyToolbar)
+watch(selectionVisible, applySelectionMenu)
+watch(settingsVisible, applySettingsPanel)
+watch(shareVisible, applyModals)
+watch(commentWriterVisible, applyModals)
+watch(commentCount, applyBadge)
+watch([eyeProtection, paragraphBreak, showInlineComments], applySwitches)
+watch(currentPage, applyProgressBar)
+watch(totalPages, applyProgressBar)
+watch(pages, () => { nextTick(renderFrontPage) })
+
+// ===================== SETTINGS PERSISTENCE =====================
+function loadSettings() {
+  try {
+    const s = uni.getStorageSync('readerSettings')
+    if (s) {
+      fontSize.value = s.fontSize ?? 18
+      fontFamily.value = s.fontFamily ?? 'SERIF'
+      theme.value = s.theme ?? 'PARCHMENT'
+      brightness.value = s.brightness ?? 80
+      eyeProtection.value = s.eyeProtection ?? false
+      turnMode.value = s.turnMode ?? 'SIMULATION'
+      paragraphSpacing.value = s.paragraphSpacing ?? 6
+      paragraphBreak.value = s.paragraphBreak ?? true
+      showInlineComments.value = s.showInlineComments ?? true
+    }
+  } catch (_) {}
+}
+
+function saveSettings() {
+  try {
+    uni.setStorageSync('readerSettings', {
+      fontSize: fontSize.value,
+      fontFamily: fontFamily.value,
+      theme: theme.value,
+      brightness: brightness.value,
+      eyeProtection: eyeProtection.value,
+      turnMode: turnMode.value,
+      paragraphSpacing: paragraphSpacing.value,
+      paragraphBreak: paragraphBreak.value,
+      showInlineComments: showInlineComments.value,
+    })
+  } catch (_) {}
+}
+
+// ===================== DATA LOADING + CACHE =====================
+function cacheKey(bId, chNo) { return `${bId}:${chNo}` }
+
+function persistChapterCache() {
+  try { uni.setStorageSync('chapterCache', chapterCache) } catch (_) {}
+}
+function restoreChapterCache() {
+  try {
+    const saved = uni.getStorageSync('chapterCache')
+    if (saved) Object.assign(chapterCache, saved)
+  } catch (_) {}
+}
+
+async function loadChapter(desiredPage) {
+  const key = cacheKey(bookId.value, chapterNo.value)
+  const cached = chapterCache[key]
+
+  // Show cached content immediately if available
+  if (cached) {
+    chapterTitle.value = cached.title
+    maxChapterNo.value = cached.maxChapterNo
+    rawContent.value = cached.content
+    splitIntoPages(rawContent.value, desiredPage)
+  }
+
+  // Fetch fresh data from API
+  try {
+    const data = await request({
+      url: `/api/v1/books/${bookId.value}/chapters/${chapterNo.value}`,
+      method: 'GET',
+    })
+    if (data?.code === 200 && data?.data) {
+      const ch = data.data
+      chapterTitle.value = ch.title ?? ''
+      maxChapterNo.value = ch.maxChapterNo ?? ch.totalChapters ?? 0
+      rawContent.value = ch.content ?? ''
+      // Update cache
+      chapterCache[key] = {
+        title: chapterTitle.value,
+        content: rawContent.value,
+        maxChapterNo: maxChapterNo.value,
+      }
+      persistChapterCache()
+      // Re-split only if content differs from cached version
+      if (!cached || cached.content !== rawContent.value) {
+        splitIntoPages(rawContent.value, desiredPage)
+      }
+    }
+  } catch (e) {
+    console.error('loadChapter failed:', e)
+  }
+
+  // Schedule deferred re-split to catch layout-timing issues
+  // (on first load, DOM may not be settled, causing wrong clientHeight)
+  scheduleSettleCheck()
+
+  // Preload adjacent chapters in background
+  preloadAdjacentChapters()
+}
+
+/** Deferred re-split after fonts/layout settle, to fix first-load timing issues */
+function scheduleSettleCheck() {
+  if (splitSettleTimer) clearTimeout(splitSettleTimer)
+  const capturedContent = rawContent.value
+  const capturedChapter = chapterNo.value
+  splitSettleTimer = setTimeout(async () => {
+    splitSettleTimer = null
+    // Only re-split if still on the same chapter
+    if (chapterNo.value !== capturedChapter || rawContent.value !== capturedContent) return
+    try { await document.fonts.ready } catch (_) {}
+    requestAnimationFrame(() => {
+      if (chapterNo.value !== capturedChapter || rawContent.value !== capturedContent) return
+      const raEl = $el(readerAreaRef.value)
+      const settledH = raEl?.clientHeight || window.innerHeight
+      if (settledH >= 100 && pages.value.length > 0) {
+        splitIntoPages(rawContent.value, currentPage.value)
+      }
+    })
+  }, 800)
+}
+
+async function preloadAdjacentChapters() {
+  const bId = bookId.value
+  const curNo = chapterNo.value
+  const maxNo = maxChapterNo.value
+  // Preload next chapter
+  if (curNo < maxNo) {
+    preloadSingleChapter(bId, curNo + 1)
+  }
+  // Preload previous chapter
+  if (curNo > 1) {
+    preloadSingleChapter(bId, curNo - 1)
+  }
+}
+
+async function preloadSingleChapter(bId, chNo) {
+  const key = cacheKey(bId, chNo)
+  if (chapterCache[key]) return  // already cached
+  try {
+    const data = await request({
+      url: `/api/v1/books/${bId}/chapters/${chNo}`,
+      method: 'GET',
+    })
+    if (data?.code === 200 && data?.data) {
+      const ch = data.data
+      chapterCache[key] = {
+        title: ch.title ?? '',
+        content: ch.content ?? '',
+        maxChapterNo: ch.maxChapterNo ?? ch.totalChapters ?? 0,
+      }
+      persistChapterCache()
+    }
+  } catch (_) {
+    // Preload failure is non-critical
+  }
+}
+
+// ===================== PAGE SPLITTING =====================
+function splitIntoPages(content, targetPage) {
+  if (!content) {
+    pages.value = ['<p style="text-align:center;color:#999;margin-top:40px">（暂无内容）</p>']
+    currentPage.value = targetPage === -1 ? 0 : (targetPage ?? 0)
+    return
+  }
+
+  const paragraphs = content.split(/\n+/).filter(p => p.trim())
+  if (!paragraphs.length) {
+    pages.value = ['<p style="text-align:center;color:#999;margin-top:40px">（暂无内容）</p>']
+    currentPage.value = targetPage === -1 ? 0 : (targetPage ?? 0)
+    return
+  }
+
+  const raEl = $el(readerAreaRef.value)
+  const viewH = raEl?.clientHeight || window.innerHeight
+  if (viewH < 100) {
+    currentPage.value = targetPage === -1 ? 0 : (targetPage ?? 0);
+    return
+  }
+
+  const measureWidth = raEl?.clientWidth || window.innerWidth
+
+  // Build paragraph HTMLs (all styles matching .page-body p:
+  // margin:0, text-indent:2em, text-align:justify, line-height:inherit)
+  const P_STYLE = 'margin:0;text-indent:2em;line-height:inherit'
+  const paraHtmls = []
+  for (const para of paragraphs) {
+    const body = escapeHtml(para)
+    if (paragraphBreak.value) {
+      paraHtmls.push(`<p style="${P_STYLE};margin-bottom:${paragraphSpacing.value * 2}px">${body}</p>`)
+    } else {
+      paraHtmls.push(`<p style="${P_STYLE}">${body}</p>`)
+    }
+  }
+
+  // ----- Pre-measure all paragraphs cumulatively -----
+  const measure = document.createElement('div')
+  measure.style.cssText = `
+    position:absolute;left:-9999px;top:0;
+    width:${measureWidth}px;
+    font-size:${fontSize.value}px;
+    line-height:1.8;
+    font-family:${fontFamily.value === 'SERIF' ? "'Noto Serif SC','Source Han Serif SC',SimSun,STSong,serif" : "'KaiTi','STKaiti',Kai,serif"};
+    padding:44px 16px 24px;
+    box-sizing:border-box;
+    text-align:justify;
+    word-break:break-word;
+    overflow-wrap:break-word;
+  `
+  document.body.appendChild(measure)
+
+  const cumH = []
+  measure.innerHTML = ''
+  for (const h of paraHtmls) {
+    measure.innerHTML += h
+    cumH.push(measure.scrollHeight)
+  }
+  // cumH[i] = scrollHeight(paragraphs[0..i]) = topPad + content + botPad
+
+  const TOP = 44
+  const BOT = 24
+  const titleH = 46  // 4px padding-top + 20*1.4 line-height + 14px margin-bottom
+
+  // scrollHeight for paragraphs [s, e] (s, e inclusive)
+  function rangeH(s, e) {
+    if (s === 0) return cumH[e]
+    return cumH[e] - cumH[s - 1] + TOP + BOT
+  }
+
+  const result = []
+  let start = 0
+  let firstPage = true
+
+  while (start < paraHtmls.length) {
+    const maxH = firstPage ? viewH - titleH : viewH
+    let end = start
+
+    // Scan forward: find the last paragraph that keeps total ≤ maxH
+    while (end < paraHtmls.length) {
+      if (rangeH(start, end) > maxH) break
+      end++
+    }
+    end--
+
+    // If even the first paragraph alone exceeds maxH, include it anyway
+    if (end < start) end = start
+
+    result.push(paraHtmls.slice(start, end + 1).join(''))
+    start = end + 1
+    firstPage = false
+  }
+
+  // ----- Rebalance: compress sparse tail pages to achieve ≥90% fill -----
+  while (result.length >= 2) {
+    const lastIdx = result.length - 1
+    const prevIdx = result.length - 2
+
+    // Measure last page fill
+    measure.innerHTML = result[lastIdx]
+    const lastH = measure.scrollHeight
+    // Already ≥ 90% of a full non-first page → done
+    if (lastH >= 0.9 * viewH) break
+
+    const prevMaxH = prevIdx === 0 ? viewH - titleH : viewH
+
+    // --- Attempt 1: merge last two pages into one ---
+    const combinedHtml = result[prevIdx] + result[lastIdx]
+    measure.innerHTML = combinedHtml
+    const combinedH = measure.scrollHeight
+    const combinedMaxH = prevIdx === 0 ? viewH - titleH : viewH
+
+    if (combinedH <= combinedMaxH) {
+      // Merged page doesn't overflow — combine into one
+      result[prevIdx] = combinedHtml
+      result.pop()
+      continue  // re-check the new last page
+    }
+
+    // --- Attempt 2: shift paragraphs between last two pages for balance ---
+    const pRegex = /<p[^>]*>.*?<\/p>/gs
+    const prevParas = result[prevIdx].match(pRegex) || [result[prevIdx]]
+    const lastParas = result[lastIdx].match(pRegex) || [result[lastIdx]]
+
+    if (prevParas.length <= 1) break  // nothing to shift
+
+    // Try moving 1..N paragraphs from end of prev page to start of last page
+    let bestPrevHtml = result[prevIdx]
+    let bestLastHtml = result[lastIdx]
+    let bestMinFill = 0
+    const maxMove = Math.min(prevParas.length - 1, 5)  // move at most 5
+
+    for (let n = 1; n <= maxMove; n++) {
+      const moved = prevParas.slice(prevParas.length - n).join('')
+      const newPrev = prevParas.slice(0, prevParas.length - n).join('')
+      const newLast = moved + result[lastIdx]
+
+      measure.innerHTML = newPrev
+      const h1 = measure.scrollHeight
+      measure.innerHTML = newLast
+      const h2 = measure.scrollHeight
+
+      if (h1 > prevMaxH || h2 > viewH) continue  // would overflow — skip
+
+      const fill1 = h1 / prevMaxH
+      const fill2 = h2 / viewH
+      const minFill = Math.min(fill1, fill2)
+
+      if (minFill > bestMinFill) {
+        bestMinFill = minFill
+        bestPrevHtml = newPrev
+        bestLastHtml = newLast
+      }
+    }
+
+    if (bestMinFill > 0) {
+      result[prevIdx] = bestPrevHtml
+      result[lastIdx] = bestLastHtml
+    }
+    break  // only rebalance the tail once
+  }
+
+  document.body.removeChild(measure)
+  pages.value = result.length ? result : ['<p style="text-align:center;color:#999;margin-top:40px">（暂无内容）</p>']
+
+  // Set current page
+  if (targetPage === -1) {
+    currentPage.value = pages.value.length - 1
+  } else if (typeof targetPage === 'number' && targetPage >= 0) {
+    currentPage.value = Math.min(targetPage, pages.value.length - 1)
+  } else {
+    currentPage.value = 0
+  }
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/** Update persistent back-indicator text */
+function updateBackIndicator() {
+  const el = $el(backIndicatorTextRef.value)
+  if (!el) return
+  const label = currentPage.value === 0
+    ? (bookTitle.value || chapterTitle.value)
+    : chapterTitle.value
+  el.textContent = label || '返回'
+}
+
+/** Push current page HTML into the front-page DOM */
+function renderFrontPage() {
+  updateBackIndicator()
+  const titleEl = $el(frontTitleRef.value)
+  const bodyEl = $el(frontBodyRef.value)
+  if (titleEl) {
+    titleEl.textContent = chapterTitle.value
+    titleEl.style.display = currentPage.value === 0 ? '' : 'none'
+  }
+  if (bodyEl) bodyEl.innerHTML = pages.value[currentPage.value] ?? ''
+  nextTick(applyHighlightsToDOM)
+}
+
+// Hide title when not on first page; update persistent back indicator
+watch(currentPage, () => {
+  updateBackIndicator()
+  nextTick(() => {
+    const titleEl = $el(frontTitleRef.value)
+    if (titleEl) titleEl.style.display = currentPage.value === 0 ? '' : 'none'
+  })
+})
+
+// ===================== PAGE NAVIGATION =====================
+function prevPage() {
+  if (toolbarVisible.value) { toolbarVisible.value = false; clearAutoHideTimer(); return }
+  if (isFlipping.value) return
+  if (currentPage.value > 0) return doFlip(-1)
+  prevChapter()
+}
+function nextPage() {
+  if (toolbarVisible.value) { toolbarVisible.value = false; clearAutoHideTimer(); return }
+  if (isFlipping.value) return
+  if (currentPage.value < totalPages.value - 1) return doFlip(1)
+  nextChapter()
+}
+
+function prevChapter() {
+  if (chapterNo.value <= 1) {
+    uni.showToast({ title: '已经是第一章了', icon: 'none' })
+    return
+  }
+  chapterNo.value--
+  loadChapter(-1)  // -1 = last page
+}
+
+function nextChapter() {
+  if (maxChapterNo.value && chapterNo.value >= maxChapterNo.value) {
+    uni.showToast({ title: '已经是最后一章了', icon: 'none' })
+    return
+  }
+  chapterNo.value++
+  loadChapter(0)  // 0 = first page
+}
+
+// ===================== 3D PAGE FLIP =====================
+function doFlip(dir) {
+  const targetIdx = currentPage.value + dir
+  if (targetIdx < 0 || targetIdx >= totalPages.value) return
+
+  isFlipping.value = true
+  flipDirection.value = dir
+
+  const isSim = turnMode.value === 'SIMULATION'
+
+  // For non-SIMULATION modes: show back page content behind the flip
+  if (!isSim) {
+    const bt = $el(backTitleRef.value)
+    const bb = $el(backBodyRef.value)
+    if (bt) bt.textContent = chapterTitle.value
+    if (bb) bb.innerHTML = pages.value[targetIdx] ?? ''
+    const bp = $el(backPageRef.value)
+    if (bp) bp.style.display = ''
+  }
+
+  // Populate flipping element content
+  const fft = $el(flipFrontTitleRef.value)
+  const ffb = $el(flipFrontBodyRef.value)
+  const fbt = $el(flipBackTitleRef.value)
+  const fbb = $el(flipBackBodyRef.value)
+  if (fft) {
+    fft.textContent = chapterTitle.value
+    fft.style.display = currentPage.value === 0 ? '' : 'none'
+  }
+  if (ffb) ffb.innerHTML = pages.value[currentPage.value] ?? ''
+  if (fbt) {
+    fbt.textContent = chapterTitle.value
+    fbt.style.display = targetIdx === 0 ? '' : 'none'
+  }
+  if (fbb) fbb.innerHTML = pages.value[targetIdx] ?? ''
+
+  const fp = $el(flipPageRef.value)
+  if (!fp) return onFlipComplete()
+
+  nextTick(() => {
+    fp.style.display = 'block'
+    fp.style.visibility = ''
+    fp.style.transition = 'none'
+    fp.style.transform = 'none'
+
+    if (turnMode.value === 'SIMULATION') {
+      // 3D flip: rotate around left or right edge
+      fp.style.transformOrigin = dir > 0 ? 'left center' : 'right center'
+      fp.style.transform = 'rotateY(0deg)'
+      fp.style.zIndex = 10
+      // Force initial layout so browser paints the starting frame
+      void fp.offsetHeight
+      // Start animation in next frame for compositor sync
+      requestAnimationFrame(() => {
+        fp.style.transition = 'transform 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)'
+        fp.style.transform = `rotateY(${dir > 0 ? -180 : 180}deg)`
+      })
+    } else if (turnMode.value === 'COVER') {
+      // Cover: new page slides over current
+      fp.style.transform = `translateX(${dir > 0 ? '100%' : '-100%'})`
+      fp.style.transformOrigin = 'center center'
+      fp.style.zIndex = 10
+      void fp.offsetHeight
+      requestAnimationFrame(() => {
+        fp.style.transition = 'transform 0.3s ease'
+        fp.style.transform = 'translateX(0)'
+      })
+    } else if (turnMode.value === 'SLIDE') {
+      // Slide: both pages move together
+      fp.style.transform = `translateX(${dir > 0 ? '100%' : '-100%'})`
+      fp.style.transformOrigin = 'center center'
+      fp.style.zIndex = 10
+      const ff = $el(frontPageRef.value)
+      if (ff) ff.style.transform = 'translateX(0)'
+      void fp.offsetHeight
+      requestAnimationFrame(() => {
+        fp.style.transition = 'transform 0.3s ease'
+        if (ff) {
+          ff.style.transition = 'transform 0.3s ease'
+          ff.style.transform = `translateX(${dir > 0 ? '-30%' : '30%'})`
+        }
+        fp.style.transform = 'translateX(0)'
+      })
+    } else {
+      // NONE / SCROLL: instant switch
+      onFlipComplete()
+    }
+  })
+}
+
+function onFlipTransitionEnd() {
+  if (!isFlipping.value) return
+  onFlipComplete()
+}
+
+function onFlipComplete() {
+  const dir = flipDirection.value
+  currentPage.value += dir
+  currentPage.value = Math.max(0, Math.min(currentPage.value, totalPages.value - 1))
+  isFlipping.value = false
+
+  // Update front page content before hiding flip element
+  const bodyEl = $el(frontBodyRef.value)
+  const titleEl = $el(frontTitleRef.value)
+  if (bodyEl) bodyEl.innerHTML = pages.value[currentPage.value] ?? ''
+  if (titleEl) {
+    titleEl.textContent = chapterTitle.value
+    titleEl.style.display = currentPage.value === 0 ? '' : 'none'
+  }
+  // Force layout so content is painted before flip element is removed
+  void (bodyEl?.offsetHeight)
+
+  // Hide flip element instantly (visibility avoids layout thrash)
+  const fp = $el(flipPageRef.value)
+  if (fp) {
+    fp.style.visibility = 'hidden'
+    fp.style.zIndex = '1'
+  }
+
+  // Reset front page (for SLIDE mode)
+  const ff = $el(frontPageRef.value)
+  if (ff) {
+    ff.style.transition = 'none'
+    ff.style.transform = 'none'
+  }
+
+  // Hide back page
+  const bp = $el(backPageRef.value)
+  if (bp) bp.style.display = 'none'
+
+  // Fully clean up flip element state after paint
+  requestAnimationFrame(() => {
+    if (fp) {
+      fp.style.display = 'none'
+      fp.style.visibility = ''
+      fp.style.transition = 'none'
+      fp.style.transform = 'none'
+      fp.style.zIndex = '10'
+    }
+  })
+
+  nextTick(applyHighlightsToDOM)
+}
+
+// ===================== TOUCH HANDLING =====================
+function onTouchStart(e) {
+  if (isFlipping.value) return
+  const t = e.touches?.[0]
+  if (!t) return
+  touchStartX = t.clientX
+  touchStartY = t.clientY
+  touchTimestamp = Date.now()
+  isDragging = true
+}
+
+function onTouchMove(e) {
+  if (!isDragging) return
+  const t = e.touches?.[0]
+  if (!t) return
+  const dx = t.clientX - touchStartX
+  const dy = Math.abs(t.clientY - touchStartY)
+  if (dy > Math.abs(dx) * 0.5) { isDragging = false; return }
+  if (Math.abs(dx) > 50) {
+    isDragging = false
+    if (dx < 0) nextPage()
+    else prevPage()
+  }
+}
+
+function onTouchEnd() {
+  isDragging = false
+}
+
+// ===================== TOOLBAR =====================
+function toggleToolbar() {
+  toolbarVisible.value = !toolbarVisible.value
+  if (toolbarVisible.value) startAutoHideTimer()
+  else clearAutoHideTimer()
+}
+
+function onDocClick(e) {
+  if (!toolbarVisible.value) return
+  // Hide toolbar if clicking outside our UI
+  const root = $el(readerAreaRef.value)?.closest('.reader-root')
+  if (root && !root.contains(e.target)) return
+  // Don't auto-hide if click is on toolbar or its children
+  const target = e.target
+  if (target.closest('.top-bar') || target.closest('.bottom-panel') ||
+      target.closest('.listen-fab') ||
+      target.closest('.settings-sheet') || target.closest('.settings-overlay') ||
+      target.closest('.selection-menu') || target.closest('.modal-overlay')) {
+    startAutoHideTimer()
+    return
+  }
+}
+
+function startAutoHideTimer() {
+  clearAutoHideTimer()
+  autoHideTimer = setTimeout(() => { toolbarVisible.value = false }, 5000)
+}
+
+function clearAutoHideTimer() {
+  if (autoHideTimer) { clearTimeout(autoHideTimer); autoHideTimer = null }
+}
+
+// ===================== TEXT SELECTION =====================
+function onSelectionChange() {
+  const sel = window.getSelection()
+  if (!sel || sel.isCollapsed || !sel.rangeCount) return
+
+  const range = sel.getRangeAt(0)
+  const text = sel.toString().trim()
+  if (!text || text.length < 2) { hideSelectionMenu(); return }
+
+  // Ensure selection is inside reader area
+  const ra = $el(readerAreaRef.value)
+  if (!ra || !ra.contains(range.commonAncestorContainer)) { hideSelectionMenu(); return }
+
+  selectionText.value = text
+  selectedTextForShare.value = text
+
+  const rect = range.getBoundingClientRect()
+  const menuW = Math.min(360, window.innerWidth - 16)
+  let mx = rect.left + rect.width / 2 - menuW / 2
+  mx = Math.max(8, Math.min(mx, window.innerWidth - menuW - 8))
+  menuX.value = mx
+
+  let my = rect.top - 108
+  if (my < 50) my = rect.bottom + 12
+  menuY.value = my
+
+  selectionVisible.value = true
+}
+
+function hideSelectionMenu() {
+  selectionVisible.value = false
+  selectionText.value = ''
+}
+
+// Selection actions
+function listenSelection()        { hideSelectionMenu(); uni.showToast({ title: '朗读功能开发中', icon: 'none' }) }
+function lookupDictionary()       { hideSelectionMenu(); uni.showToast({ title: '词典功能开发中', icon: 'none' }) }
+function tagSelection(tag)        { hideSelectionMenu(); uni.showToast({ title: `已标记为「${tag}」`, icon: 'none' }) }
+function shareSelection()         { hideSelectionMenu(); selectedTextForShare.value = selectionText.value; shareVisible.value = true }
+function reportTypo()             { openCommentEditor() }
+
+function copySelection() {
+  if (!selectionText.value) return
+  uni.setClipboardData({
+    data: selectionText.value,
+    success: () => { uni.showToast({ title: '已复制', icon: 'success' }); hideSelectionMenu() },
+  })
+}
+
+function openCommentEditor() {
+  hideSelectionMenu()
+  commentText.value = ''
+  commentWriterVisible.value = true
+  nextTick(() => {
+    const ta = $el(commentTextareaRef.value)
+    if (ta) ta.value = ''
+    const input = ta?.querySelector?.('textarea') ?? ta
+    input?.focus?.()
+  })
+}
+
+// ===================== HIGHLIGHTS =====================
+function toggleHighlight() {
+  if (!selectionText.value) return
+  if (hasCurrentHighlight.value) {
+    highlights.value = highlights.value.filter(
+      h => !(h.text === selectionText.value && h.chapterNo === chapterNo.value)
+    )
+    uni.showToast({ title: '已取消划线', icon: 'success' })
+  } else {
+    highlights.value.push({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      bookId: bookId.value,
+      chapterNo: chapterNo.value,
+      text: selectionText.value,
+      color: 'rgba(255, 235, 59, 0.5)',
+      createdAt: Date.now(),
+    })
+    uni.showToast({ title: '已划线', icon: 'success' })
+  }
+  uni.setStorageSync('readerHighlights', highlights.value)
+  applyHighlightsToDOM()
+  hideSelectionMenu()
+}
+
+function applyHighlightsToDOM() {
+  const ra = $el(readerAreaRef.value)
+  if (!ra) return
+
+  // Remove existing highlight spans
+  ra.querySelectorAll('.hl-mark').forEach(el => {
+    const p = el.parentNode
+    if (p) { p.replaceChild(document.createTextNode(el.textContent), el); p.normalize() }
+  })
+
+  const chHighlights = highlights.value.filter(h => h.chapterNo === chapterNo.value)
+  for (const h of chHighlights) {
+    try {
+      const walker = document.createTreeWalker(ra, NodeFilter.SHOW_TEXT, null, false)
+      let node
+      while ((node = walker.nextNode())) {
+        const idx = node.textContent.indexOf(h.text)
+        if (idx === -1) continue
+        const range = document.createRange()
+        range.setStart(node, idx)
+        range.setEnd(node, idx + h.text.length)
+        const span = document.createElement('span')
+        span.className = 'hl-mark'
+        span.style.cssText = `background-color:${h.color};border-radius:2px;padding:0 1px`
+        range.surroundContents(span)
+        break
+      }
+    } catch (_) {}
+  }
+}
+
+// ===================== TOP BAR ACTIONS =====================
+function goBack()             { uni.navigateBack() }
+function addToBookshelf()      { uni.showToast({ title: '已加入书架', icon: 'success' }) }
+function downloadChapter()     { uni.showToast({ title: '下载功能开发中', icon: 'none' }) }
+function showMoreMenu()        { uni.showToast({ title: '更多功能开发中', icon: 'none' }) }
+function openComments()        { toolbarVisible.value = false; uni.showToast({ title: '评论区开发中', icon: 'none' }) }
+
+// ===================== BOTTOM NAV ACTIONS =====================
+function openCatalog()         { toolbarVisible.value = false; uni.showToast({ title: '目录功能开发中', icon: 'none' }) }
+function showMoreAdaptations()  { uni.showToast({ title: '更多改编开发中', icon: 'none' }) }
+function startListening()       { uni.showToast({ title: '朗读功能开发中', icon: 'none' }) }
+
+function toggleNightMode() {
+  theme.value = theme.value === 'NIGHT' ? 'PARCHMENT' : 'NIGHT'
+  nightOverride.value = false
+  // Update nav icons (text interpolation should handle this, but do it manually for safety)
+  const ie = $el(nightIconRef.value)
+  const le = $el(nightLabelRef.value)
+  if (ie) ie.textContent = isNight.value ? '☀️' : '🌙'
+  if (le) le.textContent = isNight.value ? '日间' : '夜间'
+}
+
+function openSettings() {
+  toolbarVisible.value = false
+  settingsVisible.value = true
+}
+function closeSettings() {
+  settingsVisible.value = false
+}
+
+// ===================== SETTINGS ACTIONS =====================
+function onBrightnessChange(e)    { brightness.value = Number(e.detail?.value ?? e.detail ?? 80) }
+function onEyeProtectionChange(e) { eyeProtection.value = !!(e.detail?.value ?? e.detail) }
+function onParagraphBreakChange(e){ paragraphBreak.value = !!(e.detail?.value ?? e.detail) }
+function onInlineCommentsChange(e){ showInlineComments.value = !!(e.detail?.value ?? e.detail) }
+
+function adjustFontSize(dir) {
+  fontSize.value = Math.max(14, Math.min(36, fontSize.value + dir))
+}
+function adjustSpacing(dir) {
+  paragraphSpacing.value = Math.max(0, Math.min(20, paragraphSpacing.value + dir))
+}
+
+function selectFont(val)     { fontFamily.value = val; applyActiveStates(); saveSettings() }
+function selectTheme(key)    {
+  theme.value = key
+  nightOverride.value = false
+  applyActiveStates()
+  applyReaderTheme()
+  saveSettings()
+}
+function selectWallpaper(idx) { currentWallpaper.value = idx; applyActiveStates(); saveSettings() }
+function selectTurnMode(val) { turnMode.value = val; applyActiveStates(); saveSettings() }
+function uploadWallpaper()    { uni.showToast({ title: '上传壁纸开发中', icon: 'none' }) }
+function showAllSettings()    { uni.showToast({ title: '更多设置即将上线', icon: 'none' }) }
+
+// ===================== SHARE =====================
+function shareToChannel(channel) {
+  shareVisible.value = false
+  uni.showToast({ title: `已分享至${channel}`, icon: 'success' })
+}
+function showShareCard() {
+  toolbarVisible.value = false
+  const bodyEl = $el(frontBodyRef.value)
+  selectedTextForShare.value = bodyEl?.textContent?.trim()?.slice(0, 120) ?? ''
+  shareVisible.value = true
+}
+function closeShare() { shareVisible.value = false; applyModals() }
+
+// ===================== COMMENT =====================
+function closeCommentEditor() {
+  commentWriterVisible.value = false
+  applyModals()
+}
+function submitComment() {
+  // Read textarea value directly (v-model won't react)
+  const ta = $el(commentTextareaRef.value)
+  const val = ta?.value ?? ta?.querySelector?.('textarea')?.value ?? ''
+  if (!val.trim()) {
+    uni.showToast({ title: '请输入评论内容', icon: 'none' })
+    return
+  }
+  commentWriterVisible.value = false
+  applyModals()
+  uni.showToast({ title: '段评已发布', icon: 'success' })
+}
 </script>
 
-<style scoped>
+<style>
+/* ================================================================
+   ROOT & READER AREA
+   ================================================================ */
 .reader-root {
+  position: relative;
   width: 100%;
-  height: 100vh;
-  height: 100dvh;
+  height: 100vh; height: 100dvh;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.reader-area {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: 44px 16px 0;
+  box-sizing: border-box;
+}
+.back-indicator {
+  position: fixed;
+  z-index: 6;
+  top: 0; left: 0; right: 0;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  color: inherit;
+  cursor: pointer;
+  max-width: 100vw;
   overflow: hidden;
 }
+.back-arrow {
+  font-size: 16px;
+  line-height: 40px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+.back-label {
+  font-size: 14px;
+  line-height: 40px;
+  opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.back-indicator:active { opacity: 0.85; }
+.chapter-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  line-height: 1.4;
+  text-align: center;
+  padding-top: 4px;
+}
+.page-body {
+  font-size: inherit;
+  line-height: inherit;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  text-align: justify;
+}
+.page-body p {
+  margin: 0;
+  text-indent: 2em;
+  line-height: inherit;
+}
+.page-body .hl-mark {
+  background-color: rgba(255, 235, 59, 0.5);
+  border-radius: 2px;
+  padding: 0 1px;
+}
 
-.reader-brightness-layer {
+/* ================================================================
+   3D PAGE STAGE
+   ================================================================ */
+.page-stage {
+  position: relative;
   width: 100%;
   height: 100%;
+  transform-style: preserve-3d;
 }
-
-.reader-page-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #8C7B62;
-  font-size: 15px;
-}
-
-.reader-center-toggle {
-  position: fixed;
-  z-index: 18;
-  left: 28vw;
-  right: 28vw;
-  top: 54px;
-  bottom: 128px;
-  background: rgba(0, 0, 0, 0.001);
-  pointer-events: auto;
-}
-
-.reader {
-  position: relative;
-  width: 100%;
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-
-.content-scroll {
-  width: 100%;
-  height: 100vh;
-  overflow-x: hidden;
-}
-
-.chapter-content {
-  width: 100%;
-  min-height: 100vh;
-  padding: 62px 22px 82px;
-  box-sizing: border-box;
-  overflow-x: hidden;
-}
-
-.chapter-title {
-  display: block;
-  margin-bottom: 24px;
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 34px;
-}
-
-.paragraph {
-  display: block;
-  position: relative;
-  width: 100%;
-  margin-bottom: var(--paragraph-spacing, 16px);
-  text-align: justify;
-  white-space: normal;
-  word-break: break-all;
-  overflow-wrap: anywhere;
-}
-
-.paragraph-selected {
-  background: transparent;
-}
-
-.paragraph-highlighted {
-  padding: 2px 4px;
-  border-radius: 3px;
-}
-
-.selected-text {
-  background: rgba(180, 160, 140, 0.28);
-  box-shadow: 0 0 0 3px rgba(180, 160, 140, 0.16);
-}
-
-.selection-handle {
+.front-page,
+.back-page {
   position: absolute;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #3A3A3A;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.selection-handle::after {
-  content: '';
-  position: absolute;
-  left: 8px;
-  top: 16px;
-  width: 2px;
-  height: 32px;
-  background: #3A3A3A;
-  opacity: 0.5;
-}
-
-.handle-start {
-  left: -4px;
-  top: 2px;
-}
-
-.handle-end {
-  right: 4px;
-  bottom: 2px;
-}
-
-.paragraph-bubble {
-  display: inline-flex;
-  min-width: 22px;
-  height: 18px;
-  align-items: center;
-  justify-content: center;
-  margin-left: 6px;
-  padding: 0 5px;
-  border-radius: 9px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: rgba(255, 255, 255, 0.75);
-  color: #8C8C8C;
-  font-size: 11px;
-  vertical-align: text-top;
-}
-
-.paragraph-bubble:active {
-  background: rgba(58, 58, 58, 0.1);
-  color: #3A3A3A;
-}
-
-.paragraph-tools-hitarea {
-  position: fixed;
   inset: 0;
-  z-index: 40;
-  background: transparent;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+  padding: 0 16px 24px;
+  box-sizing: border-box;
+}
+.back-page { z-index: 1; }
+.front-page { z-index: 2; }
+
+.flipping-page {
+  position: absolute;
+  inset: 0;
+  display: none;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform;
+  z-index: 10;
+}
+.flip-front,
+.flip-back {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: 0 16px 24px;
+  box-sizing: border-box;
+  background-color: inherit;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  will-change: transform;
+}
+.flip-front { z-index: 2; }
+.flip-back {
+  z-index: 1;
+  transform: rotateY(180deg);
 }
 
-.paragraph-tools-menu {
+/* ================================================================
+   TAP ZONES
+   ================================================================ */
+.tap-zone {
+  position: absolute;
+  top: 0; bottom: 0;
+  z-index: 5;
+  background: transparent;
+}
+.tap-left  { left: 0;   width: 33.33%; }
+.tap-center{ left: 33.33%; width: 33.34%; }
+.tap-right { right: 0;  width: 33.33%; }
+
+/* ================================================================
+   TOP BAR
+   ================================================================ */
+.top-bar {
   position: fixed;
-  z-index: 41;
+  top: 0; left: 0; right: 0;
+  z-index: 20;
+  transform: translateY(-100%);
+  transition: transform 0.32s ease;
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 0.5px solid rgba(0,0,0,0.08);
+}
+.top-bar.visible { transform: translateY(0); }
+
+.top-bar-row {
   display: flex;
-  height: 44px;
   align-items: center;
   justify-content: space-between;
-  overflow: visible;
-  border-radius: 7px;
-  background: rgba(19, 19, 19, 0.96);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  height: 48px;
+  padding: 0 10px;
+  padding-top: env(safe-area-inset-top, 0);
+  box-sizing: content-box;
 }
-
-.paragraph-tools-arrow {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  background: rgba(19, 19, 19, 0.96);
-}
-
-.paragraph-tools-item {
-  flex: 1;
-  height: 44px;
-  min-width: 0;
-  margin: 0;
-  padding: 0 6px;
-  border-radius: 0;
-  border: 0;
-  background: transparent;
-  color: #FFFFFF;
-  font-size: 13px;
-  line-height: 44px;
-  text-align: center;
-}
-
-.paragraph-tools-item::after {
-  border: 0;
-}
-
-.paragraph-tools-item:active {
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.paragraph-feedback-sheet {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 36;
-  max-height: 64vh;
-  overflow-y: auto;
-  padding: 16px 18px calc(18px + env(safe-area-inset-bottom));
-  border-radius: 18px 18px 0 0;
-  background: #F8F8F6;
-  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.16);
-}
-
-.feedback-title {
-  display: block;
-  color: #1F1F1F;
-  font-size: 17px;
-  font-weight: 800;
-}
-
-.feedback-quote {
-  display: block;
-  max-height: 96px;
-  margin-top: 10px;
-  padding: 10px;
-  overflow: hidden;
-  border-left: 3px solid #3A3A3A;
-  background: #F0F0ED;
-  color: #5A5A5A;
+.top-btn {
+  white-space: nowrap;
   font-size: 14px;
+  color: #333;
+  cursor: pointer;
+}
+.top-btn:active { opacity: 0.55; }
+.top-back { font-size: 22px; font-weight: 700; min-width: 32px; }
+.top-shelf { font-size: 13px; }
+.top-download { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #8C7B62; }
+.free-badge {
+  background: #E8A030; color: #fff; font-size: 10px;
+  padding: 1px 5px; border-radius: 3px; line-height: 1.3;
+}
+.top-comments { position: relative; }
+.comment-badge {
+  position: absolute; top: -8px; right: -10px;
+  min-width: 18px; height: 18px; line-height: 18px;
+  border-radius: 9px; background: #E84C4C; color: #fff;
+  font-size: 10px; text-align: center; padding: 0 4px;
+  box-sizing: border-box;
+}
+.top-more { font-size: 20px; letter-spacing: 2px; }
+
+/* ================================================================
+   BOTTOM PANEL (unified)
+   ================================================================ */
+.bottom-panel {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 20;
+  transform: translateY(100%);
+  transition: transform 0.32s ease;
+}
+.bottom-panel.visible { transform: translateY(0); }
+
+.bottom-panel-inner {
+  background: rgba(248, 248, 246, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+  padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+}
+
+.bp-row {
+  padding: 0 16px;
+}
+.bp-progress-row {
+  display: grid;
+  grid-template-columns: 64px 1fr 64px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.chapter-nav-btn {
+  height: 30px; line-height: 30px; text-align: center;
+  border-radius: 15px; background: rgba(0,0,0,0.05);
+  color: #555; font-size: 13px; cursor: pointer;
+}
+.chapter-nav-btn:active { background: rgba(0,0,0,0.12); }
+
+.progress-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.progress-page-label {
+  font-size: 11px;
+  color: #999;
+}
+.progress-track {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(0,0,0,0.08);
+  overflow: visible;
+}
+.progress-fill {
+  position: absolute;
+  left: 0; top: 0;
+  height: 100%;
+  border-radius: 2px;
+  background: #C4A882;
+  transition: width 0.25s ease;
+}
+.progress-thumb {
+  position: absolute;
+  top: 50%; transform: translate(-50%, -50%);
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #C4A882;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  transition: left 0.25s ease;
+}
+
+.bp-actions-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0,0,0,0.06);
+}
+.bp-action {
+  height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 10px;
+  color: #5A5A5A;
+}
+.bp-action:active {
+  background: rgba(0, 0, 0, 0.06);
+  color: #1F1F1F;
+}
+.bp-action-icon {
+  font-size: 19px;
   line-height: 21px;
 }
+.bp-action-label {
+  font-size: 11px;
+}
 
-.feedback-input {
+/* ================================================================
+   LISTEN FAB
+   ================================================================ */
+.listen-fab {
+  position: fixed;
+  right: 20px; bottom: 120px;
+  z-index: 19;
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  background: #C4A882;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(196,168,130,0.45);
+  transform: scale(0);
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+}
+.listen-fab.visible { transform: scale(1); }
+.listen-fab:active { transform: scale(0.88); }
+.listen-icon { font-size: 20px; }
+
+/* ================================================================
+   SELECTION FLOATING MENU
+   ================================================================ */
+.selection-menu {
+  position: fixed;
+  z-index: 50;
+  display: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.selection-menu-body {
+  background: #2D2D2D;
+  border-radius: 12px;
+  padding: 6px 10px;
+  box-shadow: 0 6px 28px rgba(0,0,0,0.4);
+  max-width: 360px;
+}
+.sel-row {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+.sel-row-tags {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+}
+.sel-action {
+  padding: 5px 9px;
+  font-size: 12px;
+  color: #e4e4e4;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sel-action:active { background: rgba(255,255,255,0.12); }
+.sel-action-typo { color: #F0A070; }
+.sel-tag {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: #C0B0A0;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.14);
+  cursor: pointer;
+}
+.sel-tag:active { background: rgba(255,255,255,0.08); }
+.sel-arrow {
+  width: 0; height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid #2D2D2D;
+  margin-left: 20px;
+}
+
+/* ================================================================
+   MODAL OVERLAY
+   ================================================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/* ================================================================
+   SHARE CARD
+   ================================================================ */
+.share-card {
+  width: min(92vw, 420px);
+  margin-bottom: 10vh;
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 10px 50px rgba(0,0,0,0.25);
+}
+.share-card-head { margin-bottom: 12px; }
+.share-book-name { font-size: 18px; font-weight: 700; color: #1F1F1F; }
+.share-card-quote {
+  padding: 12px;
+  background: #F8F8F6;
+  border-left: 3px solid #C4A882;
+  border-radius: 0 8px 8px 0;
+  color: #5A5A5A;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+.share-card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #999;
+  font-size: 12px;
+  margin-bottom: 16px;
+}
+.share-card-tagline { color: #999; }
+.share-card-qr {
+  width: 48px; height: 48px;
+  background: #F0F0ED;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #B0B0B0;
+}
+.share-card-channels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.share-channel {
+  height: 38px; line-height: 38px; text-align: center;
+  border-radius: 8px;
+  background: #F0F0ED;
+  color: #555;
+  font-size: 13px;
+  cursor: pointer;
+}
+.share-channel:active { background: #E0E0DD; }
+.share-card-close {
+  display: block; text-align: center;
+  color: #999;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* ================================================================
+   COMMENT EDITOR
+   ================================================================ */
+.comment-editor {
   width: 100%;
-  min-height: 86px;
+  max-height: 55vh;
+  overflow-y: auto;
+  background: #F8F8F6;
+  border-radius: 16px 16px 0 0;
+  padding: 16px 18px calc(18px + env(safe-area-inset-bottom));
+}
+.comment-editor-title {
+  font-size: 17px; font-weight: 700; color: #1F1F1F;
+}
+.comment-editor-quote {
+  margin-top: 10px;
+  padding: 10px;
+  background: #F0F0ED;
+  border-left: 3px solid #333;
+  color: #5A5A5A;
+  font-size: 14px;
+  line-height: 1.5;
+  max-height: 80px;
+  overflow-y: auto;
+}
+.comment-editor-input {
+  width: 100%;
+  min-height: 80px;
   margin-top: 12px;
   padding: 10px;
   box-sizing: border-box;
   border-radius: 8px;
-  background: #F0F0ED;
+  background: #fff;
   color: #1F1F1F;
   font-size: 14px;
-  line-height: 21px;
+  line-height: 1.5;
+  border: 1px solid #ddd;
+  resize: none;
 }
-
-.feedback-actions {
+.comment-editor-actions {
   display: flex;
   gap: 10px;
   margin-top: 12px;
 }
-
-.feedback-cancel,
-.feedback-submit {
+.comment-btn {
   flex: 1;
-  height: 36px;
-  line-height: 36px;
-  margin: 0;
+  height: 40px; line-height: 40px;
+  text-align: center;
   border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.comment-btn-cancel { background: #F0F0ED; color: #888; }
+.comment-btn-submit { background: #333; color: #fff; }
+.comment-btn:active { opacity: 0.8; }
+
+/* ================================================================
+   SETTINGS PANEL
+   ================================================================ */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(0,0,0,0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.settings-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.settings-sheet {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  max-height: min(80vh, 600px);
+  overflow-y: auto;
+  background: #fff;
+  border-radius: 16px 16px 0 0;
+  padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
+  transform: translateY(100%);
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.settings-sheet.visible { transform: translateY(0); }
+.sheet-handle {
+  width: 36px; height: 4px;
+  margin: 0 auto 16px;
+  border-radius: 2px;
+  background: rgba(0,0,0,0.15);
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 6px 0;
+}
+.setting-row + .setting-row {
+  border-top: 1px solid rgba(0,0,0,0.04);
+}
+.setting-label {
+  color: #333;
   font-size: 14px;
+  min-width: 56px;
 }
 
-.feedback-cancel {
+/* Brightness */
+.brightness-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  max-width: 170px;
+}
+.brightness-icon { font-size: 14px; }
+.brightness-icon-big { font-size: 17px; }
+.brightness-slider { flex: 1; }
+
+/* Switches */
+.setting-switch { transform: scale(0.82); }
+
+/* Font family */
+.font-options {
+  display: flex;
+  gap: 8px;
+}
+.font-option {
+  padding: 4px 14px;
+  border-radius: 14px;
+  border: 1px solid #ddd;
+  font-size: 13px;
+  color: #666;
+  cursor: pointer;
+}
+.font-option.active {
+  background: #333;
+  color: #fff;
+  border-color: #333;
+}
+
+/* Theme chips */
+.theme-chips {
+  display: flex;
+  gap: 8px;
+}
+.theme-chip {
+  position: relative;
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  border: 2px solid #ddd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.theme-chip.active {
+  border-color: #333;
+  transform: scale(1.15);
+  box-shadow: 0 0 0 2px #333;
+}
+.theme-chip-swatch {
+  width: 22px; height: 22px; border-radius: 50%;
+}
+.theme-chip-tick {
+  position: absolute;
+  font-size: 12px;
+  font-weight: bold;
+  color: #333;
+}
+
+/* Wallpaper */
+.wallpaper-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.wallpaper-chip {
+  width: 40px; height: 40px;
+  border-radius: 8px;
+  border: 2px solid #e0e0e0;
+  background-size: cover;
+  cursor: pointer;
+}
+.wallpaper-chip.active {
+  border-color: #333;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+}
+.wallpaper-upload {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: #999;
   background: #F0F0ED;
-  color: #8C8C8C;
 }
 
-.feedback-submit {
-  background: #3A3A3A;
+/* Turn mode */
+.turn-mode-row {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+}
+.turn-mode-item {
+  padding: 5px 10px;
+  font-size: 12px;
+  color: #666;
+  background: #fafafa;
+  cursor: pointer;
+  border-right: 1px solid #ddd;
+}
+.turn-mode-item:last-child { border-right: none; }
+.turn-mode-item.active {
+  background: #333;
   color: #fff;
 }
 
-.feedback-submit.full {
-  width: 100%;
-  margin-top: 14px;
-}
-
-.reader-sheet-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 32;
-  background: rgba(0, 0, 0, 0.22);
-}
-
-.catalog-sheet,
-.paragraph-comments-sheet {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 37;
-  max-height: 72vh;
-  overflow-y: auto;
-  padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
-  border-radius: 18px 18px 0 0;
-  background: #F8F8F6;
-  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.14);
-}
-
-.sheet-handle {
-  width: 36px;
-  height: 4px;
-  margin: 0 auto 14px;
-  border-radius: 2px;
-  background: rgba(0, 0, 0, 0.18);
-}
-
-.catalog-head {
+/* Stepper (font size & spacing) */
+.stepper-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+  gap: 8px;
 }
-
-.catalog-title {
-  color: #181818;
-  font-size: 22px;
-  font-weight: 900;
-}
-
-.catalog-sub {
-  color: #8C8C8C;
-  font-size: 13px;
-}
-
-.catalog-list {
-  max-height: 54vh;
-}
-
-.catalog-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 15px 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.catalog-item.active .catalog-item-title {
-  color: #3A3A3A;
-  font-weight: 900;
-}
-
-.catalog-item-title {
-  min-width: 0;
-  flex: 1;
-  color: #3A3A3A;
-  font-size: 16px;
-}
-
-.catalog-item-meta {
-  color: #B0B0B0;
-  font-size: 12px;
-}
-
-.paragraph-comment-list {
-  margin-top: 12px;
-}
-
-.paragraph-comment-item {
-  padding: 12px 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
-}
-
-.paragraph-comment-user {
-  display: block;
-  color: #3A3A3A;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.paragraph-comment-text {
-  display: block;
-  margin-top: 6px;
-  color: #3A3A3A;
-  font-size: 15px;
-  line-height: 24px;
-}
-
-.paragraph-comment-empty {
-  display: block;
-  padding: 18px 0 6px;
-  color: #B0B0B0;
-  text-align: center;
+.stepper-btn {
+  width: 34px; height: 30px;
+  line-height: 30px; text-align: center;
+  border-radius: 6px;
+  background: #F0F0ED;
+  color: #333;
   font-size: 14px;
+  cursor: pointer;
+}
+.stepper-btn:active { background: #E0E0DD; }
+.stepper-value {
+  font-size: 15px;
+  color: #333;
+  min-width: 28px;
+  text-align: center;
 }
 
-.empty {
-  padding-top: 120px;
-  color: #8C8C8C;
+.setting-more-row {
+  margin-top: 8px;
+  padding: 10px 0;
   text-align: center;
+  color: #888;
+  font-size: 13px;
+  cursor: pointer;
 }
 </style>

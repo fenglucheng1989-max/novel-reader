@@ -19,7 +19,9 @@ const defaultSetting = {
   turnMode: 'COVER',
   autoPageEnabled: false,
   autoPageInterval: 15,
-  showComments: false
+  showComments: false,
+  brightness: 80,
+  eyeProtection: false
 }
 
 function isFullChapter(chapter) {
@@ -162,20 +164,29 @@ export const useReaderStore = defineStore('reader', {
           turnMode: res.data.turnMode || defaultSetting.turnMode,
           autoPageEnabled: res.data.autoPageEnabled != null ? res.data.autoPageEnabled : defaultSetting.autoPageEnabled,
           autoPageInterval: res.data.autoPageInterval || defaultSetting.autoPageInterval,
-          showComments: res.data.showComments != null ? res.data.showComments : defaultSetting.showComments
+          showComments: res.data.showComments != null ? res.data.showComments : defaultSetting.showComments,
+          brightness: res.data.brightness != null ? res.data.brightness : defaultSetting.brightness,
+          eyeProtection: res.data.eyeProtection != null ? res.data.eyeProtection : defaultSetting.eyeProtection
         }
         uni.setStorageSync('readerSetting', this.setting)
+        this.syncBrightnessKeys(this.setting)
       }
       return res
+    },
+    syncBrightnessKeys(setting) {
+      if ('brightness' in setting) uni.setStorageSync('readerBrightness', setting.brightness)
+      if ('eyeProtection' in setting) uni.setStorageSync('readerEyeProtection', setting.eyeProtection)
     },
     async saveSetting(setting) {
       this.setting = { ...this.setting, ...setting }
       uni.setStorageSync('readerSetting', this.setting)
+      this.syncBrightnessKeys(setting)
       return request({ url: '/api/v1/reading/setting', method: 'PUT', data: this.setting })
     },
     updateLocalSetting(setting) {
       this.setting = { ...this.setting, ...setting }
       uni.setStorageSync('readerSetting', this.setting)
+      this.syncBrightnessKeys(setting)
     }
   }
 })

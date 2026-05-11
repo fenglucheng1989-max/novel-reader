@@ -14,21 +14,16 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("novel_reader_setting")
-public class NovelReaderSetting {
+@TableName("novel_highlight")
+public class NovelHighlight {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long userId;
-    private Integer fontSize;
-    private Integer lineHeight;
-    private Integer marginX;
-    private Integer marginY;
-    private Integer paragraphSpacing;
-    private String theme;
-    private String turnMode;
-    private Boolean autoPageEnabled;
-    private Integer autoPageInterval;
-    private Integer brightness;
-    private Boolean eyeProtection;
-    private LocalDateTime updatedAt;
+    private Long bookId;
+    private String bookTitle;
+    private Integer chapterNo;
+    private Integer paragraphIndex;
+    private String quoteText;
+    private String color;
+    private LocalDateTime createdAt;
 }

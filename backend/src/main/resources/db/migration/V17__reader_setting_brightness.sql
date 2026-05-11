@@ -1,0 +1,2 @@
+ALTER TABLE novel_reader_setting ADD COLUMN IF NOT EXISTS brightness INT DEFAULT 80;
+ALTER TABLE novel_reader_setting ADD COLUMN IF NOT EXISTS eye_protection BOOLEAN DEFAULT FALSE;

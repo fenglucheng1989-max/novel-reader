@@ -220,7 +220,7 @@ public class BookServiceImpl implements BookService {
                 .eq(NovelChapter::getBookId, bookId)
                 .eq(NovelChapter::getChapterNo, chapterNo));
         if (chapter == null) {
-            throw new BusinessException(404, "Chapter not found");
+            throw new BusinessException(404, "章节不存在");
         }
         try {
             redisTemplate.opsForValue().set(key, chapter, Duration.ofHours(2));
@@ -286,7 +286,7 @@ public class BookServiceImpl implements BookService {
     public NovelChapter updateChapter(Long id, ChapterDTO dto) {
         NovelChapter chapter = chapterMapper.selectById(id);
         if (chapter == null) {
-            throw new BusinessException(404, "Chapter not found");
+            throw new BusinessException(404, "章节不存在");
         }
         chapter.setChapterNo(dto.getChapterNo());
         chapter.setTitle(dto.getTitle());

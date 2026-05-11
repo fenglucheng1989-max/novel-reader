@@ -1,30 +1,6 @@
 <template>
-  <view
-    ref="readerRootRef"
-    class="page-reader"
-    :class="{ dragging, 'is-night': theme === 'NIGHT' }"
-    :style="rootStyle"
-    @tap="onTap"
-    @click="onClick"
-    @touchstart="onTouchStart"
-    @touchmove.stop.prevent="onTouchMove"
-    @touchend="onTouchEnd"
-    @touchcancel="onTouchEnd"
-    @mousedown="onMouseDown"
-    @mousemove="onMouseMove"
-    @mouseup="onMouseUp"
-    @mouseleave="onMouseLeave"
-    @contextmenu.prevent.stop="onCanvasContextMenu"
-  >
+  <view ref="readerRootRef" class="page-reader" :class="{ dragging, 'is-night': theme === 'NIGHT' }" :style="rootStyle">
     <view ref="canvasHostRef" class="reader-canvas-host" />
-    <view
-      ref="centerTapRef"
-      class="center-tap-zone"
-      @tap.stop="onCenterZoneTap"
-      @click.stop="onCenterZoneTap"
-      @touchend.stop.prevent="onCenterZoneTap"
-      @pointerup.stop="onCenterZoneTap"
-    />
     <view class="reader-footer">
       <text>{{ currentPage + 1 }} / {{ totalPages || 1 }}</text>
       <text>{{ progressText }}</text>
@@ -60,17 +36,15 @@ const emit = defineEmits(['prev', 'next', 'chapterEnd', 'pageChange', 'toggleToo
 const fontFamily = "'Noto Serif SC', 'Source Han Serif SC', 'SimSun', 'STSong', serif"
 const readerRootRef = ref(null)
 const canvasHostRef = ref(null)
-const centerTapRef = ref(null)
 const viewWidth = ref(375)
 const viewHeight = ref(667)
 const rootLeft = ref(0)
 const rootTop = ref(0)
 let ctx = null
 let canvasEl = null
-let centerTapEl = null
 let repaginateTimer = null
 let adjacentPaginateTimer = null
-let resizeRaf = null
+let resizeObserver = null
 
 const pages = ref([])
 const prevPages = ref([])
@@ -83,6 +57,12 @@ const dragging = ref(false)
 const committing = ref(false)
 const dragStartX = ref(0)
 const dragDeltaX = ref(0)
+
+// Selection state on canvas (for visual highlight)
+const selectedParaIndex = ref(-1)
+const selectedCharStart = ref(0)
+const selectedCharEnd = ref(0)
+
 let suppressTapUntil = 0
 let suppressMenuUntil = 0
 let lastPointerTapAt = 0
@@ -94,9 +74,6 @@ let animState = null
 let boundaryTransitionPending = false
 let boundaryTransitionDirection = 0
 let boundaryTransitionTimer = null
-let nativePointerStart = null
-let documentPointerStart = null
-let lastCenterZoneTapAt = 0
 let cachedMeasureFont = ''
 const charWidthCache = new Map()
 const pageCache = new Map()
@@ -105,7 +82,7 @@ const totalPages = computed(() => pages.value.length)
 const themeColors = computed(() => readerThemes[props.theme] || readerThemes.DEFAULT)
 const effectiveContent = computed(() => props.chapter?.content || props.content || '')
 const effectiveTitle = computed(() => props.chapter?.title || props.title || '')
-const effectiveFontSize = computed(() => Math.max(14, Math.min(24, Number(props.fontSize) || 16)))
+const effectiveFontSize = computed(() => Math.max(14, Math.min(30, Number(props.fontSize) || 16)))
 const effectiveLineHeight = computed(() => {
   const minLineHeight = Math.round(effectiveFontSize.value * 1.55)
   return Math.max(minLineHeight, Math.min(42, Number(props.lineHeight) || minLineHeight))
@@ -169,12 +146,12 @@ function layoutSignature() {
   ].join('|')
 }
 
-function rememberPages(cacheKey, pageList) {
-  pageCache.set(cacheKey, pageList)
+function cachePages(key, list) {
+  pageCache.set(key, list)
   if (pageCache.size > 12) {
     pageCache.delete(pageCache.keys().next().value)
   }
-  return rememberPages(cacheKey, pageList)
+  return list
 }
 
 function buildPages(sourceContent, sourceTitle) {
@@ -206,25 +183,31 @@ function buildPages(sourceContent, sourceTitle) {
     usedHeight = 0
   }
 
-  function pushLine(text, paragraphIndex) {
+  function pushLine(text, paraIndex, charStart) {
     const nextHeight = effectiveLineHeight.value + (pageLines.length ? paragraphGap : 0)
     if (pageLines.length && usedHeight + nextHeight > maxPageHeight) pushPage()
     pageLines.push({
       key: `${pageList.length}-${pageLines.length}-${text}`,
       text,
-      paragraphIndex
+      paragraphIndex: paraIndex,
+      charStart,
+      charEnd: charStart + [...text].length
     })
     usedHeight += nextHeight
   }
 
   paragraphs.forEach((paragraph, paragraphIndex) => {
+    let charOffset = 0
     const lines = wrapCanvasText(paragraph, maxLineWidth)
-    lines.forEach((line) => pushLine(line, paragraphIndex))
+    lines.forEach((line) => {
+      pushLine(line, paragraphIndex, charOffset)
+      charOffset += [...line].length
+    })
   })
 
   pushPage()
   if (!pageList.length) {
-    return [{ index: 0, title: inferredTitle, lines: [{ key: '0-0-empty', text: '（本章无内容）', paragraphIndex: 0 }] }]
+    return [{ index: 0, title: inferredTitle, lines: [{ key: '0-0-empty', text: '（本章无内容）', paragraphIndex: 0, charStart: 0, charEnd: 6 }] }]
   }
   return pageList
 }
@@ -273,14 +256,6 @@ function isWideChar(ch) {
   return code >= 0x2e80
 }
 
-function measureCanvasText(text) {
-  let width = 0
-  for (const ch of String(text || '')) {
-    width += /[一-鿿　-〿＀-￯]/.test(ch) ? effectiveFontSize.value : effectiveFontSize.value * 0.58
-  }
-  return width
-}
-
 function measureCanvasChar(ch) {
   const key = ch || ' '
   const cached = charWidthCache.get(key)
@@ -301,10 +276,11 @@ function getCanvasElement() {
       canvasEl = document.createElement('canvas')
       canvasEl.className = 'reader-canvas'
       canvasEl.setAttribute('aria-hidden', 'true')
-      canvasEl.addEventListener('click', onNativeCanvasClick)
-      canvasEl.addEventListener('pointerdown', onNativePointerDown)
-      canvasEl.addEventListener('pointerup', onNativePointerUp)
-      canvasEl.addEventListener('pointercancel', onNativePointerCancel)
+      canvasEl.addEventListener('pointerdown', onPointerDown)
+      canvasEl.addEventListener('pointermove', onPointerMove)
+      canvasEl.addEventListener('pointerup', onPointerUp)
+      canvasEl.addEventListener('pointercancel', onPointerCancel)
+      canvasEl.addEventListener('contextmenu', onCanvasContextMenu)
       host.innerHTML = ''
       host.appendChild(canvasEl)
     }
@@ -377,20 +353,9 @@ function scheduleAdjacentPaginate(delay = 160) {
   }, delay)
 }
 
-function schedulePaginate(delay = 0) {
+function schedulePaginate() {
   if (repaginateTimer) { clearTimeout(repaginateTimer); repaginateTimer = null }
-  if (delay > 0) {
-    repaginateTimer = setTimeout(() => {
-      repaginateTimer = null
-      paginate()
-    }, delay)
-    return
-  }
   paginate()
-  nextTick(() => {
-    paginate()
-    repaginateTimer = setTimeout(paginate, 120)
-  })
 }
 
 function clearCanvas() {
@@ -406,60 +371,173 @@ function clearCanvas() {
 }
 
 function drawPage(page, offsetX = 0, shadow = false) {
-  if (!ctx || !page) return
+  drawPageToCtx(ctx, page, offsetX, shadow)
+}
+
+function drawPageToCtx(targetCtx, page, offsetX = 0, shadow = false) {
+  if (!targetCtx || !page) return
   const width = viewWidth.value
   const height = viewHeight.value
   const x = Math.round(offsetX)
-  ctx.save()
-  ctx.translate(x, 0)
-  ctx.fillStyle = themeColors.value.background
-  ctx.fillRect(0, 0, width, height)
+  targetCtx.save()
+  targetCtx.translate(x, 0)
+  targetCtx.fillStyle = themeColors.value.background
+  targetCtx.fillRect(0, 0, width, height)
   if (shadow) {
-    ctx.shadowColor = 'rgba(0,0,0,0.22)'
-    ctx.shadowBlur = 18
-    ctx.shadowOffsetX = flipDirection.value > 0 ? -8 : 8
-    ctx.fillRect(0, 0, width, height)
-    ctx.shadowColor = 'transparent'
+    targetCtx.shadowColor = 'rgba(0,0,0,0.18)'
+    targetCtx.shadowBlur = 14
+    targetCtx.shadowOffsetX = flipDirection.value > 0 ? -6 : 6
+    targetCtx.fillRect(0, 0, width, height)
+    targetCtx.shadowColor = 'transparent'
   }
 
-  ctx.fillStyle = themeColors.value.text
-  ctx.textBaseline = 'top'
-  ctx.textAlign = 'left'
-  ctx.font = canvasTitleFont()
+  targetCtx.fillStyle = themeColors.value.text
+  targetCtx.textBaseline = 'top'
+  targetCtx.textAlign = 'left'
+  targetCtx.font = canvasTitleFont()
   const title = page.title || ''
   if (title) {
-    ctx.fillText(title, props.marginX, titleY.value)
+    targetCtx.fillText(title, props.marginX, titleY.value)
   }
 
-  ctx.font = canvasTextFont()
+  targetCtx.font = canvasTextFont()
   const lineHeight = effectiveLineHeight.value
   const maxY = height - contentBottom.value
+  const pGap = Number(props.paragraphSpacing || 0)
   let y = title ? contentTop.value : titleY.value
   for (const line of page.lines || []) {
     if (y + lineHeight > maxY) break
-    ctx.fillText(line.text || ' ', props.marginX, y)
+    // Draw selection highlight if this line is within selected range
+    const isSelected = selectedParaIndex.value >= 0 &&
+      line.paragraphIndex === selectedParaIndex.value &&
+      line.charEnd > selectedCharStart.value &&
+      line.charStart < selectedCharEnd.value
+    if (isSelected) {
+      const selStartInLine = Math.max(0, selectedCharStart.value - line.charStart)
+      const selEndInLine = Math.min(line.text.length, selectedCharEnd.value - line.charStart)
+      const beforeWidth = targetCtx.measureText(line.text.slice(0, selStartInLine)).width
+      const selWidth = targetCtx.measureText(line.text.slice(selStartInLine, selEndInLine)).width
+      targetCtx.save()
+      targetCtx.fillStyle = 'rgba(160, 144, 128, 0.24)'
+      targetCtx.fillRect(props.marginX + beforeWidth, y, selWidth, lineHeight)
+      targetCtx.restore()
+      targetCtx.fillStyle = themeColors.value.text
+    }
+    targetCtx.fillText(line.text || ' ', props.marginX, y)
     const count = commentCount(line.paragraphIndex)
-    if (count) drawCommentBadge(count, props.marginX + Math.min(width - props.marginX * 2 - 28, ctx.measureText(line.text || '').width + 8), y + 2)
-    y += lineHeight + Number(props.paragraphSpacing || 0)
+    if (count) drawCommentBadgeToCtx(targetCtx, count, props.marginX + Math.min(width - props.marginX * 2 - 28, targetCtx.measureText(line.text || '').width + 8), y + 2)
+    y += lineHeight + pGap
   }
-  ctx.restore()
+
+  // Draw selection handles at line endings
+  if (selectedParaIndex.value >= 0) {
+    y = title ? contentTop.value : titleY.value
+    for (const line of page.lines || []) {
+      if (y + lineHeight > maxY) break
+      if (line.paragraphIndex === selectedParaIndex.value) {
+        // Draw handle at selection start if it falls on this line
+        if (line.charStart <= selectedCharStart.value && selectedCharStart.value < line.charEnd) {
+          const offsetInLine = selectedCharStart.value - line.charStart
+          const hx = props.marginX + targetCtx.measureText(line.text.slice(0, offsetInLine)).width
+          drawSelectionHandle(targetCtx, hx, y + lineHeight, true)
+        }
+        // Draw handle at selection end if it falls on this line
+        if (line.charStart < selectedCharEnd.value && selectedCharEnd.value <= line.charEnd) {
+          const offsetInLine = selectedCharEnd.value - line.charStart
+          const hx = props.marginX + targetCtx.measureText(line.text.slice(0, offsetInLine)).width
+          drawSelectionHandle(targetCtx, hx, y + lineHeight, false)
+        }
+      }
+      y += lineHeight + pGap
+    }
+  }
+
+  targetCtx.restore()
 }
 
-function drawCommentBadge(count, x, y) {
+function drawSelectionHandle(targetCtx, x, y, isStart) {
+  targetCtx.save()
+  const r = 7
+  // Circle
+  targetCtx.fillStyle = '#A09080'
+  targetCtx.beginPath()
+  targetCtx.arc(x, y + (isStart ? 2 : -2), r, 0, Math.PI * 2)
+  targetCtx.fill()
+  // Border
+  targetCtx.strokeStyle = '#FFFFFF'
+  targetCtx.lineWidth = 2
+  targetCtx.stroke()
+  // Small line indicator
+  targetCtx.fillStyle = '#FFFFFF'
+  targetCtx.fillRect(x - 1, y + (isStart ? 2 - 6 : -2 - 6), 2, 12)
+  targetCtx.restore()
+}
+
+let cachedPageImage = null
+let cachedTargetImage = null
+
+function cacheFlipPages() {
+  const current = currentPageData.value
+  const target = targetPageData.value
+  if (!current) { cachedPageImage = null; cachedTargetImage = null; return }
+  // Temporarily clear selection for cached images
+  const savedParaIndex = selectedParaIndex.value
+  const savedCharStart = selectedCharStart.value
+  const savedCharEnd = selectedCharEnd.value
+  selectedParaIndex.value = -1
+  selectedCharStart.value = 0
+  selectedCharEnd.value = 0
+
+  const dpr = Math.min(2, window.devicePixelRatio || 1)
+  const w = Math.floor(viewWidth.value * dpr)
+  const h = Math.floor(viewHeight.value * dpr)
+
+  const currentCanvas = document.createElement('canvas')
+  currentCanvas.width = w
+  currentCanvas.height = h
+  const currCtx = currentCanvas.getContext('2d')
+  currCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  drawPageToCtx(currCtx, current, 0, false)
+  cachedPageImage = currentCanvas
+
+  if (target) {
+    const targetCanvas = document.createElement('canvas')
+    targetCanvas.width = w
+    targetCanvas.height = h
+    const tgtCtx = targetCanvas.getContext('2d')
+    tgtCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    drawPageToCtx(tgtCtx, target, 0, false)
+    cachedTargetImage = targetCanvas
+  } else {
+    cachedTargetImage = null
+  }
+
+  selectedParaIndex.value = savedParaIndex
+  selectedCharStart.value = savedCharStart
+  selectedCharEnd.value = savedCharEnd
+}
+
+function clearFlipCache() {
+  cachedPageImage = null
+  cachedTargetImage = null
+}
+
+function drawCommentBadgeToCtx(targetCtx, count, x, y) {
+  if (!targetCtx) return
   const text = String(count)
   const badgeW = Math.max(20, 12 + text.length * 6)
-  ctx.save()
-  ctx.fillStyle = 'rgba(255,255,255,0.72)'
-  ctx.strokeStyle = 'rgba(0,0,0,0.08)'
-  roundedRect(ctx, x, y, badgeW, 18, 9)
-  ctx.fill()
-  ctx.stroke()
-  ctx.fillStyle = '#8C7B62'
-  ctx.font = '11px sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.fillText(text, x + badgeW / 2, y + 9)
-  ctx.restore()
+  targetCtx.save()
+  targetCtx.fillStyle = 'rgba(255,255,255,0.72)'
+  targetCtx.strokeStyle = 'rgba(0,0,0,0.08)'
+  roundedRect(targetCtx, x, y, badgeW, 18, 9)
+  targetCtx.fill()
+  targetCtx.stroke()
+  targetCtx.fillStyle = '#8C7B62'
+  targetCtx.font = '11px sans-serif'
+  targetCtx.textAlign = 'center'
+  targetCtx.textBaseline = 'middle'
+  targetCtx.fillText(text, x + badgeW / 2, y + 9)
+  targetCtx.restore()
 }
 
 function roundedRect(context, x, y, width, height, radius) {
@@ -491,11 +569,35 @@ function drawReader() {
   const width = viewWidth.value
   const progress = Math.max(0, Math.min(1, flipProgress.value))
   const dir = flipDirection.value
-  const current = currentPageData.value
-  const target = targetPageData.value || current
-  drawPage(current, 0, false)
-  const offset = dir > 0 ? (1 - progress) * width : -(1 - progress) * width
-  drawPage(target, offset, true)
+
+  if (props.turnMode === 'PAGE') {
+    // PAGE mode: current page slides slightly, target slides in
+    const currentOffset = Math.round(dir > 0 ? -progress * 18 : progress * 18)
+    if (cachedPageImage) {
+      ctx.drawImage(cachedPageImage, currentOffset, 0)
+    } else {
+      drawPage(currentPageData.value, currentOffset, false)
+    }
+    if (cachedTargetImage) {
+      const offset = dir > 0 ? Math.round((1 - progress) * width) : -Math.round((1 - progress) * width)
+      ctx.drawImage(cachedTargetImage, offset, 0)
+    } else {
+      const target = targetPageData.value || currentPageData.value
+      const offset = dir > 0 ? (1 - progress) * width : -(1 - progress) * width
+      drawPage(target, offset, true)
+    }
+  } else {
+    // COVER/NONE animation: target slides over current page
+    drawPage(currentPageData.value, 0, false)
+    if (cachedTargetImage) {
+      const offset = dir > 0 ? Math.round((1 - progress) * width) : -Math.round((1 - progress) * width)
+      ctx.drawImage(cachedTargetImage, offset, 0)
+    } else {
+      const target = targetPageData.value || currentPageData.value
+      const offset = dir > 0 ? (1 - progress) * width : -(1 - progress) * width
+      drawPage(target, offset, true)
+    }
+  }
 }
 
 function cancelAnim() {
@@ -554,6 +656,7 @@ function beginFlip(direction, progress) {
   flipDirection.value = direction
   flipProgress.value = progress
   flipActive.value = props.turnMode !== 'NONE'
+  if (flipActive.value) cacheFlipPages()
   drawReader()
   return true
 }
@@ -565,6 +668,7 @@ function finishFlip() {
   flipProgress.value = 0
   flipActive.value = false
   committing.value = false
+  clearFlipCache()
   drawReader()
 }
 
@@ -592,6 +696,7 @@ function resetBoundaryTransitionState() {
   flipProgress.value = 0
   flipActive.value = false
   committing.value = false
+  clearFlipCache()
 }
 
 function promoteBoundaryPages() {
@@ -606,6 +711,7 @@ function promoteBoundaryPages() {
   boundaryTransitionPending = false
   boundaryTransitionDirection = 0
   clearBoundaryTransitionTimer()
+  clearFlipCache()
   emit('pageChange', currentPage.value)
   drawReader()
   return true
@@ -735,162 +841,47 @@ function handlePointTap(clientX) {
   else emit('toggleTools')
 }
 
-function onCenterZoneTap() {
-  const now = Date.now()
-  if (now - lastCenterZoneTapAt < 180) return
-  lastCenterZoneTapAt = now
-  if (committing.value || dragging.value) return
-  lastPointerTapAt = now
-  suppressTapUntil = now + 120
-  emit('toggleTools')
+// ---- Unified pointer event handlers ----
+
+function onPointerDown(event) {
+  const x = event.clientX
+  startDrag(x)
+  scheduleLongPress(x, event.clientY)
 }
 
-function onTap(event) {
-  if (Date.now() < suppressTapUntil) return
-  if (dragging.value || committing.value) return
-  const x = event?.detail?.x ?? event?.changedTouches?.[0]?.clientX ?? viewWidth.value / 2
-  lastPointerTapAt = Date.now()
-  suppressTapUntil = Date.now() + 80
-  handlePointTap(x)
-}
-
-function onClick(event) {
-  if (Date.now() - lastPointerTapAt < 120) return
-  if (Date.now() < suppressTapUntil) return
-  if (dragging.value || committing.value) return
-  lastPointerTapAt = Date.now()
-  suppressTapUntil = Date.now() + 80
-  handlePointTap(event?.clientX ?? viewWidth.value / 2)
-}
-
-function onNativeCanvasClick(event) {
-  onClick(event)
-}
-
-function onNativePointerDown(event) {
-  nativePointerStart = { x: event.clientX, y: event.clientY, t: Date.now() }
-}
-
-function onNativePointerUp(event) {
-  const start = nativePointerStart
-  nativePointerStart = null
-  if (!start) return
-  const dx = Math.abs((event.clientX || 0) - start.x)
-  const dy = Math.abs((event.clientY || 0) - start.y)
-  if (dx > 8 || dy > 8) return
-  if (Date.now() - lastPointerTapAt < 120) return
-  if (Date.now() < suppressTapUntil) return
-  lastPointerTapAt = Date.now()
-  suppressTapUntil = Date.now() + 120
-  handlePointTap(event.clientX ?? viewWidth.value / 2)
-}
-
-function onNativePointerCancel() {
-  nativePointerStart = null
-}
-
-function onDocumentPointerDown(event) {
-  if (!isReaderPoint(event.clientX, event.clientY)) return
-  documentPointerStart = { x: event.clientX, y: event.clientY }
-}
-
-function onDocumentPointerUp(event) {
-  const start = documentPointerStart
-  documentPointerStart = null
-  if (!start) return
-  const dx = Math.abs((event.clientX || 0) - start.x)
-  const dy = Math.abs((event.clientY || 0) - start.y)
-  if (dx > 8 || dy > 8) return
-  if (!isReaderPoint(event.clientX, event.clientY)) return
-  if (Date.now() - lastPointerTapAt < 120 || Date.now() < suppressTapUntil) return
-  lastPointerTapAt = Date.now()
-  suppressTapUntil = Date.now() + 120
-  handlePointTap(event.clientX ?? viewWidth.value / 2)
-}
-
-function getElementFromRef(viewRef) {
-  const raw = viewRef?.value
-  return raw?.$el || raw
-}
-
-function attachCenterTapElement() {
-  // #ifdef H5
-  if (typeof document === 'undefined') return
-  const nextEl = getElementFromRef(centerTapRef)
-  if (!nextEl || nextEl === centerTapEl) return
-  detachCenterTapElement()
-  centerTapEl = nextEl
-  centerTapEl.addEventListener('click', onCenterZoneTap)
-  centerTapEl.addEventListener('pointerup', onCenterZoneTap)
-  centerTapEl.addEventListener('touchend', onCenterZoneTap, { passive: false })
-  // #endif
-}
-
-function detachCenterTapElement() {
-  // #ifdef H5
-  if (!centerTapEl) return
-  centerTapEl.removeEventListener('click', onCenterZoneTap)
-  centerTapEl.removeEventListener('pointerup', onCenterZoneTap)
-  centerTapEl.removeEventListener('touchend', onCenterZoneTap)
-  centerTapEl = null
-  // #endif
-}
-
-function isReaderPoint(x, y) {
-  const localX = Number(x) - rootLeft.value
-  const localY = Number(y) - rootTop.value
-  if (!Number.isFinite(localX) || !Number.isFinite(localY)) return false
-  if (localX < 0 || localX > viewWidth.value || localY < 0 || localY > viewHeight.value) return false
-  if (localY < 54) return false
-  if (localY > viewHeight.value - 128) return false
-  return true
-}
-
-function onTouchStart(event) {
-  const touch = event.touches?.[0]
-  if (touch) {
-    startDrag(touch.clientX)
-    scheduleLongPress(touch.clientX, touch.clientY)
-  }
-}
-
-function onTouchMove(event) {
-  const touch = event.touches?.[0]
-  if (!touch) return
-  if (longPressStart && Math.abs(touch.clientY - longPressStart.y) > 8) {
+function onPointerMove(event) {
+  if (longPressStart && Math.abs(event.clientY - longPressStart.y) > 8) {
     clearLongPressTimer()
     suppressMenuUntil = Date.now() + 700
   }
-  moveDrag(touch.clientX)
+  moveDrag(event.clientX)
 }
 
-function onTouchEnd(event) {
-  const distance = Math.abs(dragDeltaX.value)
-  const touch = event?.changedTouches?.[0]
-  const clientX = touch?.clientX ?? longPressStart?.x ?? viewWidth.value / 2
-  const shouldTap = dragging.value && distance <= 8 && Date.now() >= suppressTapUntil && !committing.value
-  clearLongPressTimer()
-  endDrag()
-  if (shouldTap) {
-    lastPointerTapAt = Date.now()
-    suppressTapUntil = Date.now() + 140
-    handlePointTap(clientX)
-  }
-}
-
-function onMouseDown(event) { startDrag(event.clientX) }
-function onMouseMove(event) { moveDrag(event.clientX) }
-function onMouseUp(event) {
+function onPointerUp(event) {
   const distance = Math.abs(dragDeltaX.value)
   const wasDragging = dragging.value
+  clearLongPressTimer()
   endDrag()
+  // If it was a tap (little to no drag), handle as point tap
   if (wasDragging && distance <= 8 && Date.now() >= suppressTapUntil && !committing.value) {
     lastPointerTapAt = Date.now()
-    handlePointTap(event.clientX)
     suppressTapUntil = Date.now() + 140
+    handlePointTap(event.clientX)
   }
 }
-function onMouseLeave() { endDrag() }
+
+function onPointerCancel() {
+  clearLongPressTimer()
+  if (dragging.value) {
+    dragging.value = false
+    dragDeltaX.value = 0
+    dragLockedDir = 0
+    velocitySamples = []
+    if (flipActive.value) { settleFlip(false) }
+  }
+}
+
+// ---- Long press ----
 
 function clearLongPressTimer() {
   if (longPressTimer) clearTimeout(longPressTimer)
@@ -918,6 +909,7 @@ function scheduleLongPress(clientX, clientY) {
 }
 
 function onCanvasContextMenu(event) {
+  event.preventDefault()
   const point = getEventPoint(event)
   const line = lineAtPoint(point.x, point.y)
   if (line?.text) emitParagraphSelect(line, point.x, point.y)
@@ -938,13 +930,31 @@ function emitParagraphSelect(line, x, y) {
   suppressTapUntil = Date.now() + 420
   dragging.value = false
   dragDeltaX.value = 0
+  // Set selection for canvas highlight
+  const text = line.text
+  const selStart = Math.max(0, Math.floor(text.length * 0.36))
+  const selEnd = Math.min(text.length, Math.max(selStart + 4, Math.floor(text.length * 0.62)))
+  selectedParaIndex.value = line.paragraphIndex
+  selectedCharStart.value = line.charStart + selStart
+  selectedCharEnd.value = line.charStart + selEnd
+  drawReader()
   emit('paragraphSelect', {
-    text: line.text,
+    text,
     index: line.paragraphIndex,
+    lineCharStart: line.charStart,
+    selStart,
+    selEnd,
     x,
     y,
     toolbarY: y
   })
+}
+
+function clearSelection() {
+  selectedParaIndex.value = -1
+  selectedCharStart.value = 0
+  selectedCharEnd.value = 0
+  if (!flipActive.value) drawReader()
 }
 
 function commentCount(paragraphIndex) {
@@ -962,9 +972,10 @@ function goToPage(idx) {
 watch(
   () => [props.chapter?.id, props.chapter?.content, props.chapter?.title, props.content, props.title, props.fontSize, props.lineHeight, props.marginX, props.marginY, props.paragraphSpacing, props.theme, props.toolsVisible],
   () => {
+    clearSelection()
     const promoted = promoteBoundaryPages()
     if (promoted) {
-      schedulePaginate(120)
+      schedulePaginate()
     } else {
       resetBoundaryTransitionState()
       schedulePaginate()
@@ -989,21 +1000,18 @@ watch(() => [currentPage.value, flipActive.value, flipProgress.value, props.brig
 
 onMounted(() => {
   schedulePaginate()
-  nextTick(attachCenterTapElement)
   // #ifdef H5
-  if (typeof window !== 'undefined') {
-    window.addEventListener('resize', onResize)
-    document.addEventListener('pointerdown', onDocumentPointerDown, true)
-    document.addEventListener('pointerup', onDocumentPointerUp, true)
+  if (typeof window !== 'undefined' && typeof ResizeObserver !== 'undefined') {
+    const root = readerRootRef.value?.$el || readerRootRef.value
+    if (root) {
+      resizeObserver = new ResizeObserver(() => {
+        schedulePaginate()
+      })
+      resizeObserver.observe(root)
+    }
   }
   // #endif
 })
-
-function onResize() {
-  if (resizeRaf) cancelAnimationFrame(resizeRaf)
-  resizeRaf = requestAnimationFrame(schedulePaginate)
-  nextTick(attachCenterTapElement)
-}
 
 onBeforeUnmount(() => {
   cancelAnim()
@@ -1011,21 +1019,14 @@ onBeforeUnmount(() => {
   clearBoundaryTransitionTimer()
   if (repaginateTimer) clearTimeout(repaginateTimer)
   if (adjacentPaginateTimer) clearTimeout(adjacentPaginateTimer)
-  if (resizeRaf) cancelAnimationFrame(resizeRaf)
-  detachCenterTapElement()
+  if (resizeObserver) resizeObserver.disconnect()
   if (canvasEl) {
-    canvasEl.removeEventListener('click', onNativeCanvasClick)
-    canvasEl.removeEventListener('pointerdown', onNativePointerDown)
-    canvasEl.removeEventListener('pointerup', onNativePointerUp)
-    canvasEl.removeEventListener('pointercancel', onNativePointerCancel)
+    canvasEl.removeEventListener('pointerdown', onPointerDown)
+    canvasEl.removeEventListener('pointermove', onPointerMove)
+    canvasEl.removeEventListener('pointerup', onPointerUp)
+    canvasEl.removeEventListener('pointercancel', onPointerCancel)
+    canvasEl.removeEventListener('contextmenu', onCanvasContextMenu)
   }
-  // #ifdef H5
-  if (typeof window !== 'undefined') {
-    window.removeEventListener('resize', onResize)
-    document.removeEventListener('pointerdown', onDocumentPointerDown, true)
-    document.removeEventListener('pointerup', onDocumentPointerUp, true)
-  }
-  // #endif
 })
 
 defineExpose({
@@ -1037,7 +1038,8 @@ defineExpose({
   },
   doFlip(dir) {
     flipBy(dir > 0 ? 1 : -1)
-  }
+  },
+  clearSelection
 })
 </script>
 
@@ -1061,17 +1063,6 @@ defineExpose({
   inset: 0;
   width: 100%;
   height: 100%;
-}
-
-.center-tap-zone {
-  position: absolute;
-  z-index: 35;
-  left: 28%;
-  right: 28%;
-  top: 54px;
-  bottom: 128px;
-  background: rgba(0, 0, 0, 0.001);
-  pointer-events: auto;
 }
 
 :deep(.reader-canvas) {

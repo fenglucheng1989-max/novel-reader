@@ -1,5 +1,5 @@
 <template>
-  <view v-if="visible" class="reader-bottom-bar" @tap.stop>
+  <view ref="rootRef" class="reader-bottom-bar" @tap.stop>
     <view class="progress-row">
       <view class="chapter-btn" :class="{ disabled: isFirstChapter }" @tap.stop="!isFirstChapter && $emit('prev')">上一章</view>
       <view class="progress-wrap">
@@ -33,6 +33,8 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+
 defineProps({
   visible: { type: Boolean, default: true },
   pageIndicator: { type: String, default: '' },
@@ -43,6 +45,8 @@ defineProps({
 })
 
 defineEmits(['prev', 'next', 'catalog', 'discuss', 'night', 'setting'])
+
+const rootRef = ref(null)
 </script>
 
 <style scoped>

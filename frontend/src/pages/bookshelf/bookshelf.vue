@@ -60,9 +60,7 @@
       </view>
 
       <!-- Loading -->
-      <view v-else-if="loading" class="empty-card">
-        <text class="empty-title">正在整理书架...</text>
-      </view>
+      <view v-else-if="loading" class="state">正在整理书架...</view>
 
       <!-- Empty -->
       <view v-else-if="!bookStore.shelf.length" class="empty-card">
@@ -209,9 +207,7 @@
 
         <!-- ─── History Tab ─── -->
         <template v-else-if="activeTab === 'history'">
-          <view v-if="historyLoading" class="empty-card">
-            <text class="empty-title">正在加载...</text>
-          </view>
+          <view v-if="historyLoading" class="state">正在加载...</view>
           <view v-else-if="!searchedHistory.length" class="empty-card">
             <view class="empty-visual-history">
               <text class="empty-history-icon">⌛</text>
@@ -298,7 +294,9 @@ const historyLoading = ref(false)
 
 async function loadReadingHistory() {
   if (!userStore.isLoggedIn) return
-  historyLoading.value = true
+  if (!readingHistory.value.length) {
+    historyLoading.value = true
+  }
   try {
     const res = await request({ url: '/api/v1/reading/history', silentAuth: true })
     if (res.code === 200) readingHistory.value = res.data || []
@@ -464,7 +462,9 @@ function loadFilterFromStorage() {
 
 async function refresh() {
   if (!userStore.isLoggedIn) return
-  loading.value = true
+  if (!bookStore.shelf.length) {
+    loading.value = true
+  }
   try {
     await Promise.all([
       bookStore.loadShelf(),
@@ -734,7 +734,10 @@ function progressText(item) {
   return `第 ${progressChapter(item)}/${total} 章`
 }
 
-onLoad(() => {
+onLoad((options) => {
+  if (options?.tab && ['shelf', 'history', 'favorites'].includes(options.tab)) {
+    activeTab.value = options.tab
+  }
   loadFilterFromStorage()
 })
 
@@ -1061,6 +1064,13 @@ onShow(() => {
   color: #8C8C8C;
   font-size: 14px;
   line-height: 22px;
+}
+
+.state {
+  padding: 52px 0;
+  color: #8C8C8C;
+  text-align: center;
+  font-size: 13px;
 }
 
 .empty-btn {

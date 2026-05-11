@@ -165,6 +165,7 @@ import BookCover from '../../components/BookCover.vue'
 
 const bookStore = useBookStore()
 const loading = ref(false)
+const hasAnyData = computed(() => editorialBooks.value.length > 0 || newBooks.value.length > 0 || completedBooks.value.length > 0)
 const activeMain = ref('recommend')
 const activeSub = ref('hot')
 
@@ -225,7 +226,9 @@ function onRankScroll(e) {
 }
 
 async function load() {
-  loading.value = true
+  if (!hasAnyData.value) {
+    loading.value = true
+  }
   try {
     await bookStore.loadCategories()
     await Promise.allSettled([

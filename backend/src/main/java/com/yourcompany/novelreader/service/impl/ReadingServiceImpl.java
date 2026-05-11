@@ -94,6 +94,8 @@ public class ReadingServiceImpl implements ReadingService {
                 .turnMode("SCROLL")
                 .autoPageEnabled(false)
                 .autoPageInterval(15)
+                .brightness(80)
+                .eyeProtection(false)
                 .updatedAt(LocalDateTime.now())
                 .build();
     }
@@ -110,6 +112,8 @@ public class ReadingServiceImpl implements ReadingService {
         setting.setTurnMode(dto.getTurnMode() == null ? setting.getTurnMode() : dto.getTurnMode());
         setting.setAutoPageEnabled(dto.getAutoPageEnabled() == null ? setting.getAutoPageEnabled() : dto.getAutoPageEnabled());
         setting.setAutoPageInterval(dto.getAutoPageInterval() == null ? setting.getAutoPageInterval() : dto.getAutoPageInterval());
+        setting.setBrightness(dto.getBrightness() == null ? setting.getBrightness() : dto.getBrightness());
+        setting.setEyeProtection(dto.getEyeProtection() == null ? setting.getEyeProtection() : dto.getEyeProtection());
         setting.setUpdatedAt(LocalDateTime.now());
         if (setting.getId() == null) {
             settingMapper.insert(setting);

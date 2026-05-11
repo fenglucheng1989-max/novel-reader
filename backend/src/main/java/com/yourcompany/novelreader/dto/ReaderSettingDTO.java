@@ -13,4 +13,6 @@ public class ReaderSettingDTO {
     private String turnMode;
     private Boolean autoPageEnabled;
     private Integer autoPageInterval;
+    private Integer brightness;
+    private Boolean eyeProtection;
 }

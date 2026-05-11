@@ -1,5 +1,5 @@
 <template>
-  <view v-if="visible" class="reader-top-bar" @tap.stop>
+  <view ref="rootRef" class="reader-top-bar" @tap.stop>
     <view class="top-left" @tap.stop="$emit('back')">
       <text class="top-icon">&#x2190;</text>
     </view>
@@ -16,12 +16,16 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
+
 defineProps({
   visible: { type: Boolean, default: true },
   title: { type: String, default: '' }
 })
 
 defineEmits(['back', 'bookshelf', 'setting'])
+
+const rootRef = ref(null)
 </script>
 
 <style scoped>

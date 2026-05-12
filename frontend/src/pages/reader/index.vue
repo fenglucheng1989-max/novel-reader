@@ -598,7 +598,7 @@ function onKeyDown(e: KeyboardEvent): void {
 }
 
 .nr-back-label {
-  max-width: 120px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

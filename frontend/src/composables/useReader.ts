@@ -73,69 +73,90 @@ export function useReader(options?: UseReaderOptions) {
 
     store.setChapterLoading(true)
 
-    // 绑定引擎事件 → store
-    engine.on('chapter:loaded', ({ chapter }) => {
-      store.setChapter(chapter)
-    })
+    // 安全超时：防止任何原因导致 loading 永远不消失
+    let loadingTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      console.warn('[useReader] Init timeout (45s), force hiding loading')
+      store.setChapterLoading(false)
+    }, 45000)
 
-    engine.on('page:changed', ({ pageIndex }) => {
-      store.setCurrentPageIndex(pageIndex)
-      store.setPages(engine.pages)
-    })
+    try {
+      // 绑定引擎事件 → store
+      engine.on('chapter:loaded', ({ chapter }) => {
+        store.setChapter(chapter)
+      })
 
-    engine.on('phase:changed', ({ from, to }) => {
-      store.setPhase(to)
-    })
+      engine.on('chapterList:loaded', ({ chapters }) => {
+        store.chapterList = chapters
+      })
 
-    engine.on('error', ({ message }) => {
-      engineError.value = message
-    })
+      engine.on('page:changed', ({ pageIndex }) => {
+        store.setCurrentPageIndex(pageIndex)
+        store.setPages(engine.pages)
+      })
 
-    engine.on('progress:saved', () => {
-      // 进度已由引擎自动保存
-    })
+      engine.on('phase:changed', ({ from, to }) => {
+        store.setPhase(to)
+      })
 
-    // 恢复进度
-    let startChapterNo = opts.chapterNo ?? 1
-    let startPageIndex = opts.pageIndex ?? 0
-    let startMode = opts.mode || 'PAGINATION'
+      engine.on('error', ({ message }) => {
+        engineError.value = message
+      })
 
-    if (opts.bookId) {
-      try {
-        const savedProgress = await ProgressService.getProgress(opts.bookId)
-        if (savedProgress) {
-          startChapterNo = opts.chapterNo ?? savedProgress.chapterNo ?? 1
-          startPageIndex = opts.pageIndex ?? savedProgress.pageIndex ?? 0
-          startMode = opts.mode || savedProgress.mode || 'PAGINATION'
+      engine.on('progress:saved', () => {
+        // 进度已由引擎自动保存
+      })
+
+      // 恢复进度
+      let startChapterNo = opts.chapterNo ?? 1
+      let startPageIndex = opts.pageIndex ?? 0
+      let startMode = opts.mode || 'PAGINATION'
+
+      if (opts.bookId) {
+        try {
+          const savedProgress = await ProgressService.getProgress(opts.bookId)
+          if (savedProgress) {
+            startChapterNo = opts.chapterNo ?? savedProgress.chapterNo ?? 1
+            startPageIndex = opts.pageIndex ?? savedProgress.pageIndex ?? 0
+            startMode = opts.mode || savedProgress.mode || 'PAGINATION'
+          }
+        } catch {
+          // 进度恢复失败不阻塞
         }
-      } catch {
-        // 进度恢复失败不阻塞
       }
+
+      store.bookId = opts.bookId
+      store.bookTitle = opts.bookTitle || ''
+
+      // 初始化引擎
+      await engine.init({
+        bookId: opts.bookId,
+        bookTitle: opts.bookTitle || '',
+        initialChapterNo: startChapterNo,
+        initialPageIndex: startPageIndex,
+        mode: startMode,
+      })
+
+      // 同步 settings → engine
+      watch(
+        () => store.settings,
+        (settings) => {
+          engine.onSettingsChanged(settings)
+        },
+        { deep: true, immediate: true },
+      )
+
+      initialized.value = true
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '初始化失败'
+      console.error('[useReader] Init failed:', msg)
+      engineError.value = msg
+    } finally {
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout)
+        loadingTimeout = null
+      }
+      store.setChapterLoading(false)
     }
-
-    store.bookId = opts.bookId
-    store.bookTitle = opts.bookTitle || ''
-
-    // 初始化引擎
-    await engine.init({
-      bookId: opts.bookId,
-      bookTitle: opts.bookTitle || '',
-      initialChapterNo: startChapterNo,
-      initialPageIndex: startPageIndex,
-      mode: startMode,
-    })
-
-    // 同步 settings → engine
-    watch(
-      () => store.settings,
-      (settings) => {
-        engine.onSettingsChanged(settings)
-      },
-      { deep: true, immediate: true },
-    )
-
-    initialized.value = true
-    store.setChapterLoading(false)
   }
 
   // 如果 options 中有 bookId，自动初始化

@@ -400,7 +400,12 @@ function rebalancePages(
   lineHeight: number,
   paragraphSpacing: number,
 ): void {
-  while (pages.length >= 2) {
+  let iterations = 0
+  const MAX_ITERATIONS = 100
+
+  while (pages.length >= 2 && iterations < MAX_ITERATIONS) {
+    iterations++
+
     const lastIdx = pages.length - 1
     const prevIdx = pages.length - 2
 
@@ -457,40 +462,41 @@ function rebalancePages(
       }
     }
 
-    if (bestMove > 0) {
-      // 执行行移动
-      const movedLines = prevLines.splice(prevLines.length - bestMove)
+    // 没有可移动的行：终止循环，防止死循环
+    if (bestMove === 0) break
 
-      // 更新上一页
-      const newPrevLines = prevLines
-      const newPrevHeight = newPrevLines.reduce(
-        (h, line, i) =>
-          h + lineHeight + (i > 0 && line.isFirstInParagraph ? paragraphSpacing : 0),
-        0,
-      )
+    // 执行行移动
+    const movedLines = prevLines.splice(prevLines.length - bestMove)
 
-      // 更新最后一页
-      const newLastLines = [...movedLines, ...lastLines]
-      const newLastHeight = newLastLines.reduce(
-        (h, line, i) =>
-          h + lineHeight + (i > 0 && line.isFirstInParagraph ? paragraphSpacing : 0),
-        0,
-      )
+    // 更新上一页
+    const newPrevLines = prevLines
+    const newPrevHeight = newPrevLines.reduce(
+      (h, line, i) =>
+        h + lineHeight + (i > 0 && line.isFirstInParagraph ? paragraphSpacing : 0),
+      0,
+    )
 
-      const prevMaxH2 = pages[prevIdx].isFirst
-        ? availableHeight - titleHeight
-        : availableHeight
+    // 更新最后一页
+    const newLastLines = [...movedLines, ...lastLines]
+    const newLastHeight = newLastLines.reduce(
+      (h, line, i) =>
+        h + lineHeight + (i > 0 && line.isFirstInParagraph ? paragraphSpacing : 0),
+      0,
+    )
 
-      pages[prevIdx].lines = newPrevLines
-      pages[prevIdx].fillRatio = prevMaxH2 > 0 ? newPrevHeight / prevMaxH2 : 0
+    const prevMaxH2 = pages[prevIdx].isFirst
+      ? availableHeight - titleHeight
+      : availableHeight
 
-      pages[lastIdx].lines = newLastLines
-      pages[lastIdx].fillRatio = availableHeight > 0 ? newLastHeight / availableHeight : 0
+    pages[prevIdx].lines = newPrevLines
+    pages[prevIdx].fillRatio = prevMaxH2 > 0 ? newPrevHeight / prevMaxH2 : 0
 
-      // 更新 charRange
-      updateCharRanges(pages[prevIdx])
-      updateCharRanges(pages[lastIdx])
-    }
+    pages[lastIdx].lines = newLastLines
+    pages[lastIdx].fillRatio = availableHeight > 0 ? newLastHeight / availableHeight : 0
+
+    // 更新 charRange
+    updateCharRanges(pages[prevIdx])
+    updateCharRanges(pages[lastIdx])
   }
 }
 

@@ -110,6 +110,7 @@ export class ReaderEngine {
   private listeners: ListenerMap = {
     'chapter:loaded': new Set(),
     'chapter:changed': new Set(),
+    'chapterList:loaded': new Set(),
     'page:changed': new Set(),
     'mode:changed': new Set(),
     'settings:changed': new Set(),
@@ -245,7 +246,17 @@ export class ReaderEngine {
     chapterNo: number,
     targetPageIndex: number = 0,
   ): Promise<void> {
-    if (this.stateMachine.phase === 'LOADING_CHAPTER') return
+    // 如果正在加载，跳过当前请求
+    if (this.stateMachine.phase === 'LOADING_CHAPTER') {
+      console.warn(`[ReaderEngine] Already loading chapter, skipping request for chapter ${chapterNo}`)
+      return
+    }
+    
+    // 如果处于错误状态，先重置
+    if (this.stateMachine.phase === 'ERROR') {
+      this.stateMachine.transition('IDLE', '从错误状态恢复')
+    }
+    
     this.stateMachine.transition('LOADING_CHAPTER', `跳转到第${chapterNo}章`)
 
     try {
@@ -292,8 +303,26 @@ export class ReaderEngine {
       this.prefetchAdjacent(chapter.chapterNo)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error'
+      console.error(`[ReaderEngine] Failed to load chapter ${chapterNo}:`, msg)
+      
+      // 失败时创建空章节作为降级，避免卡住
+      const emptyChapter: ChapterData = {
+        id: `${this._bookId}:${chapterNo}`,
+        bookId: this._bookId,
+        chapterNo,
+        title: `第${chapterNo}章`,
+        content: '',
+        wordCount: 0,
+        totalChapters: this._totalChapters || chapterNo,
+      }
+      this._chapter = emptyChapter
+      this.stateMachine.startSplitting()
+      this.splitAndRender(emptyChapter, targetPageIndex)
+      this.stateMachine.finishSplitting()
+      
       this.stateMachine.fail(msg)
       this.emit('error', { code: 'CHAPTER_ERROR', message: msg })
+      this.emit('chapter:loaded', { chapter: emptyChapter })
     }
   }
 
@@ -417,7 +446,11 @@ export class ReaderEngine {
     event: K,
     handler: ReaderEventHandler<K>,
   ): () => void {
-    const set = this.listeners[event] as Set<ReaderEventHandler<K>>
+    let set = this.listeners[event] as Set<ReaderEventHandler<K>> | undefined
+    if (!set) {
+      set = new Set<ReaderEventHandler<K>>()
+      this.listeners[event] = set as Set<unknown>
+    }
     set.add(handler)
     return () => {
       set.delete(handler as ReaderEventHandler<K>)
@@ -554,6 +587,7 @@ export class ReaderEngine {
           totalChapters: 0,
         }))
         this._totalChapters = this._allChapters.length
+        this.emit('chapterList:loaded', { chapters: this._allChapters })
       }
     } catch {
       // 章节列表加载失败不阻塞阅读

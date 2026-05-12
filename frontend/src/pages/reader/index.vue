@@ -35,6 +35,7 @@
           :current-page-index="currentPageIndex"
           :mode="store.settings.readerMode"
           :chapter-title="chapter?.title ?? ''"
+          :chapter-no="chapter?.chapterNo ?? 0"
           :book-title="store.bookTitle"
           :font-size="store.settings.fontSize"
           :line-height="store.settings.lineHeight"
@@ -57,16 +58,21 @@
         :current-page="currentPageIndex"
         :total-pages="totalPages"
         :is-night="store.isNight"
+        :book-title="store.bookTitle"
         @close="hideToolbar"
         @back="goBack"
         @add-shelf="addToShelf"
+        @add-favorite="addToFavorites"
+        @download="onDownload"
+        @more="onMore"
+        @prev-chapter="navigatePrevChapter"
+        @next-chapter="navigateNextChapter"
         @open-catalog="showCatalog"
         @toggle-night="toggleNightMode"
         @open-settings="toggleSettings"
-        @open-comments="openGlobalComments"
-        @prev-chapter="navigatePrevChapter"
-        @next-chapter="navigateNextChapter"
         @progress-seek="onProgressSeek"
+        @swipe-left="onSwipeLeft"
+        @swipe-right="onSwipeRight"
       />
 
       <!-- 目录 -->
@@ -348,6 +354,14 @@ function onProgressSeek(pageIndex: number): void {
   goToPage(pageIndex)
 }
 
+function onDownload(): void {
+  uni.showToast({ title: '下载功能开发中', icon: 'none' })
+}
+
+function onMore(): void {
+  uni.showToast({ title: '更多设置开发中', icon: 'none' })
+}
+
 function onChapterSelect(chapterNo: number): void {
   openChapter(chapterNo)
 }
@@ -498,6 +512,11 @@ function toggleCommentLike(comment: ParagraphComment): void {
 
 function addToShelf(): void {
   uni.showToast({ title: '已加入书架', icon: 'success' })
+  store.hideToolbar()
+}
+
+function addToFavorites(): void {
+  uni.showToast({ title: '已收藏', icon: 'success' })
   store.hideToolbar()
 }
 

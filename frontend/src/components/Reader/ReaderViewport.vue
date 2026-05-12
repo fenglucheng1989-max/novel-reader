@@ -15,7 +15,7 @@
 
     <!-- 分页模式：使用 Vue Transition 实现翻页动画 -->
     <view v-else-if="mode === 'PAGINATION'" class="nr-stage">
-      <Transition :name="transitionName" mode="out-in">
+      <Transition :name="transitionName">
         <ReaderPage
           v-if="currentPage"
           :key="currentPageIndex"
@@ -74,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import type { Page, ReaderMode } from '../../types/reader'
 import ReaderPage from './ReaderPage.vue'
 
@@ -82,6 +82,7 @@ const props = withDefaults(defineProps<{
   pages: Page[]
   currentPageIndex: number
   mode: ReaderMode
+  chapterNo: number
   chapterTitle: string
   bookTitle: string
   fontSize: number
@@ -93,6 +94,7 @@ const props = withDefaults(defineProps<{
   pages: () => [],
   currentPageIndex: 0,
   mode: 'PAGINATION',
+  chapterNo: 0,
   chapterTitle: '',
   bookTitle: '',
   fontSize: 18,
@@ -116,7 +118,6 @@ const viewportRef = ref<HTMLElement | null>(null)
 const currentPageRef = ref<HTMLElement | null>(null)
 const scrollViewRef = ref<HTMLElement | null>(null)
 
-const lastPageIndex = ref(props.currentPageIndex)
 const transitionName = ref('slide-left')
 
 const currentPage = computed(() => {
@@ -136,20 +137,22 @@ const viewportStyle = computed(() => ({
   backgroundColor: props.backgroundColor,
 }))
 
-const scrollTargetId = ref('')
-
 const internalPageIndex = ref(props.currentPageIndex)
+const prevChapterNo = ref(props.chapterNo)
 
-const onPageIndexChange = (newIndex: number): void => {
-  const oldIndex = internalPageIndex.value
-  transitionName.value = newIndex > oldIndex ? 'slide-left' : 'slide-right'
+watch(() => props.currentPageIndex, (newIndex, oldIndex) => {
+  // 章节切换：由 chapterNo 变化决定方向
+  if (props.chapterNo !== prevChapterNo.value) {
+    transitionName.value = props.chapterNo > prevChapterNo.value ? 'slide-left' : 'slide-right'
+    prevChapterNo.value = props.chapterNo
+  } else {
+    // 章内翻页：index 增减对应前进/后退
+    transitionName.value = newIndex > oldIndex ? 'slide-left' : 'slide-right'
+  }
   internalPageIndex.value = newIndex
-  lastPageIndex.value = oldIndex
-  
-  nextTick(() => {
-    internalPageIndex.value = props.currentPageIndex
-  })
-}
+})
+
+const scrollTargetId = ref('')
 
 let touchStartX = 0
 let touchStartY = 0
@@ -350,7 +353,7 @@ defineExpose({
 .slide-left-leave-active,
 .slide-right-enter-active,
 .slide-right-leave-active {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.35s ease;
   position: absolute;
   width: 100%;
   height: 100%;
@@ -358,22 +361,18 @@ defineExpose({
 
 .slide-left-enter-from {
   transform: translateX(100%);
-  opacity: 0;
 }
 
 .slide-left-leave-to {
-  transform: translateX(-30%);
-  opacity: 0;
+  transform: translateX(-100%);
 }
 
 .slide-right-enter-from {
   transform: translateX(-100%);
-  opacity: 0;
 }
 
 .slide-right-leave-to {
-  transform: translateX(30%);
-  opacity: 0;
+  transform: translateX(100%);
 }
 
 .slide-left-enter-to,
@@ -381,6 +380,5 @@ defineExpose({
 .slide-right-enter-to,
 .slide-right-leave-from {
   transform: translateX(0);
-  opacity: 1;
 }
 </style>

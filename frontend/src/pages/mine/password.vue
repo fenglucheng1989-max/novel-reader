@@ -23,7 +23,7 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { request } from '../../utils/request'
 
@@ -32,9 +32,9 @@ const newPassword = ref('')
 const confirmPassword = ref('')
 const saving = ref(false)
 
-const canSave = computed(() => oldPassword.value && newPassword.value.length >= 6 && confirmPassword.value)
+const canSave = computed(() => !!(oldPassword.value && newPassword.value.length >= 6 && confirmPassword.value))
 
-async function save() {
+async function save(): Promise<void> {
   if (saving.value || !canSave.value) return
   if (newPassword.value !== confirmPassword.value) {
     uni.showToast({ title: '两次密码不一致', icon: 'none' })
@@ -45,7 +45,7 @@ async function save() {
     const res = await request({
       url: '/api/v1/user/password',
       method: 'PUT',
-      data: { oldPassword: oldPassword.value, newPassword: newPassword.value }
+      data: { oldPassword: oldPassword.value, newPassword: newPassword.value },
     })
     if (res.code === 200) {
       uni.showToast({ title: '密码已修改', icon: 'success' })

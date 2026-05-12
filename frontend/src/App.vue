@@ -41,7 +41,7 @@ body {
 
 #app {
   width: min(100vw, 480px);
-  min-height: 100vh;
+  height: 100vh;
   margin: 0 auto;
   background:
     linear-gradient(180deg, #FAFAF8 0%, #F5F5F2 40%, #F8F8F6 100%);
@@ -88,6 +88,7 @@ uni-page-head .uni-page-head {
 
 uni-page-body {
   width: 100%;
+  height: 100%;
   overflow-x: hidden;
 }
 

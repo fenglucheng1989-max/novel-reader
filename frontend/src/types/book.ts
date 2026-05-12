@@ -23,6 +23,13 @@ export interface Book {
   updatedAt: string
 }
 
+/** 分类 */
+export interface Category {
+  id: number
+  name: string
+  groupKey?: string
+}
+
 /** 章节 */
 export interface Chapter {
   id: number
@@ -42,6 +49,9 @@ export interface ShelfItem {
   pinned: boolean
   progress: ReadingProgress | null
   addedAt: string
+  createdAt?: string
+  updatedAt?: string
+  lastReadAt?: string
 }
 
 /** 阅读进度 */
@@ -61,6 +71,27 @@ export interface ShelfStats {
   streakDays: number
   updateCount: number
   latestBookId: number | null
+}
+
+/** 收藏项 */
+export interface FavoriteItem {
+  bookId: number
+  bookTitle: string
+  bookAuthor: string
+  coverUrl: string
+  status: BookStatus
+  latestChapterTitle: string | null
+}
+
+/** 阅读历史项 */
+export interface HistoryItem {
+  bookId: number
+  bookTitle: string
+  bookAuthor: string
+  coverUrl: string
+  status: BookStatus
+  latestChapterTitle: string | null
+  lastReadAt: string
 }
 
 /** 评论 */

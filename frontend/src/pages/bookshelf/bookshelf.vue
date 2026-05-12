@@ -266,7 +266,7 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { onShow, onLoad } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
@@ -274,32 +274,55 @@ import { useUserStore } from '../../store/user'
 import { useReaderStore } from '../../store/reader'
 import { request } from '../../utils/request'
 import BookCover from '../../components/BookCover.vue'
+import type { ShelfItem, FavoriteItem, HistoryItem } from '../../types/book'
+
+interface BookshelfFilterParams {
+  type?: string
+  status?: string
+  categoryId?: number | string
+  categoryName?: string
+  progress?: string
+  wordRange?: string
+  wordRangeLabel?: string
+  sortBy?: string
+  onlyUpdated?: boolean
+}
+
+interface TabOption {
+  key: string
+  label: string
+}
+
+interface QuickFilter {
+  key: string
+  label: string
+}
 
 const bookStore = useBookStore()
 const userStore = useUserStore()
 const readerStore = useReaderStore()
 const loading = ref(false)
 const editMode = ref(false)
-const editTarget = ref('shelf')
-const activeTab = ref('shelf')
-const activeFilter = ref('all')
-const viewMode = ref(uni.getStorageSync('bookshelfViewMode') || 'grid')
-const selectedIds = ref(new Set())
+const editTarget = ref<'shelf' | 'favorites'>('shelf')
+const activeTab = ref<string>('shelf')
+const activeFilter = ref<string>('all')
+const viewMode = ref<string>(uni.getStorageSync('bookshelfViewMode') || 'grid')
+const selectedIds = ref(new Set<number>())
 const showMenu = ref(false)
 const searchMode = ref(false)
 const searchKeyword = ref('')
-const filterParams = ref(null)
-const readingHistory = ref([])
+const filterParams = ref<BookshelfFilterParams | null>(null)
+const readingHistory = ref<HistoryItem[]>([])
 const historyLoading = ref(false)
 
-async function loadReadingHistory() {
+async function loadReadingHistory(): Promise<void> {
   if (!userStore.isLoggedIn) return
   if (!readingHistory.value.length) {
     historyLoading.value = true
   }
   try {
     const res = await request({ url: '/api/v1/reading/history', silentAuth: true })
-    if (res.code === 200) readingHistory.value = res.data || []
+    if (res.code === 200) readingHistory.value = (res.data as HistoryItem[]) || []
   } catch { readingHistory.value = [] }
   finally { historyLoading.value = false }
 }
@@ -309,16 +332,16 @@ watch(activeTab, (val) => {
   if (val === 'history') loadReadingHistory()
 })
 
-const tabs = [
+const tabs: TabOption[] = [
   { key: 'shelf', label: '书架' },
   { key: 'history', label: '历史' },
-  { key: 'favorites', label: '收藏' }
+  { key: 'favorites', label: '收藏' },
 ]
 
-const quickFilters = [
+const quickFilters: QuickFilter[] = [
   { key: 'all', label: '全部' },
   { key: 'updated', label: '有更新' },
-  { key: 'completed', label: '已完结' }
+  { key: 'completed', label: '已完结' },
 ]
 
 const hasFilterParams = computed(() => {
@@ -330,12 +353,12 @@ const hasFilterParams = computed(() => {
 const filterSummary = computed(() => {
   const p = filterParams.value
   if (!p) return ''
-  const parts = []
-  const typeLabels = { novel: '小说', audio: '听书' }
+  const parts: string[] = []
+  const typeLabels: Record<string, string> = { novel: '小说', audio: '听书' }
   if (p.type) parts.push(typeLabels[p.type] || p.type)
   if (p.categoryName) parts.push(p.categoryName)
   if (p.wordRangeLabel) parts.push(p.wordRangeLabel)
-  const sortMap = { recent: '最近阅读', update: '最近更新', added: '收藏时间', words: '字数多少' }
+  const sortMap: Record<string, string> = { recent: '最近阅读', update: '最近更新', added: '收藏时间', words: '字数多少' }
   if (p.sortBy && sortMap[p.sortBy]) parts.push(sortMap[p.sortBy])
   return parts.join(' · ')
 })
@@ -346,15 +369,15 @@ const filteredShelf = computed(() => {
     const kw = searchKeyword.value.toLowerCase()
     list = list.filter(item =>
       (item.book.title || '').toLowerCase().includes(kw) ||
-      (item.book.author || '').toLowerCase().includes(kw)
+      (item.book.author || '').toLowerCase().includes(kw),
     )
   }
   if (hasFilterParams.value) {
-    const p = filterParams.value
+    const p = filterParams.value!
     if (p.type) {
       const relevantKeys = p.type === 'novel' ? ['male', 'female'] : [p.type]
       const typeCatIds = new Set(
-        bookStore.categories.filter(c => relevantKeys.includes(c.groupKey)).map(c => c.id)
+        bookStore.categories.filter(c => relevantKeys.includes(c.groupKey || '')).map(c => c.id),
       )
       list = list.filter((item) => typeCatIds.has(Number(item.book.categoryId)))
     }
@@ -372,7 +395,13 @@ const filteredShelf = computed(() => {
       list = list.filter((item) => progressChapter(item) >= Number(item.book.chapterCount || 0) && Number(item.book.chapterCount || 0) > 0)
     }
     if (p.wordRange) {
-      const [min, max] = { 'lt5': [0, 49999], '5-10': [50000, 99999], '10-30': [100000, 299999], 'gt30': [300000, Infinity] }[p.wordRange] || []
+      const rangeMap: Record<string, [number, number]> = {
+        lt5: [0, 49999],
+        '5-10': [50000, 99999],
+        '10-30': [100000, 299999],
+        gt30: [300000, Infinity],
+      }
+      const [min, max] = rangeMap[p.wordRange] || [undefined, undefined]
       if (min !== undefined) {
         list = list.filter((item) => {
           const wc = Number(item.book.wordCount || 0)
@@ -386,11 +415,11 @@ const filteredShelf = computed(() => {
     if (p.sortBy) {
       list = [...list]
       if (p.sortBy === 'recent') {
-        list.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
+        list.sort((a, b) => new Date(b.updatedAt || b.addedAt || 0).getTime() - new Date(a.updatedAt || a.addedAt || 0).getTime())
       } else if (p.sortBy === 'update') {
-        list.sort((a, b) => new Date(b.book.updatedAt || 0) - new Date(a.book.updatedAt || 0))
+        list.sort((a, b) => new Date(b.book.updatedAt || 0).getTime() - new Date(a.book.updatedAt || 0).getTime())
       } else if (p.sortBy === 'added') {
-        list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        list.sort((a, b) => new Date(b.addedAt || 0).getTime() - new Date(a.addedAt || 0).getTime())
       } else if (p.sortBy === 'words') {
         list.sort((a, b) => Number(b.book.wordCount || 0) - Number(a.book.wordCount || 0))
       }
@@ -408,59 +437,53 @@ const filteredShelf = computed(() => {
 const searchedFavorites = computed(() => {
   if (!searchKeyword.value) return bookStore.favorites
   const kw = searchKeyword.value.toLowerCase()
-  return bookStore.favorites.filter(item =>
+  return bookStore.favorites.filter((item: FavoriteItem) =>
     (item.bookTitle || '').toLowerCase().includes(kw) ||
-    (item.bookAuthor || '').toLowerCase().includes(kw)
+    (item.bookAuthor || '').toLowerCase().includes(kw),
   )
 })
 
 const searchedHistory = computed(() => {
   if (!searchKeyword.value) return readingHistory.value
   const kw = searchKeyword.value.toLowerCase()
-  return readingHistory.value.filter(item =>
+  return readingHistory.value.filter((item: HistoryItem) =>
     (item.bookTitle || '').toLowerCase().includes(kw) ||
-    (item.bookAuthor || '').toLowerCase().includes(kw)
+    (item.bookAuthor || '').toLowerCase().includes(kw),
   )
 })
 
 const latestItem = computed(() => {
-  const items = bookStore.shelf.filter((item) => item.lastReadAt || item.progress?.updatedAt)
+  const items = bookStore.shelf.filter((item: ShelfItem) => item.lastReadAt || item.progress?.updatedAt)
   if (!items.length) return null
   items.sort((a, b) => {
-    const aTime = new Date(a.lastReadAt || a.progress?.updatedAt || 0)
-    const bTime = new Date(b.lastReadAt || b.progress?.updatedAt || 0)
+    const aTime = new Date(a.lastReadAt || a.progress?.updatedAt || 0).getTime()
+    const bTime = new Date(b.lastReadAt || b.progress?.updatedAt || 0).getTime()
     return bTime - aTime
   })
   return items[0]
 })
 
-const activeFilterLabel = computed(() => {
-  if (hasFilterParams.value) return '筛选结果'
-  const found = quickFilters.find((f) => f.key === activeFilter.value)
-  return found ? found.label : '全部'
-})
-
 const allSelected = computed(() => {
   if (editTarget.value === 'favorites') {
     if (!bookStore.favorites.length) return false
-    return bookStore.favorites.every((item) => selectedIds.value.has(item.bookId))
+    return bookStore.favorites.every((item: FavoriteItem) => selectedIds.value.has(item.bookId))
   }
   if (!filteredShelf.value.length) return false
   return filteredShelf.value.every((item) => selectedIds.value.has(item.shelfId))
 })
 
-function loadFilterFromStorage() {
+function loadFilterFromStorage(): void {
   try {
     const raw = uni.getStorageSync('bookshelfFilter')
     if (raw) {
-      filterParams.value = JSON.parse(raw)
+      filterParams.value = JSON.parse(raw as string) as BookshelfFilterParams
     }
   } catch {
     filterParams.value = null
   }
 }
 
-async function refresh() {
+async function refresh(): Promise<void> {
   if (!userStore.isLoggedIn) return
   if (!bookStore.shelf.length) {
     loading.value = true
@@ -469,50 +492,44 @@ async function refresh() {
     await Promise.all([
       bookStore.loadShelf(),
       bookStore.loadShelfStats(),
-      bookStore.loadFavorites()
+      bookStore.loadFavorites(),
     ])
-  } catch (error) {
-    if (error?.statusCode === 401 || error?.statusCode === 403) {
-      userStore.syncFromStorage()
-      bookStore.shelf = []
-      bookStore.shelfStats = null
-      bookStore.favorites = []
-      editMode.value = false
-    }
+  } catch {
+    // 静默处理
   } finally {
     loading.value = false
   }
 }
 
-function selectQuickFilter(key) {
+function selectQuickFilter(key: string): void {
   activeFilter.value = key
   filterParams.value = null
   uni.removeStorageSync('bookshelfFilter')
   selectedIds.value = new Set()
 }
 
-function goFilter() {
+function goFilter(): void {
   showMenu.value = false
   uni.navigateTo({ url: '/pages/bookshelf/filter' })
 }
 
-function clearFilterParams() {
+function clearFilterParams(): void {
   filterParams.value = null
   uni.removeStorageSync('bookshelfFilter')
   activeFilter.value = 'all'
 }
 
-function toggleEdit() {
+function toggleEdit(): void {
   showMenu.value = false
   editMode.value = !editMode.value
   selectedIds.value = new Set()
 }
 
-async function batchPin() {
+async function batchPin(): Promise<void> {
   const ids = [...selectedIds.value].map((shelfId) => {
     const item = bookStore.shelf.find((i) => i.shelfId === shelfId)
     return item ? item.book.id : null
-  }).filter(Boolean)
+  }).filter(Boolean) as number[]
   for (const bookId of ids) {
     await bookStore.pinShelf(bookId)
   }
@@ -521,23 +538,23 @@ async function batchPin() {
   uni.showToast({ title: '已置顶', icon: 'success' })
 }
 
-function cancelEdit() {
+function cancelEdit(): void {
   editMode.value = false
   editTarget.value = 'shelf'
   selectedIds.value = new Set()
 }
 
-function toggleSelectAll() {
+function toggleSelectAll(): void {
   if (allSelected.value) {
     selectedIds.value = new Set()
   } else if (editTarget.value === 'favorites') {
-    selectedIds.value = new Set(bookStore.favorites.map((item) => item.bookId))
+    selectedIds.value = new Set(bookStore.favorites.map((item: FavoriteItem) => item.bookId))
   } else {
     selectedIds.value = new Set(filteredShelf.value.map((item) => item.shelfId))
   }
 }
 
-function toggleSelect(item) {
+function toggleSelect(item: ShelfItem): void {
   const next = new Set(selectedIds.value)
   if (next.has(item.shelfId)) {
     next.delete(item.shelfId)
@@ -547,7 +564,7 @@ function toggleSelect(item) {
   selectedIds.value = next
 }
 
-async function batchRemove() {
+async function batchRemove(): Promise<void> {
   uni.showModal({
     title: '批量移出',
     content: `确定要把选中的 ${selectedIds.value.size} 本书移出书架吗？`,
@@ -556,22 +573,22 @@ async function batchRemove() {
       const ids = [...selectedIds.value].map((shelfId) => {
         const item = bookStore.shelf.find((i) => i.shelfId === shelfId)
         return item ? item.book.id : null
-      }).filter(Boolean)
+      }).filter(Boolean) as number[]
       await bookStore.removeShelfBatch(ids)
       selectedIds.value = new Set()
       await refresh()
       if (!bookStore.shelf.length) editMode.value = false
-    }
+    },
   })
 }
 
-function toggleViewMode() {
+function toggleViewMode(): void {
   showMenu.value = false
   viewMode.value = viewMode.value === 'grid' ? 'list' : 'grid'
   uni.setStorageSync('bookshelfViewMode', viewMode.value)
 }
 
-function handleBookTap(item) {
+function handleBookTap(item: ShelfItem): void {
   if (editMode.value) {
     toggleSelect(item)
     return
@@ -579,21 +596,12 @@ function handleBookTap(item) {
   openBook(item)
 }
 
-function openBook(item) {
+function openBook(item: ShelfItem): void {
   const chapterNo = progressChapter(item)
-  uni.navigateTo({ url: `/pages/reader/reader?bookId=${item.book.id}&chapterNo=${chapterNo}` })
+  uni.navigateTo({ url: `/pages/reader/index?bookId=${item.book.id}&chapterNo=${chapterNo}` })
 }
 
-async function togglePin(item) {
-  if (item.pinned) {
-    await bookStore.unpinShelf(item.book.id)
-  } else {
-    await bookStore.pinShelf(item.book.id)
-  }
-  await refresh()
-}
-
-async function remove(bookId) {
+async function remove(bookId: number): Promise<void> {
   uni.showModal({
     title: '移出书架',
     content: '确定要把这本书移出书架吗？',
@@ -602,41 +610,41 @@ async function remove(bookId) {
       await bookStore.removeShelf(bookId)
       await refresh()
       if (!bookStore.shelf.length) editMode.value = false
-    }
+    },
   })
 }
 
-function goMine() {
+function goMine(): void {
   uni.switchTab({ url: '/pages/mine/mine' })
 }
 
-function goStore() {
+function goStore(): void {
   uni.switchTab({ url: '/pages/index/index' })
 }
 
-function enterSearch() {
+function enterSearch(): void {
   searchMode.value = true
   searchKeyword.value = ''
 }
 
-function exitSearch() {
+function exitSearch(): void {
   searchMode.value = false
   searchKeyword.value = ''
 }
 
-function onShelfSearch() {
+function onShelfSearch(): void {
   // reactive filtering via computed
 }
 
-function clearShelfSearch() {
+function clearShelfSearch(): void {
   searchKeyword.value = ''
 }
 
-function goBook(bookId) {
-  uni.navigateTo({ url: `/pages/reader/reader?bookId=${bookId}&chapterNo=1` })
+function goBook(bookId: number): void {
+  uni.navigateTo({ url: `/pages/reader/index?bookId=${bookId}&chapterNo=1` })
 }
 
-function handleFavTap(item) {
+function handleFavTap(item: FavoriteItem): void {
   if (editMode.value) {
     const next = new Set(selectedIds.value)
     if (next.has(item.bookId)) next.delete(item.bookId)
@@ -647,13 +655,13 @@ function handleFavTap(item) {
   goBook(item.bookId)
 }
 
-function showFavContextMenu(item) {
+function showFavContextMenu(item: FavoriteItem): void {
   editTarget.value = 'favorites'
   editMode.value = true
   selectedIds.value = new Set([item.bookId])
 }
 
-async function batchRemoveFav() {
+async function batchRemoveFav(): Promise<void> {
   uni.showModal({
     title: '取消收藏',
     content: `确定要取消收藏选中的 ${selectedIds.value.size} 本书吗？`,
@@ -666,77 +674,58 @@ async function batchRemoveFav() {
       selectedIds.value = new Set()
       await refresh()
       if (!bookStore.favorites.length) editMode.value = false
-    }
+    },
   })
 }
 
-function formatHistoryTime(timeStr) {
+function formatHistoryTime(timeStr: string): string {
   if (!timeStr) return ''
   const d = new Date(timeStr)
   const now = new Date()
-  const diff = now - d
+  const diff = now.getTime() - d.getTime()
   if (diff < 60000) return '刚刚'
   if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`
   if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 
-function progressChapter(item) {
+function progressChapter(item: ShelfItem): number {
   return Number(item.progress?.chapterNo || 1)
 }
 
-function remainingChapters(item) {
+function remainingChapters(item: ShelfItem): number {
   const total = Number(item.book.chapterCount || 0)
   if (!total) return 0
   return Math.max(total - progressChapter(item), 0)
 }
 
-function unreadText(item) {
+function unreadText(item: ShelfItem): string {
   if (!Number(item.book.chapterCount || 0)) return '暂无章节'
   const count = remainingChapters(item)
   return count > 0 ? `${count} 章未读` : '已读完'
 }
 
-function progressPercent(item) {
-  const total = Number(item.book.chapterCount || 0)
-  if (!total) return 0
-  return Math.round((progressChapter(item) / total) * 100)
-}
-
-function showContextMenu(item) {
+function showContextMenu(item: ShelfItem): void {
   editTarget.value = 'shelf'
   editMode.value = true
   selectedIds.value = new Set([item.shelfId])
 }
 
-async function markAsRead(item) {
-  const total = Number(item.book.chapterCount || 0)
-  if (!total) return
-  await readerStore.saveProgress(item.book.id, {
-    chapterNo: total,
-    position: 0,
-    progressPercent: 100,
-    durationSeconds: 0
-  })
-  await refresh()
-  uni.showToast({ title: '已标记为已读', icon: 'success' })
-}
-
-function formatWordCount(value) {
+function formatWordCount(value: number): string {
   const num = Number(value || 0)
   if (num >= 10000) return `${(num / 10000).toFixed(1)}万`
   return String(num)
 }
 
-function progressText(item) {
+function progressText(item: ShelfItem): string {
   const total = Number(item.book.chapterCount || 0)
   if (!total) return '暂无章节'
   return `第 ${progressChapter(item)}/${total} 章`
 }
 
 onLoad((options) => {
-  if (options?.tab && ['shelf', 'history', 'favorites'].includes(options.tab)) {
-    activeTab.value = options.tab
+  if (options?.tab && ['shelf', 'history', 'favorites'].includes(options.tab as string)) {
+    activeTab.value = options.tab as string
   }
   loadFilterFromStorage()
 })
@@ -950,86 +939,6 @@ onShow(() => {
   50% { transform: translateY(-4px); }
 }
 
-.empty-icon {
-  display: block;
-  font-size: 48px;
-  margin-bottom: 16px;
-}
-
-/* ── Empty Visual: Shelf ── */
-.empty-visual {
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  margin-bottom: 28px;
-  height: 80px;
-  position: relative;
-}
-
-.empty-shelf {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  position: relative;
-  padding-bottom: 6px;
-}
-
-.empty-shelf-plank {
-  position: absolute;
-  bottom: 0;
-  left: -12px;
-  right: -12px;
-  height: 4px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #D0C8B8, #B0A090, #D0C8B8);
-}
-
-.empty-shelf-ghost {
-  width: 16px;
-  height: 48px;
-  border-radius: 3px 4px 4px 3px;
-  border: 1.5px dashed #C8C0B4;
-  background: rgba(200, 192, 180, 0.12);
-  animation: ghostPulse 2.4s ease-in-out infinite;
-}
-
-@keyframes ghostPulse {
-  0%, 100% { opacity: 0.3; transform: scaleY(1); }
-  50% { opacity: 0.7; transform: scaleY(1.06); }
-}
-
-.empty-plus {
-  margin-left: 16px;
-  font-size: 28px;
-  color: #C0B8A8;
-  font-weight: 200;
-}
-
-/* ── Empty Visual: Heart ── */
-.empty-visual-heart {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 20px;
-}
-
-.empty-heart-icon {
-  font-size: 52px;
-  color: #D0B8B8;
-}
-
-/* ── Empty Visual: History ── */
-.empty-visual-history {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 20px;
-}
-
-.empty-history-icon {
-  font-size: 44px;
-  color: #C0C0B8;
-}
-
-/* ── Empty Compact ── */
 .empty-icon-compact {
   display: block;
   font-size: 36px;
@@ -1090,6 +999,77 @@ onShow(() => {
   margin-top: 12px;
   color: #B0B0B0;
   font-size: 12px;
+}
+
+/* ── Empty Visual ── */
+.empty-visual {
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  margin-bottom: 28px;
+  height: 80px;
+  position: relative;
+}
+
+.empty-shelf {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  position: relative;
+  padding-bottom: 6px;
+}
+
+.empty-shelf-plank {
+  position: absolute;
+  bottom: 0;
+  left: -12px;
+  right: -12px;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #D0C8B8, #B0A090, #D0C8B8);
+}
+
+.empty-shelf-ghost {
+  width: 16px;
+  height: 48px;
+  border-radius: 3px 4px 4px 3px;
+  border: 1.5px dashed #C8C0B4;
+  background: rgba(200, 192, 180, 0.12);
+  animation: ghostPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes ghostPulse {
+  0%, 100% { opacity: 0.3; transform: scaleY(1); }
+  50% { opacity: 0.7; transform: scaleY(1.06); }
+}
+
+.empty-plus {
+  margin-left: 16px;
+  font-size: 28px;
+  color: #C0B8A8;
+  font-weight: 200;
+}
+
+.empty-visual-heart {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.empty-heart-icon {
+  font-size: 52px;
+  color: #D0B8B8;
+}
+
+.empty-visual-history {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.empty-history-icon {
+  font-size: 44px;
+  color: #C0C0B8;
 }
 
 /* ── Hero Slot (continue reading) ── */

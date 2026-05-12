@@ -1,0 +1,48 @@
+// === 阅读器变量 ===
+
+// 主题色
+$nr-primary: #C4A882;
+$nr-primary-light: #F9F5E8;
+$nr-primary-dark: #8B7355;
+
+// 文字
+$nr-text: #3D2B1F;
+$nr-text-secondary: #8B7355;
+$nr-text-muted: #B8A088;
+$nr-text-light: #999;
+
+// 背景
+$nr-bg: #F9F5E8;
+$nr-bg-white: #FFFFFF;
+$nr-bg-dark: #161A1D;
+$nr-bg-overlay: rgba(0, 0, 0, 0.3);
+
+// 间距
+$nr-padding-h: 22px;
+$nr-padding-v: 28px;
+$nr-title-height: 60px;
+$nr-header-height: 44px;
+
+// 排版
+$nr-font-size-base: 18px;
+$nr-line-height-base: 1.8;
+$nr-title-font-size: 1.15em;
+
+// 动画
+$nr-animation-duration: 300ms;
+$nr-easing: cubic-bezier(0.4, 0, 0.2, 1);
+
+// 安全区
+$nr-safe-top: env(safe-area-inset-top, 0px);
+$nr-safe-bottom: env(safe-area-inset-bottom, 0px);
+
+// 桌面端
+$nr-desktop-max-width: 900px;
+
+// z-index
+$nr-z-toolbar: 100;
+$nr-z-settings: 150;
+$nr-z-menu: 200;
+$nr-z-comment: 200;
+$nr-z-longpress: 300;
+$nr-z-loading: 1000;

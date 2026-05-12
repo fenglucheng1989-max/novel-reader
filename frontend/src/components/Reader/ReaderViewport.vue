@@ -13,21 +13,25 @@
       <text class="nr-empty-hint">加载中...</text>
     </view>
 
-    <!-- 分页模式：三页舞台 -->
-    <view v-else-if="mode === 'PAGINATION' && currentPage" class="nr-stage">
-      <ReaderPage
-        ref="currentPageRef"
-        class="nr-current-page"
-        :html="currentPage.html || ''"
-        :title="currentPage.isFirst ? chapterTitle : ''"
-        :is-first="currentPage.isFirst"
-        :book-title="bookTitle"
-        :page-label="pageLabel"
-        :font-size="fontSize"
-        :line-height="lineHeight"
-        :font-family="fontFamily"
-        :text-color="textColor"
-      />
+    <!-- 分页模式：使用 Vue Transition 实现翻页动画 -->
+    <view v-else-if="mode === 'PAGINATION'" class="nr-stage">
+      <Transition :name="transitionName" mode="out-in">
+        <ReaderPage
+          v-if="currentPage"
+          :key="currentPageIndex"
+          ref="currentPageRef"
+          class="nr-current-page"
+          :html="currentPage.html || ''"
+          :title="currentPage.isFirst ? chapterTitle : ''"
+          :is-first="currentPage.isFirst"
+          :book-title="bookTitle"
+          :page-label="pageLabel"
+          :font-size="fontSize"
+          :line-height="lineHeight"
+          :font-family="fontFamily"
+          :text-color="textColor"
+        />
+      </Transition>
     </view>
 
     <!-- 滚动模式：虚拟列表容器 -->
@@ -70,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import type { Page, ReaderMode } from '../../types/reader'
 import ReaderPage from './ReaderPage.vue'
 
@@ -112,6 +116,9 @@ const viewportRef = ref<HTMLElement | null>(null)
 const currentPageRef = ref<HTMLElement | null>(null)
 const scrollViewRef = ref<HTMLElement | null>(null)
 
+const lastPageIndex = ref(props.currentPageIndex)
+const transitionName = ref('slide-left')
+
 const currentPage = computed(() => {
   const page = props.pages[props.currentPageIndex]
   return page || null
@@ -131,7 +138,19 @@ const viewportStyle = computed(() => ({
 
 const scrollTargetId = ref('')
 
-// === 触摸处理 ===
+const internalPageIndex = ref(props.currentPageIndex)
+
+const onPageIndexChange = (newIndex: number): void => {
+  const oldIndex = internalPageIndex.value
+  transitionName.value = newIndex > oldIndex ? 'slide-left' : 'slide-right'
+  internalPageIndex.value = newIndex
+  lastPageIndex.value = oldIndex
+  
+  nextTick(() => {
+    internalPageIndex.value = props.currentPageIndex
+  })
+}
+
 let touchStartX = 0
 let touchStartY = 0
 let touchStartTime = 0
@@ -145,7 +164,6 @@ function onTouchStart(e: TouchEvent): void {
   touchStartTime = Date.now()
   isSwiping = false
 
-  // 长按检测
   longPressTimer = setTimeout(() => {
     if (!isSwiping) {
       handleLongPress(touch.clientX, touch.clientY)
@@ -180,7 +198,6 @@ function onTouchEnd(e: TouchEvent): void {
     const dx = touch.clientX - touchStartX
     const elapsed = Date.now() - touchStartTime
 
-    // 快速滑动检测
     if (Math.abs(dx) > 50 || Math.abs(dx) / elapsed > 0.3) {
       if (dx < 0) emit('swipe-left')
       else emit('swipe-right')
@@ -191,7 +208,6 @@ function onTouchEnd(e: TouchEvent): void {
 }
 
 function handleLongPress(x: number, y: number): void {
-  // 获取点击位置的文字内容（段落级）
   const el = document.elementFromPoint(x, y)
   if (!el) return
 
@@ -220,7 +236,6 @@ function onTapRight(): void {
 }
 
 function onScroll(e: { detail: { scrollTop: number } }): void {
-  // 计算当前滚动位置对应的 pageIndex
   const scrollTop = e.detail.scrollTop
   const pageHeight = (scrollViewRef.value as HTMLElement | null)?.clientHeight || 600
   const pageIndex = Math.round(scrollTop / pageHeight)
@@ -230,6 +245,13 @@ function onScroll(e: { detail: { scrollTop: number } }): void {
 function scrollToPage(pageIndex: number): void {
   scrollTargetId.value = `nr-page-${pageIndex}`
 }
+
+defineExpose({
+  viewportRef,
+  currentPageRef,
+  scrollViewRef,
+  scrollToPage,
+})
 </script>
 
 <style scoped>
@@ -282,7 +304,7 @@ function scrollToPage(pageIndex: number): void {
   top: 0; left: 0;
   width: 100%;
   height: 100%;
-  padding: 44px 22px 16px;
+  padding: 44px 22px 44px;
   box-sizing: border-box;
 }
 
@@ -293,7 +315,7 @@ function scrollToPage(pageIndex: number): void {
 
 .nr-scroll-page {
   min-height: 100%;
-  padding: 44px 22px 16px;
+  padding: 44px 22px 44px;
   box-sizing: border-box;
 }
 
@@ -321,5 +343,44 @@ function scrollToPage(pageIndex: number): void {
 
 .nr-tap-right {
   width: 33.33%;
+}
+
+/* Vue Transition Animations */
+.slide-left-enter-active,
+.slide-left-leave-active,
+.slide-right-enter-active,
+.slide-right-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.slide-left-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.slide-left-leave-to {
+  transform: translateX(-30%);
+  opacity: 0;
+}
+
+.slide-right-enter-from {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.slide-right-leave-to {
+  transform: translateX(30%);
+  opacity: 0;
+}
+
+.slide-left-enter-to,
+.slide-left-leave-from,
+.slide-right-enter-to,
+.slide-right-leave-from {
+  transform: translateX(0);
+  opacity: 1;
 }
 </style>

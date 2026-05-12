@@ -121,74 +121,80 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import BookCover from '../../components/BookCover.vue'
+import type { Book } from '../../types/book'
 
 const bookStore = useBookStore()
 const keyword = ref('')
 const loading = ref(false)
 const searched = ref(false)
-const results = ref([])
+const results = ref<Book[]>([])
 
 const HISTORY_KEY = 'searchHistory'
 const MAX_HISTORY = 10
-const hotTags = ['玄幻', '都市', '悬疑', '热血', '重生', '完结', '修真', '科幻']
+const hotTags: string[] = ['玄幻', '都市', '悬疑', '热血', '重生', '完结', '修真', '科幻']
 
-const rankTabs = [
+interface RankTab {
+  key: string
+  label: string
+}
+
+const rankTabs: RankTab[] = [
   { key: 'hot', label: '热搜榜' },
   { key: 'audio', label: '精选榜' },
-  { key: 'peak', label: '巅峰榜' }
+  { key: 'peak', label: '巅峰榜' },
 ]
 
 const rankLoading = ref(false)
-const rankData = reactive({ hot: [], audio: [], peak: [] })
+const rankData = reactive<Record<string, Book[]>>({ hot: [], audio: [], peak: [] })
 
 const categoryMap = computed(() => {
-  const map = {}
+  const map: Record<number, string> = {}
   for (const cat of (bookStore.categories || [])) {
     map[cat.id] = cat.name
   }
   return map
 })
 
-const history = ref([])
+const history = ref<string[]>([])
 
-function loadHistory() {
+function loadHistory(): void {
   try {
     const raw = uni.getStorageSync(HISTORY_KEY)
-    history.value = raw ? JSON.parse(raw) : []
+    history.value = raw ? JSON.parse(raw as string) : []
   } catch {
     history.value = []
   }
 }
 
-function saveHistory(word) {
+function saveHistory(word: string): void {
   const next = [word, ...history.value.filter((h) => h !== word)].slice(0, MAX_HISTORY)
   history.value = next
   uni.setStorageSync(HISTORY_KEY, JSON.stringify(next))
 }
 
-function clearHistory() {
+function clearHistory(): void {
   history.value = []
   uni.removeStorageSync(HISTORY_KEY)
 }
 
-function onInput(e) {
+function onInput(e: { detail: { value: string } }): void {
   if (!e.detail.value) {
     keyword.value = ''
   }
 }
 
-function clearInput() {
+function clearInput(): void {
   keyword.value = ''
   searched.value = false
   results.value = []
 }
 
-async function doSearch() {
+async function doSearch(): Promise<void> {
   const kw = keyword.value.trim()
   if (!kw) {
     uni.showToast({ title: '请输入关键词', icon: 'none' })
@@ -199,57 +205,54 @@ async function doSearch() {
   searched.value = true
   try {
     const res = await bookStore.search(kw)
-    results.value = res.code === 200 ? (res.data || []) : []
+    results.value = res.code === 200 ? (res.data as Book[] || []) : []
   } finally {
     loading.value = false
   }
 }
 
-function searchTag(tag) {
+function searchTag(tag: string): void {
   keyword.value = tag
   doSearch()
 }
 
-function goBack() {
+function goBack(): void {
   const pages = getCurrentPages()
   if (pages.length > 1) uni.navigateBack()
   else uni.switchTab({ url: '/pages/index/index' })
 }
 
-function goDetail(id) {
+function goDetail(id: number): void {
   uni.navigateTo({ url: `/pages/book/detail?id=${id}` })
 }
 
-function goRank(tabKey) {
+function goRank(tabKey: string): void {
   uni.navigateTo({ url: `/pages/rank/rank?type=${tabKey}` })
 }
 
-async function loadRankData() {
+async function loadRankData(): Promise<void> {
   rankLoading.value = true
   try {
-    // 热搜榜: by chapterCount
     const hotRes = await bookStore.loadFilter({ sortBy: 'chapterCount', pageSize: 10 })
-    rankData.hot = hotRes.code === 200 ? (hotRes.data?.records || []) : []
+    rankData.hot = hotRes.code === 200 ? ((hotRes.data as { records?: Book[] })?.records || []) : []
 
-    // 有声榜: placeholder (no audio yet, show featured)
     const audioRes = await bookStore.loadFeatured(10)
-    rankData.audio = audioRes.code === 200 ? (audioRes.data || []) : []
+    rankData.audio = audioRes.code === 200 ? (audioRes.data as Book[] || []) : []
 
-    // 巅峰榜: by rating/wordCount
     const peakRes = await bookStore.loadFilter({ sortBy: 'wordCount', pageSize: 10 })
-    rankData.peak = peakRes.code === 200 ? (peakRes.data?.records || []) : []
+    rankData.peak = peakRes.code === 200 ? ((peakRes.data as { records?: Book[] })?.records || []) : []
   } finally {
     rankLoading.value = false
   }
 }
 
-function rankScoreText(book, tabKey) {
+function rankScoreText(book: Book, tabKey: string): string {
   if (tabKey === 'peak') return `${formatWordCount(book.wordCount)}字`
   if (tabKey === 'audio') return book.status === 'COMPLETED' ? '完结' : '连载'
   return `${book.chapterCount || 0}章`
 }
 
-function formatWordCount(value) {
+function formatWordCount(value: number): string {
   const num = Number(value || 0)
   if (num >= 10000) return `${(num / 10000).toFixed(1)}万`
   return String(num)
@@ -260,7 +263,7 @@ onLoad((options) => {
   loadHistory()
   loadRankData()
   if (options?.keyword) {
-    keyword.value = decodeURIComponent(options.keyword)
+    keyword.value = decodeURIComponent(options.keyword as string)
     doSearch()
   }
 })
@@ -440,14 +443,8 @@ onLoad((options) => {
   overflow: hidden;
 }
 
-.rank-card--hot {
-  background: #FFFFFF;
-}
-
-.rank-card--audio {
-  background: #FFFFFF;
-}
-
+.rank-card--hot,
+.rank-card--audio,
 .rank-card--peak {
   background: #FFFFFF;
 }

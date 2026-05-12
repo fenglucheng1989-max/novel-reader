@@ -25,7 +25,7 @@
       }
     },
     {
-      "path": "pages/reader/reader",
+      "path": "pages/reader/index",
       "style": {
         "navigationStyle": "custom"
       }

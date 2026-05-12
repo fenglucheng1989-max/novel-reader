@@ -10,24 +10,34 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 import BookCover from './BookCover.vue'
+import type { Book, BookStatus } from '../types/book'
 
-const props = defineProps({
-  book: { type: Object, required: true },
-  showRank: { type: Number, default: 0 },
-  showStatus: { type: Boolean, default: false },
-  showLatestChapter: { type: Boolean, default: false }
+const props = withDefaults(defineProps<{
+  book: Book
+  showRank?: number
+  showStatus?: boolean
+  showLatestChapter?: boolean
+}>(), {
+  showRank: 0,
+  showStatus: false,
+  showLatestChapter: false,
 })
 
-defineEmits(['tap'])
+defineEmits<{
+  tap: []
+}>()
 
-const statusLabel = computed(() => props.book.status === 'COMPLETED' ? '完结' : '连载')
-const statusClass = computed(() => props.book.status === 'COMPLETED' ? 'status-done' : 'status-ongoing')
+const WORD_COUNT_THRESHOLD_WAN = 10000
+const WORD_COUNT_THRESHOLD_QIAN = 1000
+
+const statusLabel = computed(() => (props.book.status === 'COMPLETED' ? '完结' : '连载'))
+const statusClass = computed(() => (props.book.status === 'COMPLETED' ? 'status-done' : 'status-ongoing'))
 
 const metaLine = computed(() => {
-  const parts = [props.book.author || '佚名']
+  const parts: string[] = [props.book.author || '佚名']
   if (props.showLatestChapter && props.book.latestChapterTitle) {
     parts.push(props.book.latestChapterTitle)
   } else if (props.book.wordCount) {
@@ -36,9 +46,9 @@ const metaLine = computed(() => {
   return parts.join(' · ')
 })
 
-function formatWordCount(n) {
-  if (n >= 10000) return (n / 10000).toFixed(1) + '万字'
-  if (n >= 1000) return (n / 1000).toFixed(1) + '千字'
+function formatWordCount(n: number): string {
+  if (n >= WORD_COUNT_THRESHOLD_WAN) return (n / WORD_COUNT_THRESHOLD_WAN).toFixed(1) + '万字'
+  if (n >= WORD_COUNT_THRESHOLD_QIAN) return (n / WORD_COUNT_THRESHOLD_QIAN).toFixed(1) + '千字'
   return n + '字'
 }
 </script>

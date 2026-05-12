@@ -15,7 +15,7 @@
         </view>
         <view class="stepper">
           <view class="stepper-btn" @tap="changeFont(-1)">-</view>
-          <text class="stepper-value">{{ readerStore.setting.fontSize }}</text>
+          <text class="stepper-value">{{ readerStore.settings.fontSize }}</text>
           <view class="stepper-btn" @tap="changeFont(1)">+</view>
         </view>
       </view>
@@ -25,9 +25,9 @@
           <text class="setting-desc">正文行间距离</text>
         </view>
         <view class="stepper">
-          <view class="stepper-btn" @tap="changeLineHeight(-2)">-</view>
-          <text class="stepper-value">{{ readerStore.setting.lineHeight }}</text>
-          <view class="stepper-btn" @tap="changeLineHeight(2)">+</view>
+          <view class="stepper-btn" @tap="changeLineHeight(-0.1)">-</view>
+          <text class="stepper-value">{{ readerStore.settings.lineHeight.toFixed(1) }}</text>
+          <view class="stepper-btn" @tap="changeLineHeight(0.1)">+</view>
         </view>
       </view>
       <view class="setting-row">
@@ -37,7 +37,7 @@
         </view>
         <view class="stepper">
           <view class="stepper-btn" @tap="changeMargin(-2)">-</view>
-          <text class="stepper-value">{{ readerStore.setting.marginX }}</text>
+          <text class="stepper-value">{{ readerStore.settings.marginHorizontal }}</text>
           <view class="stepper-btn" @tap="changeMargin(2)">+</view>
         </view>
       </view>
@@ -48,7 +48,7 @@
         </view>
         <view class="stepper">
           <view class="stepper-btn" @tap="changeParaSpacing(-2)">-</view>
-          <text class="stepper-value">{{ readerStore.setting.paragraphSpacing }}</text>
+          <text class="stepper-value">{{ readerStore.settings.paragraphSpacing }}</text>
           <view class="stepper-btn" @tap="changeParaSpacing(2)">+</view>
         </view>
       </view>
@@ -57,7 +57,7 @@
     <view class="section">
       <text class="section-title">背景与显示</text>
       <view class="theme-grid">
-        <button v-for="t in themes" :key="t.key" :class="{ active: readerStore.setting.theme === t.key }" @tap="setTheme(t.key)">
+        <button v-for="t in themes" :key="t.key" :class="{ active: currentThemeKey === t.key }" @tap="setTheme(t.key)">
           <view class="theme-dot" :style="{ background: t.bg, border: '1px solid ' + t.border }" />
           <text>{{ t.label }}</text>
         </button>
@@ -71,7 +71,7 @@
           class="brightness-slider"
           :min="20"
           :max="100"
-          :value="brightness"
+          :value="readerStore.settings.brightness"
           activeColor="#3A3A3A"
           backgroundColor="#e0e0e0"
           block-size="16"
@@ -83,7 +83,7 @@
           <text class="setting-name">护眼模式</text>
           <text class="setting-desc">降低蓝光，保护眼睛</text>
         </view>
-        <switch :checked="eyeProtection" @change="onEyeProtection" color="#C4A882" />
+        <switch :checked="readerStore.settings.eyeProtection" @change="onEyeProtection" color="#C4A882" />
       </view>
     </view>
 
@@ -94,7 +94,7 @@
           v-for="opt in turnOptions"
           :key="opt.value"
           class="turn-btn"
-          :class="{ active: readerStore.setting.turnMode === opt.value }"
+          :class="{ active: readerStore.settings.turnMode === opt.value }"
           @tap="setTurnMode(opt.value)"
         >
           <text class="turn-icon">{{ opt.icon }}</text>
@@ -107,74 +107,90 @@
   </view>
 </template>
 
-<script setup>
-import { ref } from 'vue'
+<script setup lang="ts">
+import { computed } from 'vue'
 import { useReaderStore } from '../../store/reader'
-import { useUserStore } from '../../store/user'
+import type { TurnMode } from '../../types/reader'
+
+interface ThemeOption {
+  key: string
+  label: string
+  bg: string
+  border: string
+  backgroundColor: string
+  textColor: string
+}
+
+interface TurnOption {
+  value: TurnMode
+  label: string
+  icon: string
+  desc: string
+}
 
 const readerStore = useReaderStore()
-const userStore = useUserStore()
-const brightness = ref(Number(readerStore.setting.brightness ?? uni.getStorageSync('readerBrightness') ?? 80))
-const eyeProtection = ref(Boolean(readerStore.setting.eyeProtection ?? uni.getStorageSync('readerEyeProtection') ?? false))
 
-const themes = [
-  { key: 'DEFAULT', label: '米白', bg: '#F8F8F6', border: '#CCCCCC' },
-  { key: 'PARCHMENT', label: '羊皮', bg: '#F5E6C8', border: '#C4A882' },
-  { key: 'LIGHT_GREEN', label: '浅绿', bg: '#E8F0E3', border: '#A8C4A0' },
-  { key: 'GRAY', label: '素灰', bg: '#EBEBE7', border: '#B0B0B0' },
-  { key: 'NIGHT', label: '夜间', bg: '#161A1D', border: '#3A4045' }
+const themes: ThemeOption[] = [
+  { key: 'DEFAULT', label: '米白', bg: '#F8F8F6', border: '#CCCCCC', backgroundColor: '#F9F5E8', textColor: '#3D2B1F' },
+  { key: 'PARCHMENT', label: '羊皮', bg: '#F5E6C8', border: '#C4A882', backgroundColor: '#F5E6C8', textColor: '#3D2B1F' },
+  { key: 'LIGHT_GREEN', label: '浅绿', bg: '#E8F0E3', border: '#A8C4A0', backgroundColor: '#E8F0E3', textColor: '#3D2B1F' },
+  { key: 'GRAY', label: '素灰', bg: '#EBEBE7', border: '#B0B0B0', backgroundColor: '#EBEBE7', textColor: '#3D2B1F' },
+  { key: 'NIGHT', label: '夜间', bg: '#161A1D', border: '#3A4045', backgroundColor: '#161A1D', textColor: '#D8D1C7' },
 ]
 
-const turnOptions = [
+const turnOptions: TurnOption[] = [
   { value: 'COVER', label: '覆盖', icon: '▤', desc: '页面平推覆盖' },
   { value: 'SCROLL', label: '上下', icon: '☰', desc: '垂直滚动阅读' },
-  { value: 'PAGE', label: '仿真', icon: '▯', desc: '模拟翻书效果' },
-  { value: 'NONE', label: '无', icon: '◻', desc: '无动画切换' }
+  { value: 'NONE', label: '无', icon: '◻', desc: '无动画切换' },
 ]
 
-function saveSetting(patch) {
-  if (userStore.isLoggedIn) {
-    readerStore.saveSetting(patch)
+const currentThemeKey = computed(() => {
+  if (readerStore.settings.nightMode) return 'NIGHT'
+  const bg = readerStore.settings.backgroundColor
+  const found = themes.find(t => t.backgroundColor === bg)
+  return found ? found.key : 'DEFAULT'
+})
+
+function changeFont(delta: number): void {
+  readerStore.updateSettings({ fontSize: Math.max(14, Math.min(36, readerStore.settings.fontSize + delta)) })
+}
+
+function changeLineHeight(delta: number): void {
+  readerStore.updateTypography({ lineHeight: delta })
+}
+
+function changeMargin(delta: number): void {
+  const next = Math.max(8, Math.min(48, readerStore.settings.marginHorizontal + delta))
+  readerStore.updateSettings({ marginHorizontal: next })
+}
+
+function changeParaSpacing(delta: number): void {
+  readerStore.updateTypography({ paragraphSpacing: delta })
+}
+
+function setTheme(key: string): void {
+  const theme = themes.find(t => t.key === key)
+  if (!theme) return
+  if (key === 'NIGHT') {
+    readerStore.updateSettings({ nightMode: true, backgroundColor: theme.backgroundColor, textColor: theme.textColor })
   } else {
-    readerStore.updateLocalSetting(patch)
+    readerStore.updateSettings({ nightMode: false, backgroundColor: theme.backgroundColor, textColor: theme.textColor })
   }
 }
 
-function changeFont(delta) {
-  saveSetting({ fontSize: Math.max(14, Math.min(30, readerStore.setting.fontSize + delta)) })
+function setTurnMode(val: TurnMode): void {
+  readerStore.setTurnMode(val)
 }
 
-function changeLineHeight(delta) {
-  saveSetting({ lineHeight: Math.max(24, Math.min(48, readerStore.setting.lineHeight + delta)) })
+function onBrightness(e: { detail: { value: number } }): void {
+  readerStore.updateSettings({ brightness: Math.max(20, Math.min(100, Number(e.detail.value || 80))) })
 }
 
-function changeMargin(delta) {
-  saveSetting({ marginX: Math.max(12, Math.min(48, readerStore.setting.marginX + delta)) })
+function onEyeProtection(e: { detail: { value: boolean } }): void {
+  readerStore.updateSettings({ eyeProtection: !!e.detail.value })
 }
 
-function changeParaSpacing(delta) {
-  saveSetting({ paragraphSpacing: Math.max(0, Math.min(24, readerStore.setting.paragraphSpacing + delta)) })
-}
-
-function setTheme(key) {
-  saveSetting({ theme: key })
-}
-
-function setTurnMode(val) {
-  saveSetting({ turnMode: val })
-}
-
-function onBrightness(e) {
-  brightness.value = Math.max(20, Math.min(100, Number(e.detail.value || 80)))
-  readerStore.updateLocalSetting({ brightness: brightness.value })
-}
-
-function onEyeProtection(e) {
-  eyeProtection.value = !!e.detail.value
-  readerStore.updateLocalSetting({ eyeProtection: eyeProtection.value })
-}
-
-function goBack() {
+function goBack(): void {
   const pages = getCurrentPages()
   if (pages.length > 1) uni.navigateBack()
   else uni.reLaunch({ url: '/pages/mine/mine' })
@@ -284,7 +300,7 @@ function goBack() {
 }
 
 .stepper-value {
-  width: 28px;
+  width: 40px;
   color: #1F1F1F;
   font-size: 14px;
   text-align: center;

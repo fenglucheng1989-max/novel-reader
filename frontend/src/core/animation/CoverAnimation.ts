@@ -16,7 +16,7 @@ export class CoverAnimator implements IAnimator {
   private animationTimeout: ReturnType<typeof setTimeout> | null = null
 
   prepare(ctx: FlipContext): void {
-    const { container, currentPageEl, targetHtml, direction, viewport } = ctx
+    const { container, currentPageEl, targetHtml, direction } = ctx
 
     // 检查必要的 DOM 元素是否存在
     if (!container || !currentPageEl) {
@@ -46,6 +46,7 @@ export class CoverAnimator implements IAnimator {
       z-index:10;
       backface-visibility:hidden;
       transform-style:preserve-3d;
+      visibility:hidden;
     `
     this.overlay.innerHTML = targetHtml
 
@@ -54,7 +55,13 @@ export class CoverAnimator implements IAnimator {
     this.overlay.style.transform = `translateX(${startX})`
     this.overlay.style.opacity = '0'
 
-    container.appendChild(this.overlay)
+    // 再次检查 container 是否存在（可能在异步操作中被移除）
+    if (container.isConnected) {
+      container.appendChild(this.overlay)
+    } else {
+      console.error('[CoverAnimator] Container is no longer in DOM')
+      this.overlay = null
+    }
   }
 
   animate(ctx: FlipContext): Promise<void> {
@@ -81,14 +88,22 @@ export class CoverAnimator implements IAnimator {
         onComplete()
       }, ctx.duration + 200)
 
-      // 下一帧触发过渡
+      // 下一帧触发过渡（先设可见，再触发位移动画）
       requestAnimationFrame(() => {
         if (!this.overlay) {
           resolve()
           return
         }
-        this.overlay.style.transform = 'translateX(0)'
-        this.overlay.style.opacity = '1'
+        this.overlay.style.visibility = 'visible'
+        // 双 rAF 确保浏览器已完成布局，避免闪烁
+        requestAnimationFrame(() => {
+          if (!this.overlay) {
+            resolve()
+            return
+          }
+          this.overlay.style.transform = 'translateX(0)'
+          this.overlay.style.opacity = '1'
+        })
       })
     })
   }
@@ -107,15 +122,21 @@ export class CoverAnimator implements IAnimator {
   private finish(ctx: FlipContext): void {
     if (ctx.currentPageEl) {
       ctx.currentPageEl.innerHTML = ctx.targetHtml
+      ctx.currentPageEl.style.opacity = '1'
+      ctx.currentPageEl.style.transform = 'translateX(0)'
     }
     this.cleanup(ctx)
   }
 
   private cleanup(_ctx: FlipContext | null): void {
-    if (this.overlay && this.overlay.parentNode) {
-      this.overlay.parentNode.removeChild(this.overlay)
+    if (this.overlay) {
+      try {
+        this.overlay.remove()
+      } catch (e) {
+        console.warn('[CoverAnimator] Error removing overlay:', e)
+      }
+      this.overlay = null
     }
-    this.overlay = null
     this.oldContent = ''
   }
 }

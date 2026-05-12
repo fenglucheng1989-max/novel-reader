@@ -37,6 +37,7 @@ export class SlideAnimator implements IAnimator {
       width:${viewport.width}px;height:${viewport.height}px;
       overflow:hidden;pointer-events:none;
       z-index:10;
+      visibility:hidden;
     `
 
     // 旧页（当前可见内容）
@@ -71,7 +72,14 @@ export class SlideAnimator implements IAnimator {
 
     this.wrapper.appendChild(this.oldPage)
     this.wrapper.appendChild(this.newPage)
-    container.appendChild(this.wrapper)
+
+    // 再次检查 container 是否存在（可能在异步操作中被移除）
+    if (container.isConnected) {
+      container.appendChild(this.wrapper)
+    } else {
+      console.error('[SlideAnimator] Container is no longer in DOM')
+      this.cleanupDOM(null)
+    }
   }
 
   animate(ctx: FlipContext): Promise<void> {
@@ -103,15 +111,23 @@ export class SlideAnimator implements IAnimator {
         onComplete()
       }, ctx.duration + 200)
 
-      // 触发下一帧动画
+      // 触发下一帧动画（先设可见，再触发位移动画）
       requestAnimationFrame(() => {
-        if (!this.oldPage || !this.newPage) {
+        if (!this.oldPage || !this.newPage || !this.wrapper) {
           resolve()
           return
         }
-        const offset = direction === 1 ? '-100%' : '100%'
-        this.oldPage.style.transform = `translateX(${offset})`
-        this.newPage.style.transform = 'translateX(0)'
+        this.wrapper.style.visibility = 'visible'
+        // 双 rAF 确保浏览器已完成布局，避免闪烁
+        requestAnimationFrame(() => {
+          if (!this.oldPage || !this.newPage) {
+            resolve()
+            return
+          }
+          const offset = direction === 1 ? '-100%' : '100%'
+          this.oldPage.style.transform = `translateX(${offset})`
+          this.newPage.style.transform = 'translateX(0)'
+        })
       })
     })
   }
@@ -128,16 +144,25 @@ export class SlideAnimator implements IAnimator {
   }
 
   private cleanupDOM(ctx: FlipContext | null): void {
-    if (this.wrapper && this.wrapper.parentNode) {
-      this.wrapper.parentNode.removeChild(this.wrapper)
+    if (this.wrapper) {
+      try {
+        this.wrapper.remove()
+      } catch (e) {
+        console.warn('[SlideAnimator] Error removing wrapper:', e)
+      }
+      this.wrapper = null
     }
-    this.wrapper = null
     this.oldPage = null
     this.newPage = null
 
-    // 确保最终内容已更新
     if (ctx && ctx.currentPageEl) {
-      ctx.currentPageEl.innerHTML = ctx.targetHtml
+      try {
+        ctx.currentPageEl.innerHTML = ctx.targetHtml
+        ctx.currentPageEl.style.opacity = '1'
+        ctx.currentPageEl.style.transform = 'translateX(0)'
+      } catch (e) {
+        console.warn('[SlideAnimator] Error updating current page:', e)
+      }
     }
   }
 }

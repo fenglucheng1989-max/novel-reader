@@ -12,7 +12,7 @@
     </view>
 
     <view v-else class="highlight-list">
-      <view v-for="group in grouped" :key="group.bookId" class="group-card">
+      <view v-for="group in highlightStore.groupedHighlights" :key="group.bookId" class="group-card">
         <view class="group-head" @tap="goDetail(group.bookId)">
           <text class="group-book">{{ group.bookTitle || '未知书籍' }}</text>
           <text class="group-count">{{ group.items.length }} 条</text>
@@ -27,17 +27,15 @@
   </view>
 </template>
 
-<script setup>
-import { computed, ref } from 'vue'
+<script setup lang="ts">
 import { onShow } from '@dcloudio/uni-app'
 import { useHighlightStore } from '../../store/highlight'
 import { useUserStore } from '../../store/user'
 
 const highlightStore = useHighlightStore()
 const userStore = useUserStore()
-const grouped = ref([])
 
-function goDetail(bookId) {
+function goDetail(bookId: number): void {
   uni.navigateTo({ url: `/pages/book/detail?id=${bookId}` })
 }
 
@@ -45,11 +43,7 @@ onShow(() => {
   userStore.syncFromStorage()
   highlightStore.loadFromStorage()
   if (userStore.isLoggedIn) {
-    highlightStore.syncFromServer().then(() => {
-      grouped.value = highlightStore.getGroupedHighlights()
-    })
-  } else {
-    grouped.value = highlightStore.getGroupedHighlights()
+    highlightStore.syncFromServer()
   }
 })
 </script>

@@ -99,21 +99,22 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import { useUserStore } from '../../store/user'
+import type { BookDetail, BookStatus, Comment } from '../../types/book'
 
 const bookStore = useBookStore()
 const userStore = useUserStore()
 
-const id = ref('')
-const detail = ref(null)
+const id = ref<string | number>('')
+const detail = ref<BookDetail | null>(null)
 const loading = ref(false)
 const showIntroModal = ref(false)
 const modalLeaving = ref(false)
-const comments = ref([])
+const comments = ref<Comment[]>([])
 const commentTotal = ref(0)
 const commentsLoading = ref(false)
 const showHint = ref(true)
@@ -127,13 +128,14 @@ const truncatedIntro = computed(() => descText.value.slice(0, TWO_LINE_CHARS))
 const visibleComments = computed(() => comments.value.slice(0, 2))
 const coverBgStyle = computed(() => detail.value?.book?.coverUrl
   ? { background: `center / cover no-repeat url("${detail.value.book.coverUrl}")` }
-  : {})
+  : {},
+)
 
-async function load() {
+async function load(): Promise<void> {
   loading.value = true
   try {
     const res = await bookStore.loadDetail(id.value)
-    detail.value = res.code === 200 ? res.data : null
+    detail.value = (res.code === 200 ? res.data as BookDetail : null)
     checkFavorite()
   } catch {
     detail.value = null
@@ -143,12 +145,13 @@ async function load() {
   loadComments()
 }
 
-async function loadComments() {
+async function loadComments(): Promise<void> {
   commentsLoading.value = true
   try {
     const res = await bookStore.loadBookComments(id.value, 1, 20)
-    comments.value = res.code === 200 ? (res.data?.records || []) : []
-    commentTotal.value = Number(res.data?.total || comments.value.length || 0)
+    const data = res.data as { records?: Comment[]; total?: number } | undefined
+    comments.value = res.code === 200 ? (data?.records || []) : []
+    commentTotal.value = Number(data?.total || comments.value.length || 0)
   } catch {
     comments.value = []
     commentTotal.value = 0
@@ -157,7 +160,7 @@ async function loadComments() {
   }
 }
 
-async function toggleShelf() {
+async function toggleShelf(): Promise<void> {
   if (!userStore.isLoggedIn) {
     uni.showToast({ title: '请先登录', icon: 'none' })
     setTimeout(() => uni.switchTab({ url: '/pages/mine/mine' }), 700)
@@ -165,14 +168,14 @@ async function toggleShelf() {
   }
   if (detail.value?.inBookshelf) {
     await bookStore.removeShelf(id.value)
-    detail.value.inBookshelf = false
+    if (detail.value) detail.value.inBookshelf = false
   } else {
     await bookStore.addShelf(id.value)
-    detail.value.inBookshelf = true
+    if (detail.value) detail.value.inBookshelf = true
   }
 }
 
-async function toggleFavorite() {
+async function toggleFavorite(): Promise<void> {
   if (!userStore.isLoggedIn) {
     uni.showToast({ title: '请先登录', icon: 'none' })
     setTimeout(() => uni.switchTab({ url: '/pages/mine/mine' }), 700)
@@ -189,32 +192,32 @@ async function toggleFavorite() {
   }
 }
 
-async function checkFavorite() {
+async function checkFavorite(): Promise<void> {
   if (!userStore.isLoggedIn) return
   try {
     const res = await bookStore.checkFavoriteStatus(id.value)
-    if (res.code === 200) isFavorited.value = res.data
+    if (res.code === 200) isFavorited.value = Boolean(res.data)
   } catch { isFavorited.value = false }
 }
 
-function onTouchStart(e) {
+function onTouchStart(e: { touches: Array<{ clientX: number }> }): void {
   touchStartX.value = e.touches[0].clientX
 }
 
-function onTouchEnd(e) {
+function onTouchEnd(e: { changedTouches: Array<{ clientX: number }> }): void {
   const dx = e.changedTouches[0].clientX - touchStartX.value
   if (dx < -50) {
     startRead()
   }
 }
 
-function startRead() {
+function startRead(): void {
   uni.setStorageSync('swipeHintDismissed', true)
   showHint.value = false
-  uni.navigateTo({ url: `/pages/reader/reader?bookId=${id.value}&chapterNo=1` })
+  uni.navigateTo({ url: `/pages/reader/index?bookId=${id.value}&chapterNo=1` })
 }
 
-function closeIntroModal() {
+function closeIntroModal(): void {
   modalLeaving.value = true
   setTimeout(() => {
     showIntroModal.value = false
@@ -222,48 +225,43 @@ function closeIntroModal() {
   }, 250)
 }
 
-function goBack() {
+function goBack(): void {
   const pages = getCurrentPages()
   if (pages.length > 1) uni.navigateBack()
   else uni.switchTab({ url: '/pages/index/index' })
 }
 
-function onListen() {
-  uni.showToast({ title: '听书功能即将上线', icon: 'none' })
-}
-
-function goReviews() {
+function goReviews(): void {
   uni.navigateTo({ url: `/pages/review/review?bookId=${id.value}` })
 }
 
-function coverText(title) {
+function coverText(title: string): string {
   return (title || '书').slice(0, 2)
 }
 
-function statusText(status) {
+function statusText(status: BookStatus): string {
   if (status === 'COMPLETED') return '完结'
-  if (status === 'PAUSED') return '暂停'
   return '连载'
 }
 
-function formatRating(value) {
+function formatRating(value: number): string {
   const num = Number(value || 0)
   return num ? num.toFixed(1) : '暂无'
 }
 
-function formatCount(value) {
+function formatCount(value: number): string {
   const num = Number(value || 0)
   if (num >= 10000) return `${(num / 10000).toFixed(1)}万`
   return String(num)
 }
 
-function formatWordCount(value) {
+function formatWordCount(value: number): string {
   const num = Number(value || 0)
   if (num >= 10000) return `${(num / 10000).toFixed(1)}万`
   return String(num)
 }
 
-function formatTime(dateStr) {
+function formatTime(dateStr: string): string {
   if (!dateStr) return '刚刚'
   const diff = Math.max(0, Date.now() - new Date(dateStr).getTime())
   const minutes = Math.floor(diff / 60000)
@@ -274,8 +272,8 @@ function formatTime(dateStr) {
   return `阅读 ${Math.floor(hours / 24)} 天后`
 }
 
-function resolveBookId(query = {}) {
-  if (query?.id) return query.id
+function resolveBookId(query: Record<string, unknown> = {}): string | number {
+  if (query?.id) return query.id as string
   // #ifdef H5
   if (typeof window !== 'undefined') {
     const hash = window.location.hash || ''
@@ -287,7 +285,7 @@ function resolveBookId(query = {}) {
 }
 
 onLoad((query) => {
-  id.value = resolveBookId(query)
+  id.value = resolveBookId(query as Record<string, unknown>)
   load()
 })
 
@@ -404,9 +402,6 @@ onShow(() => {
   height: 22px;
   background: rgba(0,0,0,0.08);
   transform: translateY(-50%);
-}
-
-.stat:last-child {
 }
 
 .stat-value {

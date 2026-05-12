@@ -1,0 +1,159 @@
+// === 阅读器全局样式 ===
+
+@import 'variables';
+@import 'themes';
+
+// 桌面端居中布局
+.nr-desktop {
+  max-width: $nr-desktop-max-width;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+}
+
+// 正文段落样式
+.nr-line {
+  margin: 0;
+  text-align: justify;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.nr-empty-line {
+  height: 1em;
+}
+
+.nr-title {
+  text-align: center;
+  font-weight: bold;
+  font-size: $nr-title-font-size;
+  line-height: 1.4;
+}
+
+// 每页容器（分页模式）
+.nr-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+// 三页缓存布局
+.nr-prev-page,
+.nr-current-page,
+.nr-next-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.nr-prev-page {
+  z-index: 1;
+  visibility: hidden;
+}
+
+.nr-current-page {
+  z-index: 2;
+}
+
+.nr-next-page {
+  z-index: 1;
+  visibility: hidden;
+}
+
+// 翻页动画元素
+.nr-flip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.nr-flip-face {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+}
+
+.nr-flip-front {
+  z-index: 2;
+}
+
+.nr-flip-back {
+  z-index: 1;
+  transform: rotateY(180deg);
+}
+
+// 评论气泡
+.nr-comment-bubble {
+  position: absolute;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  background: rgba(196, 168, 130, 0.8);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 5;
+}
+.nr-comment-bubble-text {
+  font-size: 10px;
+  color: #fff;
+  font-weight: bold;
+}
+
+// 文本高亮
+.nr-highlight {
+  background: rgba(255, 235, 59, 0.4);
+  border-radius: 2px;
+}
+
+.nr-highlight-line {
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 235, 59, 0.6);
+  text-underline-offset: 2px;
+}
+
+// 返回按钮
+.nr-back-indicator {
+  position: fixed;
+  top: $nr-safe-top;
+  left: 8px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  color: $nr-text-muted;
+  font-size: 14px;
+}
+
+.nr-back-arrow {
+  font-size: 24px;
+  line-height: 1;
+}
+
+// 滚动模式
+.nr-scroll-container {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.nr-scroll-chunk {
+  min-height: 100%;
+  box-sizing: border-box;
+}

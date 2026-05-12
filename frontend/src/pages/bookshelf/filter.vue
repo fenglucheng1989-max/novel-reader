@@ -93,12 +93,13 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import { useUserStore } from '../../store/user'
 import BookCover from '../../components/BookCover.vue'
+import type { ShelfItem, Category } from '../../types/book'
 
 const bookStore = useBookStore()
 const userStore = useUserStore()
@@ -123,9 +124,15 @@ const statusOptions = [
   { label: '有更新', value: 'updated' }
 ]
 
-const categories = ref([])
+const categories = ref<Category[]>([])
 
-const form = reactive({
+const form = reactive<{
+  type: string
+  progress: string
+  status: string
+  categoryId: number | null
+  categoryName: string
+}>({
   type: '',
   progress: '',
   status: '',
@@ -133,69 +140,69 @@ const form = reactive({
   categoryName: ''
 })
 
-const filteredList = computed(() => {
+const filteredList = computed<ShelfItem[]>(() => {
   let list = bookStore.shelf || []
   if (form.type) {
     if (form.type === 'novel') {
       const novelCatIds = new Set(
         categories.value.filter(c => c.groupKey === 'male' || c.groupKey === 'female').map(c => c.id)
       )
-      list = list.filter((item) => novelCatIds.has(Number(item.book.categoryId)))
+      list = list.filter((item: ShelfItem) => novelCatIds.has(Number(item.book.categoryId)))
     } else if (form.type === 'audio') {
       const audioCatIds = new Set(
         categories.value.filter(c => c.groupKey === 'audio').map(c => c.id)
       )
-      list = list.filter((item) => audioCatIds.has(Number(item.book.categoryId)))
+      list = list.filter((item: ShelfItem) => audioCatIds.has(Number(item.book.categoryId)))
     }
   }
   if (form.status) {
     if (form.status === 'updated') {
-      list = list.filter((item) => remainingChapters(item) > 0)
+      list = list.filter((item: ShelfItem) => remainingChapters(item) > 0)
     } else {
-      list = list.filter((item) => item.book.status === form.status)
+      list = list.filter((item: ShelfItem) => item.book.status === form.status)
     }
   }
   if (form.progress === 'unread') {
-    list = list.filter((item) => progressChapter(item) <= 1)
+    list = list.filter((item: ShelfItem) => progressChapter(item) <= 1)
   } else if (form.progress === 'reading') {
-    list = list.filter((item) => progressChapter(item) > 1 && progressChapter(item) < Number(item.book.chapterCount || 9999))
+    list = list.filter((item: ShelfItem) => progressChapter(item) > 1 && progressChapter(item) < Number(item.book.chapterCount || 9999))
   } else if (form.progress === 'finished') {
-    list = list.filter((item) => progressChapter(item) >= Number(item.book.chapterCount || 0) && Number(item.book.chapterCount || 0) > 0)
+    list = list.filter((item: ShelfItem) => progressChapter(item) >= Number(item.book.chapterCount || 0) && Number(item.book.chapterCount || 0) > 0)
   }
   if (form.categoryId) {
-    list = list.filter((item) => Number(item.book.categoryId) === Number(form.categoryId))
+    list = list.filter((item: ShelfItem) => Number(item.book.categoryId) === Number(form.categoryId))
   }
   return list
 })
 
-function progressChapter(item) {
+function progressChapter(item: ShelfItem): number {
   return Number(item.progress?.chapterNo || 1)
 }
 
-function remainingChapters(item) {
+function remainingChapters(item: ShelfItem): number {
   const total = Number(item.book.chapterCount || 0)
   if (!total) return 0
   return Math.max(total - progressChapter(item), 0)
 }
 
-function formatWordCount(value) {
+function formatWordCount(value: string | number): string {
   const num = Number(value || 0)
   if (num >= 10000) return `${(num / 10000).toFixed(1)}万`
   return String(num)
 }
 
-function progressText(item) {
+function progressText(item: ShelfItem): string {
   const total = Number(item.book.chapterCount || 0)
   if (!total) return '暂无章节'
   return `${progressChapter(item)}/${total} 章`
 }
 
-async function loadCategories() {
+async function loadCategories(): Promise<void> {
   await bookStore.loadCategories()
   categories.value = bookStore.categories || []
 }
 
-function selectCategory(cat) {
+function selectCategory(cat: Category): void {
   if (form.categoryId === cat.id) {
     form.categoryId = null
     form.categoryName = ''
@@ -205,7 +212,7 @@ function selectCategory(cat) {
   }
 }
 
-function resetAll() {
+function resetAll(): void {
   form.type = ''
   form.progress = ''
   form.status = ''
@@ -213,12 +220,12 @@ function resetAll() {
   form.categoryName = ''
 }
 
-function openBook(item) {
+function openBook(item: ShelfItem): void {
   const chapterNo = progressChapter(item)
-  uni.navigateTo({ url: `/pages/reader/reader?bookId=${item.book.id}&chapterNo=${chapterNo}` })
+  uni.navigateTo({ url: `/pages/reader/index?bookId=${item.book.id}&chapterNo=${chapterNo}` })
 }
 
-function goBack() {
+function goBack(): void {
   // save filter state before going back
   uni.setStorageSync('bookshelfFilter', JSON.stringify({
     type: form.type,
@@ -240,7 +247,14 @@ onLoad(async () => {
   try {
     const raw = uni.getStorageSync('bookshelfFilter')
     if (raw) {
-      const prev = JSON.parse(raw)
+      const prev = JSON.parse(raw) as {
+        type?: string
+        progress?: string
+        status?: string
+        categoryId?: number | null
+        categoryName?: string
+        onlyUpdated?: boolean
+      }
       if (prev.type) form.type = prev.type
       if (prev.onlyUpdated) {
         form.status = 'updated'

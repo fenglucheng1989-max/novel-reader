@@ -1,0 +1,48 @@
+// === 阅读器主题色映射 ===
+
+$themes: (
+  'DEFAULT': (
+    bg: #FFFFFF,
+    text: #1F1F1F,
+    secondary: #666,
+    border: #eee,
+  ),
+  'PARCHMENT': (
+    bg: #F9F5E8,
+    text: #3D2B1F,
+    secondary: #8B7355,
+    border: #E8DCC8,
+  ),
+  'LIGHT_GREEN': (
+    bg: #E8F0E3,
+    text: #2D3A28,
+    secondary: #5A7A50,
+    border: #D0E0C8,
+  ),
+  'LIGHT_BLUE': (
+    bg: #E4ECF0,
+    text: #1F2A3A,
+    secondary: #5A7A8A,
+    border: #C8D8E0,
+  ),
+  'NIGHT': (
+    bg: #161A1D,
+    text: #D8D1C7,
+    secondary: #8B8275,
+    border: #2A2A2A,
+  ),
+  'GRAY': (
+    bg: #EBEBE7,
+    text: #2D2D2D,
+    secondary: #666,
+    border: #ddd,
+  ),
+);
+
+@mixin theme-colors($theme-name) {
+  $colors: map-get($themes, $theme-name);
+  @if $colors {
+    background-color: map-get($colors, bg);
+    color: map-get($colors, text);
+  }
+}

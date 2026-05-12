@@ -4,27 +4,41 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue'
 
-const props = defineProps({
-  title: { type: String, default: '书' },
-  coverUrl: { type: String, default: '' },
-  size: { type: String, default: 'md' }
+type CoverSize = 'sm' | 'md' | 'lg' | 'xl'
+
+const props = withDefaults(defineProps<{
+  title?: string
+  coverUrl?: string
+  size?: CoverSize
+}>(), {
+  title: '书',
+  coverUrl: '',
+  size: 'md',
 })
 
-const coverUrl = computed(() => props.coverUrl || '')
 const displayTitle = computed(() => (props.title || '书').slice(0, 2))
+
 const coverStyle = computed(() => ({
-  background: coverUrl.value
-    ? `center / cover no-repeat url("${coverUrl.value}")`
-    : `linear-gradient(145deg, ${hue()} 0%, ${hue(true)} 100%)`
+  background: props.coverUrl
+    ? `center / cover no-repeat url("${props.coverUrl}")`
+    : `linear-gradient(145deg, ${hue()} 0%, ${hue(true)} 100%)`,
 }))
 
+const TITLE_BASE_CHARCODE = 0
+const HUE_SEGMENTS = 24
+const HUE_STEP = 15
+
 let cachedHue = 0
-function hue(dark) {
-  if (!cachedHue) cachedHue = ((props.title || '书').charCodeAt(0) % 24) * 15
-  return dark ? `hsl(${cachedHue}, 20%, 38%)` : `hsl(${cachedHue}, 18%, 62%)`
+function hue(dark?: boolean): string {
+  if (!cachedHue) {
+    cachedHue = ((props.title || '书').charCodeAt(TITLE_BASE_CHARCODE) % HUE_SEGMENTS) * HUE_STEP
+  }
+  return dark
+    ? `hsl(${cachedHue}, 20%, 38%)`
+    : `hsl(${cachedHue}, 18%, 62%)`
 }
 </script>
 

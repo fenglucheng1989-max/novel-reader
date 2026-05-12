@@ -6,10 +6,6 @@
         <text class="search-icon">⌕</text>
         <text class="search-placeholder">搜索书名、作者或关键词</text>
       </view>
-      <!-- <view class="cate-btn" @tap="goCategory">
-        <text class="cate-btn-icon">⊞</text>
-        <text>分类</text>
-      </view> -->
     </view>
     <view v-if="categoryId" class="active-cate-row">
       <text class="active-cate-chip">{{ activeCateName }} <text class="active-cate-close" @tap="bookStore.selectCategory(0); load()">×</text></text>
@@ -157,22 +153,40 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import BookCover from '../../components/BookCover.vue'
+import type { Book, BookStatus } from '../../types/book'
+
+interface MainTab {
+  key: string
+  name: string
+}
+
+interface SubTab {
+  key: string
+  label: string
+}
+
+interface SubApiConfig {
+  sortBy?: string
+  status?: string
+  pageSize: number
+  silent?: boolean
+}
 
 const bookStore = useBookStore()
 const loading = ref(false)
 const hasAnyData = computed(() => editorialBooks.value.length > 0 || newBooks.value.length > 0 || completedBooks.value.length > 0)
-const activeMain = ref('recommend')
-const activeSub = ref('hot')
+const activeMain = ref<string>('recommend')
+const activeSub = ref<string>('hot')
 
-const rankBooks = ref([])
-const editorialBooks = ref([])
-const newBooks = ref([])
-const completedBooks = ref([])
+const rankBooks = ref<Book[]>([])
+const editorialBooks = ref<Book[]>([])
+const newBooks = ref<Book[]>([])
+const completedBooks = ref<Book[]>([])
 
 const groupKey = computed(() => {
   return activeMain.value === 'recommend' ? null : activeMain.value
@@ -194,38 +208,38 @@ const rankPages = computed(() => {
   const n = Math.ceil(rankBooks.value.length / perPage)
   return Array.from({ length: n }, (_, i) => i)
 })
-function pageBooks(pi) {
+function pageBooks(pi: number): Book[] {
   const start = pi * perPage
   return rankBooks.value.slice(start, start + perPage)
 }
 
-const mainTabs = [
+const mainTabs: MainTab[] = [
   { key: 'recommend', name: '推荐' },
   { key: 'male', name: '男生' },
   { key: 'female', name: '女生' },
   { key: 'audio', name: '听书' },
-  { key: 'short', name: '短剧' }
+  { key: 'short', name: '短剧' },
 ]
 
-const subTabs = [
+const subTabs: SubTab[] = [
   { key: 'hot', label: '推荐榜' },
   { key: 'completed', label: '完结榜' },
-  { key: 'new', label: '新书榜' }
+  { key: 'new', label: '新书榜' },
 ]
 
-const subApiMap = {
+const subApiMap: Record<string, SubApiConfig> = {
   hot: { sortBy: 'chapterCount', pageSize: 16 },
   completed: { status: 'COMPLETED', sortBy: 'chapterCount', pageSize: 16 },
-  new: { sortBy: 'latest', pageSize: 16 }
+  new: { sortBy: 'latest', pageSize: 16 },
 }
 
-function onRankScroll(e) {
+function onRankScroll(e: { detail: { scrollLeft: number; scrollWidth: number } }): void {
   const x = e.detail.scrollLeft
   const w = e.detail.scrollWidth / rankPages.value.length
   if (w > 0) rankPage.value = Math.round(x / w)
 }
 
-async function load() {
+async function load(): Promise<void> {
   if (!hasAnyData.value) {
     loading.value = true
   }
@@ -235,78 +249,81 @@ async function load() {
       loadRank(),
       loadEditorial(),
       loadNewBooks(),
-      loadCompleted()
+      loadCompleted(),
     ])
   } finally {
     loading.value = false
   }
 }
 
-async function loadRank() {
+async function loadRank(): Promise<void> {
   const cfg = subApiMap[activeSub.value] || subApiMap.hot
   try {
-    const res = await bookStore.loadFilter({ ...cfg, groupKey: groupKey.value, categoryId: categoryId.value, silent: true })
+    const res = await bookStore.loadFilter({ ...cfg, groupKey: groupKey.value ?? undefined, categoryId: categoryId.value ?? undefined })
     if (res.code === 200) {
-      rankBooks.value = res.data?.records || []
+      const data = res.data as { records?: Book[] } | undefined
+      rankBooks.value = data?.records || []
       rankPage.value = 0
     }
   } catch { /* ignore */ }
 }
 
-async function loadEditorial() {
+async function loadEditorial(): Promise<void> {
   try {
-    const res = await bookStore.loadFeatured(8, groupKey.value)
-    if (res.code === 200) editorialBooks.value = res.data || []
+    const res = await bookStore.loadFeatured(8, groupKey.value ?? undefined)
+    if (res.code === 200) editorialBooks.value = (res.data as Book[]) || []
   } catch { /* ignore */ }
 }
 
-async function loadNewBooks() {
+async function loadNewBooks(): Promise<void> {
   try {
     const res = await bookStore.loadFilter({
-      groupKey: groupKey.value,
-      categoryId: categoryId.value,
+      groupKey: groupKey.value ?? undefined,
+      categoryId: categoryId.value ?? undefined,
       sortBy: 'latest',
-      pageSize: 10
+      pageSize: 10,
     })
-    if (res.code === 200) newBooks.value = res.data?.records || []
+    if (res.code === 200) {
+      const data = res.data as { records?: Book[] } | undefined
+      newBooks.value = data?.records || []
+    }
   } catch { /* ignore */ }
 }
 
-async function loadCompleted() {
+async function loadCompleted(): Promise<void> {
   try {
     const res = await bookStore.loadFilter({
-      groupKey: groupKey.value,
-      categoryId: categoryId.value,
+      groupKey: groupKey.value ?? undefined,
+      categoryId: categoryId.value ?? undefined,
       status: 'COMPLETED',
-      pageSize: 10
+      pageSize: 10,
     })
-    if (res.code === 200) completedBooks.value = res.data?.records || []
+    if (res.code === 200) {
+      const data = res.data as { records?: Book[] } | undefined
+      completedBooks.value = data?.records || []
+    }
   } catch { /* ignore */ }
 }
 
-function switchMain(key) {
+function switchMain(key: string): void {
   activeMain.value = key
   bookStore.selectCategory(0)
   load()
 }
 
-function goDetail(id) {
+function goDetail(id: number): void {
   uni.navigateTo({ url: `/pages/book/detail?id=${id}` })
 }
 
-function goSearch() {
+function goSearch(): void {
   uni.navigateTo({ url: '/pages/search/search' })
 }
 
-function goCategory() {
-  uni.navigateTo({ url: '/pages/category/category' })
-}
-
-function goFullRank() {
+function goFullRank(): void {
   uni.navigateTo({ url: `/pages/rank/rank?type=${activeSub.value}` })
 }
 
-function statusLabel(s) {
+function statusLabel(s: BookStatus): string {
   return s === 'COMPLETED' ? '完结' : '连载'
 }
 
@@ -352,26 +369,6 @@ onShow(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.cate-btn {
-  flex-shrink: 0;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 12px;
-  border-radius: 8px;
-  background: #FFFFFF;
-  color: #8C8C8C;
-  font-size: 13px;
-  font-weight: 700;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-}
-
-.cate-btn-icon {
-  font-size: 13px;
-  color: #A09080;
 }
 
 /* Active Category Chip */
@@ -634,30 +631,6 @@ onShow(() => {
   font-size: 11px;
 }
 
-/* Section (for non-card sections) */
-.sec {
-  margin-top: 24px;
-}
-
-.sec-head {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.sec-line {
-  color: #D0D0C8;
-  font-size: 10px;
-}
-
-.sec-title {
-  color: #1F1F1F;
-  font-size: 15px;
-  font-weight: 900;
-}
-
 /* Editor Picks */
 .h-scroll {
   white-space: nowrap;
@@ -804,6 +777,5 @@ onShow(() => {
 
 @media (min-width: 720px) {
   .page { padding-left: calc((100% - 480px) / 2); padding-right: calc((100% - 480px) / 2); }
-  .grid-card { width: calc(50% - 10px); }
 }
 </style>

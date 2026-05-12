@@ -8,13 +8,15 @@
   </view>
 </template>
 
-<script setup>
-defineProps({
-  title: { type: String, required: true },
-  actionText: { type: String, default: '' }
-})
+<script setup lang="ts">
+defineProps<{
+  title: string
+  actionText?: string
+}>()
 
-const emit = defineEmits(['action'])
+const emit = defineEmits<{
+  action: []
+}>()
 </script>
 
 <style scoped>

@@ -66,18 +66,20 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import BookCover from '../../components/BookCover.vue'
+import type { Book, BookStatus, PageResult } from '../../types/book'
+import type { ApiResponse } from '../../types/api'
 
 const bookStore = useBookStore()
 const loading = ref(false)
-const rankBooks = ref([])
-const categoryId = ref(0)
-const activeCate = ref('all')
-const activeRank = ref('recommend')
+const rankBooks = ref<Book[]>([])
+const categoryId = ref<number>(0)
+const activeCate = ref<string>('all')
+const activeRank = ref<string>('recommend')
 
 const cateTabs = [
   { key: 'all', name: '全部' },
@@ -95,44 +97,47 @@ const rankTabs = [
 
 const currentRank = computed(() => rankTabs.find((r) => r.key === activeRank.value) || rankTabs[0])
 
-const cateGroupKeyMap = {
+const cateGroupKeyMap: Record<string, string | null> = {
   all: null,
   novel: null,
   short: 'short',
   audio: 'audio'
 }
 
-async function load() {
+async function load(): Promise<void> {
   loading.value = true
   const cid = categoryId.value || null
   const group = cateGroupKeyMap[activeCate.value]
   try {
     await bookStore.loadCategories()
-    let res
     switch (activeRank.value) {
-      case 'recommend':
-        res = await bookStore.loadRank(cid, 50, group)
+      case 'recommend': {
+        const res = await bookStore.loadRank(cid, 50, group) as ApiResponse<Book[]>
         rankBooks.value = res.code === 200 ? (res.data || []) : []
         break
-      case 'hot':
-        res = await bookStore.loadFilter({ categoryId: cid, groupKey: group, sortBy: 'chapterCount', pageSize: 50 })
+      }
+      case 'hot': {
+        const res = await bookStore.loadFilter({ categoryId: cid, groupKey: group, sortBy: 'chapterCount', pageSize: 50 }) as ApiResponse<PageResult<Book>>
         rankBooks.value = res.code === 200 ? (res.data?.records || []) : []
         break
-      case 'new':
-        res = await bookStore.loadFilter({ categoryId: cid, groupKey: group, sortBy: 'latest', pageSize: 50 })
+      }
+      case 'new': {
+        const res = await bookStore.loadFilter({ categoryId: cid, groupKey: group, sortBy: 'latest', pageSize: 50 }) as ApiResponse<PageResult<Book>>
         rankBooks.value = res.code === 200 ? (res.data?.records || []) : []
         break
-      case 'completed':
-        res = await bookStore.loadFilter({ categoryId: cid, groupKey: group, status: 'COMPLETED', sortBy: 'wordCount', pageSize: 50 })
+      }
+      case 'completed': {
+        const res = await bookStore.loadFilter({ categoryId: cid, groupKey: group, status: 'COMPLETED', sortBy: 'wordCount', pageSize: 50 }) as ApiResponse<PageResult<Book>>
         rankBooks.value = res.code === 200 ? (res.data?.records || []) : []
         break
+      }
     }
   } finally {
     loading.value = false
   }
 }
 
-function goBack() {
+function goBack(): void {
   const pages = getCurrentPages()
   if (pages.length > 1) {
     uni.navigateBack()
@@ -141,20 +146,20 @@ function goBack() {
   }
 }
 
-function goDetail(id) {
+function goDetail(id: number): void {
   uni.navigateTo({ url: `/pages/book/detail?id=${id}` })
 }
 
-function statusLabel(s) {
+function statusLabel(s: BookStatus): string {
   return s === 'COMPLETED' ? '完结' : '连载'
 }
 
-function wordText(count) {
+function wordText(count: string | number): string {
   const n = Number(count || 0)
   return n >= 10000 ? `${(n / 10000).toFixed(1)}万字` : `${n}字`
 }
 
-onLoad((query) => {
+onLoad((query?: Record<string, any>) => {
   categoryId.value = Number(query?.categoryId || 0)
   if (query?.type && rankTabs.some((t) => t.key === query.type)) {
     activeRank.value = query.type

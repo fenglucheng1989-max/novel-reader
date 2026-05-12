@@ -48,46 +48,58 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { request } from '../../utils/request'
 
-const FALLBACK = {
+interface DocSection {
+  title: string
+  body: string
+}
+
+interface LegalDocument {
+  title?: string
+  version?: string
+  content?: string
+}
+
+const FALLBACK: Record<string, { title: string; content: string }> = {
   terms: {
     title: '用户协议',
-    content: '欢迎使用悦读\n感谢您使用悦读。悦读是一款个人阅读管理工具。\n\n服务说明\n悦读为您提供书籍浏览、书架管理、阅读进度同步等功能。\n\n账号与安全\n请妥善保管您的账号和密码。\n\n用户行为规范\n使用悦读时应遵守相关法律法规。\n\n知识产权\n书籍内容归原作者或版权方所有。\n\n免责声明\n悦读按现状提供服务。\n\n协议更新\n我们可能根据需要更新本协议。\n\n联系我们\nyuedu@example.com'
+    content: '欢迎使用悦读\n感谢您使用悦读。悦读是一款个人阅读管理工具。\n\n服务说明\n悦读为您提供书籍浏览、书架管理、阅读进度同步等功能。\n\n账号与安全\n请妥善保管您的账号和密码。\n\n用户行为规范\n使用悦读时应遵守相关法律法规。\n\n知识产权\n书籍内容归原作者或版权方所有。\n\n免责声明\n悦读按现状提供服务。\n\n协议更新\n我们可能根据需要更新本协议。\n\n联系我们\nyuedu@example.com',
   },
   privacy: {
     title: '隐私政策',
-    content: '信息收集\n我们仅收集提供服务所必需的信息。\n\n信息使用\n用于创建和管理您的账号、同步阅读数据。\n\n信息存储\n您的数据存储在安全的服务器上。\n\n信息共享\n我们不会将个人信息出售或分享给第三方。\n\nCookie 与缓存\n本地存储必要的缓存以提升体验。\n\n用户权利\n您可以查看、修改或删除账号信息。\n\n儿童隐私\n不面向13岁以下儿童。\n\n政策更新\n更新后通过应用内通知告知。\n\n联系我们\nyuedu@example.com'
-  }
+    content: '信息收集\n我们仅收集提供服务所必需的信息。\n\n信息使用\n用于创建和管理您的账号、同步阅读数据。\n\n信息存储\n您的数据存储在安全的服务器上。\n\n信息共享\n我们不会将个人信息出售或分享给第三方。\n\nCookie 与缓存\n本地存储必要的缓存以提升体验。\n\n用户权利\n您可以查看、修改或删除账号信息。\n\n儿童隐私\n不面向13岁以下儿童。\n\n政策更新\n更新后通过应用内通知告知。\n\n联系我们\nyuedu@example.com',
+  },
 }
 
-const section = ref('about')
+const section = ref<'about' | 'terms' | 'privacy'>('about')
 const loading = ref(false)
 const docTitle = ref('')
 const docVersion = ref('')
-const sections = ref([])
+const sections = ref<DocSection[]>([])
 
-function parseContent(content) {
+function parseContent(content: string): DocSection[] {
   const lines = String(content || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean)
-  const result = []
+  const result: DocSection[] = []
   for (let i = 0; i < lines.length; i += 2) {
     result.push({ title: lines[i] || '说明', body: lines[i + 1] || '' })
   }
   return result.length > 0 ? result : [{ title: '说明', body: String(content || '') }]
 }
 
-async function load() {
+async function load(): Promise<void> {
   loading.value = true
   const type = section.value === 'terms' ? 'TERMS' : 'PRIVACY'
   try {
     const res = await request({ url: `/api/v1/legal-documents/latest/${type}`, noAuth: true, silent: true })
     if (res.code === 200 && res.data) {
-      docTitle.value = res.data.title || FALLBACK[section.value].title
-      docVersion.value = res.data.version || ''
-      sections.value = parseContent(res.data.content)
+      const data = res.data as LegalDocument
+      docTitle.value = data.title || FALLBACK[section.value].title
+      docVersion.value = data.version || ''
+      sections.value = parseContent(data.content || '')
     } else {
       useFallback()
     }
@@ -98,7 +110,7 @@ async function load() {
   }
 }
 
-function useFallback() {
+function useFallback(): void {
   const fb = FALLBACK[section.value]
   docTitle.value = fb.title
   docVersion.value = ''
@@ -106,9 +118,9 @@ function useFallback() {
 }
 
 onLoad((query) => {
-  if (query?.section) {
+  if (query?.section && (query.section === 'terms' || query.section === 'privacy')) {
     section.value = query.section
-    if (query.section !== 'about') load()
+    load()
   } else {
     section.value = 'about'
   }

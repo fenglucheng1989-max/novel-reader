@@ -26,19 +26,20 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import { useUserStore } from '../../store/user'
+import type { Comment } from '../../types/book'
 
 const bookStore = useBookStore()
 const userStore = useUserStore()
-const comments = ref([])
+const comments = ref<Comment[]>([])
 const totalCount = ref(0)
 const loading = ref(false)
 
-function goDetail(bookId) {
+function goDetail(bookId?: number): void {
   if (!bookId) return
   uni.navigateTo({ url: `/pages/book/detail?id=${bookId}` })
 }
@@ -50,13 +51,14 @@ onShow(() => {
   }
 })
 
-async function loadComments() {
+async function loadComments(): Promise<void> {
   loading.value = true
   try {
     const res = await bookStore.loadMyComments(1, 50)
     if (res.code === 200) {
-      comments.value = res.data?.records || []
-      totalCount.value = res.data?.total || 0
+      const data = res.data as { records?: Comment[]; total?: number } | undefined
+      comments.value = data?.records || []
+      totalCount.value = data?.total || 0
     }
   } catch {
     comments.value = []

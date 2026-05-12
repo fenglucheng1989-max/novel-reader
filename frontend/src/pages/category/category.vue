@@ -99,24 +99,26 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
 import BookCardHorizontal from '../../components/BookCardHorizontal.vue'
+import type { Book, PageResult } from '../../types/book'
+import type { ApiResponse } from '../../types/api'
 
 const bookStore = useBookStore()
 const loading = ref(false)
-const activeGender = ref('male')
+const activeGender = ref<string>('male')
 
-const currentKeyword = ref('')
-const statusFilter = ref('')
-const sortBy = ref('latest')
-const books = ref([])
+const currentKeyword = ref<string>('')
+const statusFilter = ref<string>('')
+const sortBy = ref<string>('latest')
+const books = ref<Book[]>([])
 const searchLoading = ref(false)
-const page = ref(1)
-const total = ref(0)
-const hasMore = computed(() => books.value.length < total.value)
+const page = ref<number>(1)
+const total = ref<number>(0)
+const hasMore = computed<boolean>(() => books.value.length < total.value)
 
 const genderTabs = [
   { key: 'male', name: '男生' },
@@ -134,7 +136,14 @@ const tagGroups = [
   { key: 'plot', label: '情节' }
 ]
 
-const tagMap = {
+interface TagGroups {
+  hot: string[]
+  theme: string[]
+  role: string[]
+  plot: string[]
+}
+
+const tagMap: Record<string, TagGroups> = {
   male: {
     hot: ['热血','升级流','无限流','都市脑洞','玄幻脑洞','克苏鲁','游戏体育','架空','副本','求生','末日','灵异'],
     theme: ['悬疑','玄幻','历史','都市','科幻','奇幻','武侠','仙侠','末世','游戏','体育','脑洞'],
@@ -161,14 +170,14 @@ const tagMap = {
   }
 }
 
-const activeTagSet = computed(() => tagMap[activeGender.value] || tagMap.male)
+const activeTagSet = computed<TagGroups>(() => tagMap[activeGender.value] || tagMap.male)
 
-async function load() {
+async function load(): Promise<void> {
   loading.value = true
   try { await bookStore.loadCategories() } finally { loading.value = false }
 }
 
-function pickTag(tag) {
+function pickTag(tag: string): void {
   currentKeyword.value = tag
   page.value = 1
   books.value = []
@@ -176,13 +185,13 @@ function pickTag(tag) {
   doSearch()
 }
 
-function clearKeyword() {
+function clearKeyword(): void {
   currentKeyword.value = ''
   books.value = []
   total.value = 0
 }
 
-function setFilter(type, value) {
+function setFilter(type: 'status' | 'sort', value: string): void {
   if (type === 'status') statusFilter.value = value
   if (type === 'sort') sortBy.value = value
   page.value = 1
@@ -191,7 +200,7 @@ function setFilter(type, value) {
   if (currentKeyword.value) doSearch()
 }
 
-async function doSearch() {
+async function doSearch(): Promise<void> {
   searchLoading.value = true
   try {
     const res = await bookStore.loadFilter({
@@ -201,7 +210,7 @@ async function doSearch() {
       sortBy: sortBy.value,
       page: page.value,
       pageSize: 20
-    })
+    }) as ApiResponse<PageResult<Book>>
     if (res.code === 200) {
       const newRecords = res.data?.records || []
       if (page.value === 1) {
@@ -216,21 +225,21 @@ async function doSearch() {
   }
 }
 
-function loadMore() {
+function loadMore(): void {
   page.value++
   doSearch()
 }
 
-function chooseCategory(id) {
+function chooseCategory(id: number): void {
   bookStore.selectCategory(id)
   uni.switchTab({ url: '/pages/index/index' })
 }
 
-function goDetail(id) {
+function goDetail(id: number): void {
   uni.navigateTo({ url: `/pages/book/detail?id=${id}` })
 }
 
-function goBack() {
+function goBack(): void {
   const pages = getCurrentPages()
   if (pages.length > 1) uni.navigateBack()
   else uni.reLaunch({ url: '/pages/index/index' })

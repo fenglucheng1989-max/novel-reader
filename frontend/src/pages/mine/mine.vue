@@ -42,7 +42,7 @@
           <view class="menu-icon"><text class="menu-icon-text">&#x2699;</text></view>
           <view class="menu-copy">
             <text class="menu-title">阅读设置</text>
-            <text class="menu-sub">字号 {{ readerStore.setting.fontSize }} · 行距 {{ readerStore.setting.lineHeight }} · {{ themeLabel }}</text>
+            <text class="menu-sub">字号 {{ readerStore.settings.fontSize }} · 行距 {{ readerStore.settings.lineHeight }} · {{ themeLabel }}</text>
           </view>
           <text class="menu-arrow">&#8250;</text>
         </view>
@@ -51,7 +51,7 @@
           <view class="menu-copy">
             <text class="menu-title">夜间模式</text>
           </view>
-          <switch :checked="readerStore.setting.theme === 'NIGHT'" color="#A09080" style="transform:scale(0.85)" />
+          <switch :checked="readerStore.settings.nightMode" color="#A09080" style="transform:scale(0.85)" />
         </view>
       </view>
 
@@ -162,13 +162,14 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '../../store/user'
 import { useReaderStore } from '../../store/reader'
 import { useBookStore } from '../../store/book'
 import { useHighlightStore } from '../../store/highlight'
+import type { ShelfStats } from '../../types/book'
 
 const userStore = useUserStore()
 const readerStore = useReaderStore()
@@ -176,28 +177,27 @@ const bookStore = useBookStore()
 const highlightStore = useHighlightStore()
 
 // Auth
-const mode = ref('login')
+const mode = ref<'login' | 'register'>('login')
 const username = ref('')
 const password = ref('')
 const email = ref('')
 const acceptLegal = ref(false)
 
 // Data
-const shelfStats = ref(null)
+const shelfStats = ref<ShelfStats | null>(null)
 const commentsCount = ref(0)
 
+const BACKGROUND_THEME_MAP: Record<string, string> = {
+  '#161A1D': '夜间',
+  '#F5E6C8': '羊皮',
+  '#E8F0E3': '浅绿',
+  '#EBEBE7': '素灰',
+}
 const avatarText = computed(() => (userStore.username || '悦').slice(0, 1).toUpperCase())
-const themeLabel = computed(() => {
-  const t = readerStore.setting.theme
-  if (t === 'GRAY') return '素灰'
-  if (t === 'NIGHT') return '夜间'
-  if (t === 'PARCHMENT') return '羊皮'
-  if (t === 'LIGHT_GREEN') return '浅绿'
-  return '米白'
-})
+const themeLabel = computed(() => BACKGROUND_THEME_MAP[readerStore.settings.backgroundColor] || '米白')
 
 // ── Auth ──
-async function submit() {
+async function submit(): Promise<void> {
   if (!username.value || !password.value) {
     uni.showToast({ title: '请输入用户名和密码', icon: 'none' })
     return
@@ -211,32 +211,30 @@ async function submit() {
   } else {
     await userStore.register(username.value, password.value, email.value)
   }
-  await readerStore.loadSetting()
   uni.showToast({ title: '已登录', icon: 'success' })
 }
 
-function logout() {
+function logout(): void {
   userStore.logout()
   uni.showToast({ title: '已退出', icon: 'none' })
 }
 
 // ── Nav ──
-function goHistory() { uni.switchTab({ url: '/pages/bookshelf/bookshelf?tab=history' }) }
-function goReaderSettings() { uni.navigateTo({ url: '/pages/mine/settings' }) }
-function goComments() { uni.navigateTo({ url: '/pages/mine/comments' }) }
-function goHighlights() { uni.navigateTo({ url: '/pages/mine/highlights' }) }
-function goProfile() { uni.navigateTo({ url: '/pages/mine/profile' }) }
-function goPassword() { uni.navigateTo({ url: '/pages/mine/password' }) }
-function goAbout(section) { uni.navigateTo({ url: `/pages/mine/about?section=${section}` }) }
+function goHistory(): void { uni.switchTab({ url: '/pages/bookshelf/bookshelf?tab=history' }) }
+function goReaderSettings(): void { uni.navigateTo({ url: '/pages/mine/settings' }) }
+function goComments(): void { uni.navigateTo({ url: '/pages/mine/comments' }) }
+function goHighlights(): void { uni.navigateTo({ url: '/pages/mine/highlights' }) }
+function goProfile(): void { uni.navigateTo({ url: '/pages/mine/profile' }) }
+function goPassword(): void { uni.navigateTo({ url: '/pages/mine/password' }) }
+function goAbout(section: string): void { uni.navigateTo({ url: `/pages/mine/about?section=${section}` }) }
 
 // ── Night Mode ──
-function toggleNightMode() {
-  const next = readerStore.setting.theme === 'NIGHT' ? 'DEFAULT' : 'NIGHT'
-  readerStore.saveSetting({ theme: next })
+function toggleNightMode(): void {
+  readerStore.toggleNightMode()
 }
 
 // ── Cache ──
-function clearCache() {
+function clearCache(): void {
   uni.showModal({
     title: '清除缓存',
     content: '确定清除所有本地缓存吗？不会影响书架和阅读进度。',
@@ -246,12 +244,12 @@ function clearCache() {
         keys.filter(k => k.startsWith('chapter:v2:')).forEach(k => uni.removeStorageSync(k))
         uni.showToast({ title: '缓存已清除', icon: 'success' })
       }
-    }
+    },
   })
 }
 
 // ── Avatar ──
-function handleChangeAvatar() {
+function handleChangeAvatar(): void {
   uni.chooseImage({
     count: 1,
     sizeType: ['compressed'],
@@ -260,34 +258,35 @@ function handleChangeAvatar() {
       if (!path) return
       try {
         const fs = uni.getFileSystemManager()
-        const data = fs.readFileSync(path, 'base64')
+        const data = fs.readFileSync(path, 'base64') as string
         const ext = (path.split('.').pop() || 'png').replace(/^jpeg$/, 'jpg')
         const dataUrl = `data:image/${ext};base64,${data}`
         const result = await userStore.updateProfile({ avatarUrl: dataUrl })
         if (result.code === 200) {
           uni.showToast({ title: '头像已更新', icon: 'success' })
         } else {
-          uni.showToast({ title: result.message || '头像更新失败', icon: 'none' })
+          uni.showToast({ title: (result.message as string) || '头像更新失败', icon: 'none' })
         }
-      } catch (e) {
-        uni.showToast({ title: e.message || '头像更新失败', icon: 'none' })
+      } catch {
+        uni.showToast({ title: '头像更新失败', icon: 'none' })
       }
-    }
+    },
   })
 }
 
 // ── Lifecycle ──
-async function loadShelfStats() {
+async function loadShelfStats(): Promise<void> {
   try {
     const res = await bookStore.loadShelfStats()
-    if (res.code === 200) shelfStats.value = res.data
+    if (res.code === 200) shelfStats.value = res.data as ShelfStats
   } catch { shelfStats.value = null }
 }
 
-async function loadCommentCount() {
+async function loadCommentCount(): Promise<void> {
   try {
     const res = await bookStore.loadMyComments(1, 1)
-    commentsCount.value = res.data?.total || 0
+    const data = res.data as { total?: number } | undefined
+    commentsCount.value = data?.total || 0
   } catch { commentsCount.value = 0 }
 }
 
@@ -295,7 +294,6 @@ onShow(() => {
   userStore.syncFromStorage()
   if (userStore.isLoggedIn) {
     userStore.fetchProfile()
-    readerStore.loadSetting()
     loadShelfStats()
     loadCommentCount()
     highlightStore.loadFromStorage()

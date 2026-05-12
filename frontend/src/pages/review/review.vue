@@ -24,20 +24,22 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useBookStore } from '../../store/book'
+import type { Comment, PageResult } from '../../types/book'
+import type { ApiResponse } from '../../types/api'
 
 const bookStore = useBookStore()
-const bookId = ref('')
-const reviews = ref([])
+const bookId = ref<string>('')
+const reviews = ref<Comment[]>([])
 const loading = ref(false)
 
-async function load() {
+async function load(): Promise<void> {
   loading.value = true
   try {
-    const res = await bookStore.loadBookComments(bookId.value, 1, 100)
+    const res = await bookStore.loadBookComments(bookId.value, 1, 100) as ApiResponse<PageResult<Comment>>
     reviews.value = res.code === 200 ? (res.data?.records || []) : []
   } catch {
     reviews.value = []
@@ -46,13 +48,13 @@ async function load() {
   }
 }
 
-function goBack() {
+function goBack(): void {
   const pages = getCurrentPages()
   if (pages.length > 1) uni.navigateBack()
   else uni.reLaunch({ url: '/pages/index/index' })
 }
 
-function formatTime(dateStr) {
+function formatTime(dateStr: string | null | undefined): string {
   if (!dateStr) return '刚刚'
   const diff = Math.max(0, Date.now() - new Date(dateStr).getTime())
   const minutes = Math.floor(diff / 60000)
@@ -63,7 +65,7 @@ function formatTime(dateStr) {
   return `${Math.floor(hours / 24)} 天前`
 }
 
-onLoad((query) => {
+onLoad((query?: Record<string, any>) => {
   bookId.value = query.bookId || ''
   load()
 })

@@ -37,7 +37,7 @@
   </view>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '../../store/user'
@@ -57,7 +57,7 @@ onShow(() => {
   avatarUrl.value = userStore.avatarUrl || ''
 })
 
-function changeAvatar() {
+function changeAvatar(): void {
   uni.chooseImage({
     count: 1,
     sizeType: ['compressed'],
@@ -66,7 +66,7 @@ function changeAvatar() {
       if (!path) return
       try {
         const fs = uni.getFileSystemManager()
-        const data = fs.readFileSync(path, 'base64')
+        const data = fs.readFileSync(path, 'base64') as string
         const ext = (path.split('.').pop() || 'png').replace(/^jpeg$/, 'jpg')
         const dataUrl = `data:image/${ext};base64,${data}`
         const result = await userStore.updateProfile({ avatarUrl: dataUrl })
@@ -74,16 +74,16 @@ function changeAvatar() {
           avatarUrl.value = userStore.avatarUrl
           uni.showToast({ title: '头像已更新', icon: 'success' })
         } else {
-          uni.showToast({ title: result.message || '更新失败', icon: 'none' })
+          uni.showToast({ title: (result.message as string) || '更新失败', icon: 'none' })
         }
       } catch {
         uni.showToast({ title: '更新失败', icon: 'none' })
       }
-    }
+    },
   })
 }
 
-async function save() {
+async function save(): Promise<void> {
   if (saving.value) return
   if (!formUsername.value.trim()) {
     uni.showToast({ title: '用户名不能为空', icon: 'none' })
@@ -93,13 +93,13 @@ async function save() {
   try {
     const res = await userStore.updateProfile({
       username: formUsername.value.trim(),
-      email: formEmail.value.trim()
+      email: formEmail.value.trim(),
     })
     if (res.code === 200) {
       uni.showToast({ title: '已更新', icon: 'success' })
       setTimeout(() => uni.navigateBack(), 600)
     } else {
-      uni.showToast({ title: res.message || '更新失败', icon: 'none' })
+      uni.showToast({ title: (res.message as string) || '更新失败', icon: 'none' })
     }
   } catch {
     uni.showToast({ title: '更新失败', icon: 'none' })

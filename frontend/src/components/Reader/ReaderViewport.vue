@@ -307,7 +307,7 @@ defineExpose({
   top: 0; left: 0;
   width: 100%;
   height: 100%;
-  padding: 44px 22px 44px;
+  padding: 36px 22px 44px;
   box-sizing: border-box;
 }
 
@@ -318,7 +318,7 @@ defineExpose({
 
 .nr-scroll-page {
   min-height: 100%;
-  padding: 44px 22px 44px;
+  padding: 36px 22px 44px;
   box-sizing: border-box;
 }
 

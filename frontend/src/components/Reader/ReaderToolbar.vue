@@ -14,13 +14,13 @@
         <text class="nr-top-title">{{ bookTitle }}</text>
       </view>
       <view class="nr-top-right">
-        <view class="nr-action" @click="$emit('add-shelf')">
-          <text class="nr-action-icon">+</text>
-          <text class="nr-action-label">书架</text>
+        <view class="nr-action" :class="{ 'nr-action-active': isInShelf }" @click="$emit('toggle-shelf')">
+          <text class="nr-action-icon">{{ isInShelf ? '✓' : '+' }}</text>
+          <text class="nr-action-label">{{ isInShelf ? '已加入' : '书架' }}</text>
         </view>
-        <view class="nr-action" @click="$emit('add-favorite')">
-          <text class="nr-action-icon">☆</text>
-          <text class="nr-action-label">收藏</text>
+        <view class="nr-action" :class="{ 'nr-action-active': isFavorited }" @click="$emit('toggle-favorite')">
+          <text class="nr-action-icon">{{ isFavorited ? '★' : '☆' }}</text>
+          <text class="nr-action-label">{{ isFavorited ? '已收藏' : '收藏' }}</text>
         </view>
         <view class="nr-action" @click="$emit('more')">
           <text class="nr-action-icon">⋮</text>
@@ -71,19 +71,23 @@ const props = withDefaults(defineProps<{
   totalPages: number
   isNight: boolean
   bookTitle: string
+  isInShelf?: boolean
+  isFavorited?: boolean
 }>(), {
   visible: false,
   currentPage: 0,
   totalPages: 1,
   isNight: false,
   bookTitle: '',
+  isInShelf: false,
+  isFavorited: false,
 })
 
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'back'): void
-  (e: 'add-shelf'): void
-  (e: 'add-favorite'): void
+  (e: 'toggle-shelf'): void
+  (e: 'toggle-favorite'): void
   (e: 'download'): void
   (e: 'more'): void
   (e: 'prev-chapter'): void
@@ -298,6 +302,14 @@ function onProgressTap(e: { clientX: number } | MouseEvent): void {
   font-size: 15px;
   color: #6B5E53;
   line-height: 1;
+}
+
+.nr-action-active .nr-action-icon {
+  color: #C8965E;
+}
+
+.nr-action-active .nr-action-label {
+  color: #C8965E;
 }
 
 .nr-action-label {

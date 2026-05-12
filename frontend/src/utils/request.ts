@@ -23,6 +23,7 @@ export interface RequestOptions {
   silent?: boolean
   silentAuth?: boolean
   responseType?: 'text' | 'arraybuffer'
+  timeout?: number
 }
 
 interface RequestError extends Error {
@@ -78,20 +79,37 @@ function buildHeader(options: RequestOptions): Record<string, string> {
  * 通用请求
  * 返回 Promise<ApiResponse<T>>
  */
+// 默认超时时间（毫秒）
+const DEFAULT_TIMEOUT = 15000
+
 export function request<T = unknown>(options: RequestOptions): Promise<ApiResponse<T>> {
   return new Promise((resolve, reject) => {
     const header = buildHeader(options)
     const silent = options.silent
     const primaryUrl = getApiBaseUrl() + options.url
     const fallbackUrl = getDevFallbackUrl(options.url)
+    const timeout = options.timeout ?? DEFAULT_TIMEOUT
 
     function send(url: string, allowFallback: boolean = true): void {
+      // 超时处理
+      const timeoutTimer = setTimeout(() => {
+        if (allowFallback && url !== fallbackUrl) {
+          send(fallbackUrl, false)
+        } else {
+          const message = '请求超时'
+          if (!silent) uni.showToast({ title: message, icon: 'none' })
+          reject(createError(message, { url, timeout }))
+        }
+      }, timeout)
+
       uni.request({
         url,
         method: options.method || 'GET',
         data: options.data || {},
         header,
+        timeout,
         success: (res) => {
+          clearTimeout(timeoutTimer)
           res.data = normalizeResponseData(res.data) as UniApp.RequestSuccessCallbackResult['data']
 
           if (res.statusCode === 200) {
@@ -139,6 +157,7 @@ export function request<T = unknown>(options: RequestOptions): Promise<ApiRespon
           reject(createError(message, res.data))
         },
         fail: (err) => {
+          clearTimeout(timeoutTimer)
           if (allowFallback && url !== fallbackUrl) {
             send(fallbackUrl, false)
             return

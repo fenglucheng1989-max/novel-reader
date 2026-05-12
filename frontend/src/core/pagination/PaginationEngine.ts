@@ -85,8 +85,8 @@ function processContent(content: string): ProcessedParagraph[] {
 
     if (text.length === 0) {
       emptyCount++
-      if (emptyCount <= 3) {
-        // 保留最多 3 个连续空行
+      if (emptyCount <= 1) {
+        // 多个连续空行合并为一个
         result.push({
           chars: [],
           originalIndex: i,
@@ -260,7 +260,7 @@ function buildPages(
     while (lineIdx < lines.length) {
       const line = lines[lineIdx]
       const lineH =
-        usableLineHeight + (line.isFirstInParagraph && paragraphSpacing > 0 ? paragraphSpacing : 0)
+        usableLineHeight + (line.isFirstInParagraph && line.text.length > 0 && paragraphSpacing > 0 ? paragraphSpacing : 0)
 
       if (pageLines.length > 0 && usedHeight + lineH > maxContentHeight) {
         break

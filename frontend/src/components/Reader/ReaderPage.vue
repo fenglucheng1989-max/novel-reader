@@ -43,6 +43,7 @@ const props = withDefaults(defineProps<{
   lineHeight?: number
   fontFamily?: string
   textColor?: string
+  backgroundColor?: string
 }>(), {
   html: '',
   title: '',
@@ -54,10 +55,12 @@ const props = withDefaults(defineProps<{
   lineHeight: 1.8,
   fontFamily: "'Noto Serif SC','Source Han Serif SC',SimSun,STSong,serif",
   textColor: '#3D2B1F',
+  backgroundColor: '#F9F5E8',
 })
 
 const pageStyle = computed(() => ({
   color: props.textColor,
+  backgroundColor: props.backgroundColor,
 }))
 
 const contentStyle = computed(() => ({

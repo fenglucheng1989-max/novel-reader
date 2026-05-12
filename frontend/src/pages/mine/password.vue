@@ -7,12 +7,15 @@
 
     <view class="form-card">
       <view class="form-row">
+        <text class="form-label">原密码</text>
         <input class="form-input" v-model="oldPassword" password placeholder="输入原密码" />
       </view>
       <view class="form-row">
-        <input class="form-input" v-model="newPassword" password placeholder="新密码，至少6位" maxlength="50" />
+        <text class="form-label">新密码</text>
+        <input class="form-input" v-model="newPassword" password placeholder="至少6位" maxlength="50" />
       </view>
       <view class="form-row">
+        <text class="form-label">确认密码</text>
         <input class="form-input" v-model="confirmPassword" password placeholder="再次输入新密码" maxlength="50" />
       </view>
     </view>
@@ -99,18 +102,29 @@ async function save(): Promise<void> {
 }
 
 .form-row {
+  display: flex;
+  align-items: center;
+  padding: 0 15px;
+  min-height: 48px;
   border-bottom: 1px solid #F4F4F1;
 }
 
 .form-row:last-child { border-bottom: none; }
 
-.form-input {
-  width: 100%;
-  height: 48px;
-  padding: 0 15px;
-  font-size: 14px;
+.form-label {
+  width: 70px;
+  flex-shrink: 0;
   color: #1F1F1F;
-  box-sizing: border-box;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.form-input {
+  flex: 1;
+  height: 40px;
+  text-align: right;
+  color: #8C8C8C;
+  font-size: 14px;
 }
 
 /* ── Button ── */
@@ -123,19 +137,18 @@ async function save(): Promise<void> {
 .btn-save {
   display: block;
   width: 100%;
-  height: 40px;
-  line-height: 40px;
+  height: 44px;
+  line-height: 44px;
   text-align: center;
   border-radius: 999px;
-  border: 2px solid #A09080;
-  color: #A09080;
-  font-size: 15px;
+  background: #A09080;
+  color: #FFFFFF;
+  font-size: 16px;
   font-weight: 700;
-  background: #FFFFFF;
 }
 
 .btn-save--disabled {
-  border-color: #E0DDD5;
-  color: #C0BDB5;
+  background: #D0C8BC;
+  color: #FFFFFF;
 }
 </style>

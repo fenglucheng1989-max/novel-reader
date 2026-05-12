@@ -105,6 +105,9 @@ export const useReaderStore = defineStore('reader', () => {
   /* ---- 进度 ---- */
   const progress = ref<ReaderProgress | null>(null)
 
+  /* ---- 滚动模式锚点 ---- */
+  const scrollAnchorIndex = ref(-1)
+
   /* ===================== Computed ===================== */
 
   const totalPages = computed(() => Math.max(1, pages.value.length))
@@ -347,6 +350,7 @@ export const useReaderStore = defineStore('reader', () => {
     phase, toolbarVisible, settingsVisible,
     menuVisible, commentPanelVisible, catalogVisible,
     loading, chapterLoading, error, progress,
+    scrollAnchorIndex,
 
     // 计算属性
     totalPages, progressPercent,

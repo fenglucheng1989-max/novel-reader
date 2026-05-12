@@ -246,19 +246,18 @@ async function save(): Promise<void> {
 .btn-save {
   display: block;
   width: 100%;
-  height: 40px;
-  line-height: 40px;
+  height: 44px;
+  line-height: 44px;
   text-align: center;
   border-radius: 999px;
-  border: 2px solid #A09080;
-  color: #A09080;
-  font-size: 15px;
+  background: #A09080;
+  color: #FFFFFF;
+  font-size: 16px;
   font-weight: 700;
-  background: #FFFFFF;
 }
 
 .btn-save--disabled {
-  border-color: #E0DDD5;
-  color: #C0BDB5;
+  background: #D0C8BC;
+  color: #FFFFFF;
 }
 </style>

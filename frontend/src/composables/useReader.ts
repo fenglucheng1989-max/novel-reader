@@ -89,9 +89,12 @@ export function useReader(options?: UseReaderOptions) {
         store.chapterList = chapters
       })
 
-      engine.on('page:changed', ({ pageIndex }) => {
+      engine.on('page:changed', ({ pageIndex, prependedCount }) => {
         store.setCurrentPageIndex(pageIndex)
         store.setPages(engine.pages)
+        if (typeof prependedCount === 'number' && prependedCount > 0) {
+          store.scrollAnchorIndex = prependedCount
+        }
       })
 
       engine.on('phase:changed', ({ from, to }) => {

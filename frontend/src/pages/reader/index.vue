@@ -14,7 +14,7 @@
     <!-- 阅读区域 -->
     <template v-if="pageReady">
       <!-- 返回指示器 -->
-      <view class="nr-back-indicator" @click="goBack">
+      <view class="nr-back-indicator" :style="backIndicatorStyle" @click="goBack">
         <text class="nr-back-arrow">‹</text>
         <text class="nr-back-label">{{ backLabel }}</text>
       </view>
@@ -34,6 +34,7 @@
           :pages="pages"
           :current-page-index="currentPageIndex"
           :mode="store.settings.readerMode"
+          :turn-mode="store.settings.turnMode"
           :chapter-title="chapter?.title ?? ''"
           :chapter-no="chapter?.chapterNo ?? 0"
           :book-title="store.bookTitle"
@@ -42,6 +43,7 @@
           :font-family="resolvedFontFamily"
           :text-color="store.settings.textColor"
           :background-color="store.settings.backgroundColor"
+          :scroll-anchor-index="store.scrollAnchorIndex"
           @tap-left="onTapLeft"
           @tap-center="toggleToolbar"
           @tap-right="onTapRight"
@@ -49,6 +51,8 @@
           @swipe-right="onSwipeRight"
           @long-press="onLongPress"
           @scroll="onScroll"
+          @scroll-lower="navigateNextChapter"
+          @scroll-upper="navigatePrevChapter"
         />
       </view>
 
@@ -59,10 +63,12 @@
         :total-pages="totalPages"
         :is-night="store.isNight"
         :book-title="store.bookTitle"
+        :is-in-shelf="isInShelf"
+        :is-favorited="isFavorited"
         @close="hideToolbar"
         @back="goBack"
-        @add-shelf="addToShelf"
-        @add-favorite="addToFavorites"
+        @toggle-shelf="toggleShelf"
+        @toggle-favorite="toggleFavorite"
         @download="onDownload"
         @more="onMore"
         @prev-chapter="navigatePrevChapter"
@@ -225,6 +231,9 @@ onLoad((q) => {
     bookTitle,
     chapterNo: chapterNo ? Number(chapterNo) : undefined,
   })
+
+  // 检查收藏/书架状态
+  checkCollectionStatus()
 })
 
 // ===================== 设置 Composable =====================
@@ -274,6 +283,10 @@ const longPressParagraphIndex = ref(-1)
 const rootStyle = computed(() => ({
   backgroundColor: store.settings.backgroundColor,
   color: store.settings.textColor,
+}))
+
+const backIndicatorStyle = computed(() => ({
+  backgroundColor: store.settings.backgroundColor,
 }))
 
 const resolvedFontFamily = computed(() => {
@@ -510,14 +523,60 @@ function toggleCommentLike(comment: ParagraphComment): void {
   commentCtrl.toggleLike(comment)
 }
 
-function addToShelf(): void {
-  uni.showToast({ title: '已加入书架', icon: 'success' })
-  store.hideToolbar()
+const isInShelf = ref(false)
+const isFavorited = ref(false)
+
+async function checkCollectionStatus(): Promise<void> {
+  try {
+    const { useBookStore } = await import('../../store/book')
+    const bookStore = useBookStore()
+    // 检查书架状态
+    if (bookStore.shelf.length === 0) {
+      await bookStore.loadShelf()
+    }
+    isInShelf.value = bookStore.shelfBookIds.includes(Number(store.bookId))
+    // 检查收藏状态
+    const favRes = await bookStore.checkFavoriteStatus(store.bookId)
+    isFavorited.value = favRes.code === 200 && !!favRes.data
+  } catch {
+    // 静默失败
+  }
 }
 
-function addToFavorites(): void {
-  uni.showToast({ title: '已收藏', icon: 'success' })
-  store.hideToolbar()
+async function toggleShelf(): Promise<void> {
+  try {
+    const { useBookStore } = await import('../../store/book')
+    const bookStore = useBookStore()
+    if (isInShelf.value) {
+      await bookStore.removeShelf(store.bookId)
+      isInShelf.value = false
+      uni.showToast({ title: '已移出书架', icon: 'none' })
+    } else {
+      await bookStore.addShelf(store.bookId)
+      isInShelf.value = true
+      uni.showToast({ title: '已加入书架', icon: 'success' })
+    }
+  } catch {
+    uni.showToast({ title: '操作失败', icon: 'none' })
+  }
+}
+
+async function toggleFavorite(): Promise<void> {
+  try {
+    const { useBookStore } = await import('../../store/book')
+    const bookStore = useBookStore()
+    if (isFavorited.value) {
+      await bookStore.removeFavorite(store.bookId)
+      isFavorited.value = false
+      uni.showToast({ title: '已取消收藏', icon: 'none' })
+    } else {
+      await bookStore.addFavorite(store.bookId)
+      isFavorited.value = true
+      uni.showToast({ title: '已收藏', icon: 'success' })
+    }
+  } catch {
+    uni.showToast({ title: '操作失败', icon: 'none' })
+  }
 }
 
 // ===================== 滚动事件 =====================
@@ -581,13 +640,14 @@ function onKeyDown(e: KeyboardEvent): void {
 
 .nr-back-indicator {
   position: fixed;
-  top: env(safe-area-inset-top, 4px);
-  left: 4px;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 50;
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 8px;
+  padding: calc(env(safe-area-inset-top, 4px) + 4px) 12px 4px;
   color: #B8A088;
   font-size: 14px;
 }

@@ -102,6 +102,10 @@ export class ReaderEngine {
   private _allChapters: ChapterData[] = []
   private _totalChapters: number = 0
 
+  /* ---- 滚动模式多章节缓冲 ---- */
+  private _scrollChapters: Map<number, { chapter: ChapterData; pages: Page[] }> = new Map()
+  private _scrollChapterOrder: number[] = []
+
   /* ---- 缓存 ---- */
   private chapterCache: Map<string, ChapterCacheRecord> = new Map()
   private loadPromises: Map<string, Promise<ChapterData | null>> = new Map()
@@ -174,6 +178,7 @@ export class ReaderEngine {
     this.session?.end()
     this.chapterCache.clear()
     this.loadPromises.clear()
+    this.resetScrollBuffer()
     this.stateMachine.reset()
   }
 
@@ -291,6 +296,13 @@ export class ReaderEngine {
       this.stateMachine.finishSplitting()
       this.session.changeChapter(chapter, targetPageIndex)
 
+      // 滚动模式：初始化缓冲
+      if (this._mode === 'SCROLL') {
+        this.resetScrollBuffer()
+        this._scrollChapters.set(chapter.chapterNo, { chapter, pages: this._pages })
+        this._scrollChapterOrder.push(chapter.chapterNo)
+      }
+
       this.emit('chapter:loaded', { chapter })
       if (prevChapterNo !== chapter.chapterNo) {
         this.emit('chapter:changed', {
@@ -326,19 +338,195 @@ export class ReaderEngine {
     }
   }
 
+  private _lastChapterTransition = 0
+  private readonly CHAPTER_TRANSITION_COOLDOWN = 800
+  private readonly MAX_SCROLL_CHAPTERS = 3
+
   /** 上一章 */
   async prevChapter(): Promise<boolean> {
+    const now = Date.now()
+    if (now - this._lastChapterTransition < this.CHAPTER_TRANSITION_COOLDOWN) return false
     if (!this._chapter || this._chapter.chapterNo <= 1) return false
+    this._lastChapterTransition = now
+
+    if (this._mode === 'SCROLL') {
+      return this.prependPrevChapter()
+    }
     await this.openChapter(this._chapter.chapterNo - 1, -1)
     return true
   }
 
   /** 下一章 */
   async nextChapter(): Promise<boolean> {
+    const now = Date.now()
+    if (now - this._lastChapterTransition < this.CHAPTER_TRANSITION_COOLDOWN) return false
     if (!this._chapter) return false
     if (this._chapter.chapterNo >= this._totalChapters) return false
+    this._lastChapterTransition = now
+
+    if (this._mode === 'SCROLL') {
+      return this.appendNextChapter()
+    }
     await this.openChapter(this._chapter.chapterNo + 1, 0)
     return true
+  }
+
+  /** 滚动模式：追加下一章页面到缓冲末尾 */
+  private async appendNextChapter(): Promise<boolean> {
+    const nextNo = this._chapter!.chapterNo + 1
+    if (nextNo > this._totalChapters) return false
+
+    // 已在缓冲中，直接定位
+    const existing = this._scrollChapters.get(nextNo)
+    if (existing) {
+      this._chapter = existing.chapter
+      this.emit('chapter:loaded', { chapter: existing.chapter })
+      this.emit('page:changed', {
+        pageIndex: this._currentPageIndex,
+        totalPages: this._pages.length,
+      })
+      return true
+    }
+
+    try {
+      const chapter = await this.loadChapterData(this._bookId, nextNo)
+      if (!chapter) return false
+
+      const pages = this.splitChapter(chapter)
+      this._scrollChapters.set(nextNo, { chapter, pages })
+      this._scrollChapterOrder.push(nextNo)
+      this.trimScrollBuffer()
+
+      // 追加到当前页面数组
+      this._pages = [...this._pages, ...pages]
+      this._chapter = chapter
+      this.session.changeChapter(chapter, this._currentPageIndex)
+
+      this.emit('chapter:loaded', { chapter })
+      this.emit('page:changed', {
+        pageIndex: this._currentPageIndex,
+        totalPages: this._pages.length,
+      })
+      return true
+    } catch (err) {
+      console.error('[ReaderEngine] Failed to append next chapter:', err)
+      return false
+    }
+  }
+
+  /** 滚动模式：前置上一章页面到缓冲开头 */
+  private async prependPrevChapter(): Promise<boolean> {
+    const prevNo = this._chapter!.chapterNo - 1
+    if (prevNo < 1) return false
+
+    // 已在缓冲中，直接定位
+    const existing = this._scrollChapters.get(prevNo)
+    if (existing) {
+      // 计算该章在 _pages 中的起始偏移
+      let pageOffset = 0
+      for (const cno of this._scrollChapterOrder) {
+        if (cno === prevNo) break
+        pageOffset += this._scrollChapters.get(cno)!.pages.length
+      }
+      this._chapter = existing.chapter
+      this._currentPageIndex = pageOffset
+      this.session.changeChapter(existing.chapter, pageOffset)
+      this.emit('chapter:loaded', { chapter: existing.chapter })
+      this.emit('page:changed', {
+        pageIndex: pageOffset,
+        totalPages: this._pages.length,
+      })
+      return true
+    }
+
+    try {
+      const chapter = await this.loadChapterData(this._bookId, prevNo)
+      if (!chapter) return false
+
+      const pages = this.splitChapter(chapter)
+      this._scrollChapters.set(prevNo, { chapter, pages })
+      this._scrollChapterOrder.unshift(prevNo)
+      this.trimScrollBuffer()
+
+      // 记录旧页面长度，用于调整滚动位置
+      const addedCount = pages.length
+      this._pages = [...pages, ...this._pages]
+      this._currentPageIndex = this._currentPageIndex + addedCount
+      this._chapter = chapter
+      this.session.changeChapter(chapter, this._currentPageIndex)
+
+      this.emit('chapter:loaded', { chapter })
+      this.emit('page:changed', {
+        pageIndex: this._currentPageIndex,
+        totalPages: this._pages.length,
+        prependedCount: addedCount,
+      })
+      return true
+    } catch (err) {
+      console.error('[ReaderEngine] Failed to prepend prev chapter:', err)
+      return false
+    }
+  }
+
+  /** 对单个章节执行分页，返回 Page[] */
+  private splitChapter(chapter: ChapterData): Page[] {
+    const screenInfo = this.platform.getScreenInfo()
+    const effectiveWidth = screenInfo.isDesktop
+      ? screenInfo.maxContentWidth
+      : screenInfo.width
+    const splitOptions = this.buildSplitOptions(effectiveWidth, screenInfo.height)
+    const result = splitContent(
+      chapter.content,
+      splitOptions,
+      this.createMeasureFunction(),
+    )
+    const pageBuildOptions: PageBuildOptions = {
+      paragraphIndent: true,
+      paragraphSpacing: splitOptions.paragraphSpacing,
+    }
+    const parsed = parseContent(chapter.content)
+    const paraMeta = this.buildParagraphMeta(parsed.paragraphs)
+    if (Object.keys(paraMeta).length > 0) {
+      pageBuildOptions.paragraphMeta = paraMeta
+    }
+    buildAllPages(result.pages, pageBuildOptions)
+    // 标记章节号，用于滚动模式稳定 key
+    for (const p of result.pages) {
+      p.chapterNo = chapter.chapterNo
+    }
+    return result.pages
+  }
+
+  /** 裁剪滚动缓冲区，只保留最近 N 章 */
+  private trimScrollBuffer(): void {
+    while (this._scrollChapterOrder.length > this.MAX_SCROLL_CHAPTERS) {
+      const oldest = this._scrollChapterOrder.shift()!
+      const entry = this._scrollChapters.get(oldest)
+      this._scrollChapters.delete(oldest)
+
+      // 从 _pages 中移除旧章节的页面
+      if (entry) {
+        const removeCount = entry.pages.length
+        if (this._scrollChapterOrder.length === 0) {
+          // 只剩当前章节，完全重建
+          // 其实不会进这里，因为至少有一个章节
+        }
+        // 如果移除的是最旧的（在数组前面），从前面删除
+        const remainingOrder = this._scrollChapterOrder
+        const firstRemaining = remainingOrder[0]
+        const firstEntry = this._scrollChapters.get(firstRemaining)
+        if (firstEntry) {
+          this._pages = this._pages.slice(removeCount)
+          this._currentPageIndex = Math.max(0, this._currentPageIndex - removeCount)
+        }
+      }
+    }
+  }
+
+  /** 滚动模式下重置缓冲（切换书籍/模式时使用） */
+  private resetScrollBuffer(): void {
+    this._scrollChapters.clear()
+    this._scrollChapterOrder = []
   }
 
   /* ===================== 翻页 ===================== */
@@ -394,6 +582,7 @@ export class ReaderEngine {
   goToPage(pageIndex: number): void {
     if (pageIndex < 0 || pageIndex >= this._pages.length) return
     if (this._isAnimating) return
+    if (pageIndex === this._currentPageIndex) return
 
     this._currentPageIndex = pageIndex
     this.session.updatePage(pageIndex, this._pages.length)
@@ -413,6 +602,11 @@ export class ReaderEngine {
     // 滚动模式下翻页模式强制 SCROLL
     if (mode === 'SCROLL' && this._turnMode !== 'SCROLL') {
       this._turnMode = 'SCROLL'
+    }
+
+    // 切换模式时重置滚动缓冲
+    if (mode !== 'SCROLL') {
+      this.resetScrollBuffer()
     }
   }
 
@@ -630,6 +824,11 @@ export class ReaderEngine {
     }
 
     buildAllPages(result.pages, pageBuildOptions)
+
+    // 标记章节号，用于滚动模式稳定 key
+    for (const p of result.pages) {
+      p.chapterNo = chapter.chapterNo
+    }
 
     this._pages = result.pages
 

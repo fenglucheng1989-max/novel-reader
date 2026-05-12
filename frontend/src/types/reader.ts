@@ -62,6 +62,8 @@ export interface Page {
   fillRatio: number
   paragraphRange: [number, number]
   charRange: [number, number]
+  /** 所属章节号（滚动模式用于稳定 key） */
+  chapterNo?: number
 }
 
 /** 分页统计 */
@@ -326,7 +328,7 @@ export interface ReaderEventMap {
   'chapter:loaded': { chapter: ChapterData }
   'chapter:changed': { from: number; to: number }
   'chapterList:loaded': { chapters: ChapterData[] }
-  'page:changed': { pageIndex: number; totalPages: number }
+  'page:changed': { pageIndex: number; totalPages: number; direction?: number; prependedCount?: number }
   'mode:changed': { mode: ReaderMode }
   'settings:changed': { key: keyof ReaderSettings; value: unknown }
   'progress:saved': { progress: ReaderProgress }
